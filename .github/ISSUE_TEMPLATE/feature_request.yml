@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an improvement.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        email-town-labeler is deliberately narrow: local classification, labels under its own prefix,
+        never destructive. Requests that need archiving, deleting, sending or a hosted
+        component are out of scope. Please do not include real email content.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

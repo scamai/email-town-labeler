@@ -1,0 +1,21 @@
+# Keep the build context small and free of secrets.
+.git
+.github
+.venv*
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+dist
+build
+*.egg-info
+data
+docs
+tests
+scripts
+docker
+# never ship credentials or mail state into an image
+**/client_secret*.json
+**/token*.json
+**/*.sqlite*
+**/.env

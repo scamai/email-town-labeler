@@ -1,0 +1,84 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "email-town-labeler"
+dynamic = ["version"]
+description = "Private, self-hosted Gmail auto-labeling with a small local model"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Scam.ai" }]
+keywords = ["gmail", "email", "classification", "labeling", "privacy", "self-hosted", "local-first"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Email",
+  "Topic :: Communications :: Email :: Filters",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "google-api-python-client>=2.100",
+  "google-auth-oauthlib>=1.2",
+  "platformdirs>=4.0",
+  "numpy>=1.24",
+  "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+embed = ["sentence-transformers>=5.0", "torch>=2.4"]
+onnx = ["onnxruntime>=1.18", "tokenizers>=0.20"]
+# Everything optional at once (both ML backends). Large: pulls torch.
+full = ["email-town-labeler[embed,onnx]"]
+dev = ["pytest>=8", "ruff>=0.6", "build>=1.2"]
+
+[project.urls]
+Homepage = "https://github.com/scamai/email-town-labeler"
+Documentation = "https://github.com/scamai/email-town-labeler/tree/main/docs"
+Source = "https://github.com/scamai/email-town-labeler"
+Issues = "https://github.com/scamai/email-town-labeler/issues"
+Changelog = "https://github.com/scamai/email-town-labeler/blob/main/CHANGELOG.md"
+Security = "https://github.com/scamai/email-town-labeler/blob/main/SECURITY.md"
+
+[project.scripts]
+email-town-labeler = "email_town_labeler.cli:main"
+
+[tool.hatch.version]
+path = "src/email_town_labeler/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/email_town_labeler"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/email_town_labeler",
+  "tests",
+  "docs",
+  "scripts",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "MODEL_CARD_TEMPLATE.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"

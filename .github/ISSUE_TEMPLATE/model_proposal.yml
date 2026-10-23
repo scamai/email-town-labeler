@@ -1,0 +1,61 @@
+name: Model proposal
+description: Propose a pretrained model package for email-town-labeler.
+labels: [model]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read docs/models.md ("Requirements for a shipped model" and "Evaluation methodology")
+        first. A model trained on a private mailbox needs the owner's explicit, informed consent to
+        publishing it, stated in the model card with the memorisation caveat.
+  - type: input
+    id: ref
+    attributes:
+      label: Package location
+      placeholder: hf:org/repo@<commit hash>
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Backend
+      options: [embedding_probe, onnx_classifier, ollama_choice, other]
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Training data
+      description: Sources, licenses, how consent was obtained if any mail was donated, and how labels were produced.
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Held-out metrics
+      description: Evaluation set, size, 7-way accuracy, macro-F1, per-class F1, confusion matrix, coverage at 0.55.
+    validations:
+      required: true
+  - type: input
+    id: license
+    attributes:
+      label: License (SPDX)
+    validations:
+      required: true
+  - type: textarea
+    id: footprint
+    attributes:
+      label: Size, RAM and CPU throughput
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Requirements
+      options:
+        - label: Trained on non-private data only.
+          required: true
+        - label: Includes a model card based on MODEL_CARD_TEMPLATE.md.
+          required: true
+        - label: Embedder revision pinned; every package file has a sha256 in model.json.
+          required: true
+        - label: Evaluation code is available to reproduce the numbers.
+          required: true

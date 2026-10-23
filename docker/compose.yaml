@@ -1,0 +1,51 @@
+# email-town-labeler with Docker Compose.
+#
+# First run (from the repo root):
+#
+#   docker compose -f docker/compose.yaml build
+#   # put your OAuth client file into the volume (see docs/google-cloud-setup.md)
+#   docker compose -f docker/compose.yaml run --rm -T --entrypoint sh email-town-labeler \
+#       -c 'mkdir -p /data/config && cat > /data/config/client_secret.json' < client_secret.json
+#   docker compose -f docker/compose.yaml run --rm email-town-labeler setup --headless --model town-modernbert
+#   docker compose -f docker/compose.yaml up -d
+#
+# Or run `docker compose ...` from inside docker/ and drop the -f flag.
+# `setup --headless` signs in, downloads the default model into the volume (about 820 MB,
+# once; sha256-pinned) and dry-runs it on your 5 newest messages. It prints a Google URL. Open it in any browser, approve, then paste the
+# full http://localhost/... URL your browser was redirected to (the page itself will not load;
+# that is expected) back into the terminal.
+
+name: email-town-labeler
+
+services:
+  email-town-labeler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      args:
+        EXTRAS: "onnx"        # "" = rules only; "embed,onnx" adds CPU torch (town-modernbert-torch)
+    image: email-town-labeler:local
+    command: ["run"]
+    restart: unless-stopped
+    volumes:
+      - email-town-labeler-data:/data
+    environment:
+      EMAIL_TOWN_LABELER_HOME: /data
+      TZ: ${TZ:-UTC}
+    # The daemon only makes outbound HTTPS calls (Gmail API, optional model downloads).
+    # No ports are published.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  email-town-labeler-data:

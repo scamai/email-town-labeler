@@ -1,0 +1,63 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Privacy first.** Do not paste real email content: no subjects, senders, addresses,
+        snippets, bodies, message ids from your mailbox, screenshots of your inbox, `token.json`
+        or `client_secret.json`. Describe the *shape* of a message instead
+        ("HTML-only newsletter with a List-Id header"). Security issues: security@scam.ai.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: This report contains no real email content, addresses, tokens or client secrets.
+          required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Commands you ran. Use synthetic examples for any mail involved.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `email-town-labeler --version` and `email-town-labeler doctor`
+      description: Read it before pasting.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is it installed?
+      options: [pipx, pip / venv, uv, Docker, from source]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and Python version
+      placeholder: macOS 15.1, Python 3.12.7
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model ref and backend
+      placeholder: rules
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log lines
+      render: text
