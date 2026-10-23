@@ -632,3 +632,78 @@ def test_doctor_shows_the_effective_policy(app):
     _setup(app, "--yes", "--model", "rules")
     _, out = app.call("doctor")
     assert "policy" in out and "action_threshold 0.2 (default), promotional_threshold 0.6 (default)" in out
+
+
+def _town_day(app, monkeypatch, n=40):
+    """Setup, then n new messages that Town (the teacher) labels; the CLI resolves the fake model."""
+    from email_town_labeler.models.base import ModelManifest
+
+    monkeypatch.setattr(cli, "_manifest_or_none", lambda cfg, paths: ModelManifest("fake", "1", "fake"))
+    app.inputs.append("http://localhost:8765/?state=abc&code=xyz")
+    app.call("setup", "--client-secret", str(app.secret), "--headless", "--yes")
+    for name in ("action needed", "newsletters", "promotional", "orders"):
+        app.client.create_label(name)
+    ids = []
+    for i in range(n):
+        bulk = i % 2 == 0
+        h = {"list-id": "<list.example.test>"} if bulk else {}
+        ids.append(app.client.add_message(cls="promotional", prob=0.7, **h))
+    assert app.call("once")[0] == 0
+    for i, m in enumerate(ids):
+        app.client.user_add_label(m, app.client.label_id("newsletters" if i % 2 == 0 else "promotional"))
+    assert app.call("once")[0] == 0
+    return ids
+
+
+def test_learn_status_reset_and_export(app, monkeypatch, tmp_path):
+    rc, out = app.call("learn", "--dry-run")
+    assert rc == 0 and "collecting signals: 0 of 30" in out and not app.paths.learned.exists()
+    _town_day(app, monkeypatch)
+    rc, out = app.call("status", "--json")
+    li = json.loads(out)["learning"]
+    assert li["signals"]["teacher"] == 40 and not li["head_active"] and li["teacher"] == "auto"
+    rc, out = app.call("learn", "--dry-run")
+    assert rc == 0 and "teacher 40" in out and "dry run" in out
+    assert not app.paths.learned.exists()
+    rc, out = app.call("learn")
+    assert rc == 0 and "saved personal.json" in out, out
+    assert "personal head personal-" in out and "held-out accuracy" in out
+    rc, out = app.call("status")
+    assert "personal head" in out and "active" in out and "40 teacher labels" in out
+    assert "@example.test" not in out.replace("me@example.test", "")  # no sender addresses
+    rc, out = app.call("status", "--json")
+    assert json.loads(out)["learning"]["head_active"] is True
+    # export: ids and numbers only
+    f = tmp_path / "signals.jsonl"
+    rc, out = app.call("learn", "--export", str(f))
+    rows = [json.loads(x) for x in f.read_text().splitlines()]
+    assert rc == 0 and len(rows) == 40 and {r["kind"] for r in rows} == {"teacher"}
+    assert set(rows[0]) == {"msg_id", "label", "not_label", "kind", "weight", "scores", "features", "model"}
+    assert "made-up" not in f.read_text()
+    # the escape hatch
+    rc, out = app.call("personalize", "--reset")
+    assert rc == 0 and "removed the personal head" in out and not app.paths.learned.exists()
+    rc, out = app.call("status", "--json")
+    li = json.loads(out)["learning"]
+    assert not li["head_active"] and li["signals"]["teacher"] == 0  # signals before the reset are not reused
+
+
+def test_personalize_without_a_head_runs_learn(app, monkeypatch):
+    _town_day(app, monkeypatch)
+    rc, out = app.call("personalize")  # model.ref = rules: no trainable head
+    assert rc == 0 and "learning on its stored scores instead" in out and "saved personal.json" in out
+    assert load_config(app.paths.config_file).model_ref == "rules"  # unchanged
+
+
+def test_status_policy_shows_learned_thresholds(app, monkeypatch):
+    from email_town_labeler import learn
+
+    _town_day(app, monkeypatch)
+    learn.save(
+        app.paths.learned,
+        learn.Artifact(base_model="fake@1", created=1.0, policy={"promotional_threshold": 0.9}),
+    )
+    _rc, out = app.call("status", "--json")
+    assert json.loads(out)["policy"]["promotional_threshold"] == {"value": 0.9, "source": "learned"}
+    _rc, out = app.call("status")
+    assert "promotional_threshold 0.9 (learned)" in out

@@ -21,7 +21,7 @@ Hosted inbox-sorting services work by sending your mail to their servers. email-
   project. There is no email-town-labeler server and no shared app that could be compromised.
 - **No telemetry.** No analytics, no crash reports, no update checks.
 - **Nothing about content is stored.** The local database holds message ids, predicted
-  classes and your corrections. Logs never contain subjects, senders or bodies.
+  classes and probabilities, a few yes/no facts, and your corrections. Logs never contain subjects, senders or bodies.
 - **Non-destructive and reversible.** It only adds and removes its own `email-town-labeler/...` labels.
   `email-town-labeler undo` removes all of them.
 
@@ -36,8 +36,9 @@ flowchart LR
   M -- "class + probability" --> E
   E -- "add label email-town-labeler/(class)" --> G
   G -- "you change a label" --> E
-  E -- "corrections" --> DB[("state.sqlite<br/>ids + classes only")]
-  DB -. "email-town-labeler personalize" .-> M
+  G -- "Town's labels (optional)" --> E
+  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
+  DB -. "learn (daily, local)" .-> E
 ```
 
 1. Every ~60 seconds email-town-labeler asks Gmail what changed since the last poll.
@@ -47,7 +48,9 @@ flowchart LR
    leans towards `action needed`, keeps uncertain mail and people you write to out of
    `promotional`, and marks Primary mail from strangers as `new sender`.
 4. If you move a message to a different `email-town-labeler/...` label or remove ours, that is recorded
-   as a correction. `email-town-labeler personalize` uses your corrections to adapt the model, locally.
+   as a correction. If you also run Town, its labels count as ground truth. Once a day the
+   service learns from these, locally: a small personal layer on the model's scores (used only if
+   it beats the model on held-out signals) and re-tuned thresholds.
 
 ## Quickstart
 
@@ -152,7 +155,8 @@ have logged in.
 | `email-town-labeler model list` | Published models (installed or not, with sizes), installed packages, and the active one |
 | `email-town-labeler model pull <name\|ref> [--use]` | Download and verify a model package (`town-modernbert`, `hf:...`, a URL); `--use` makes it active |
 | `email-town-labeler model info [ref]` | Manifest, license and metrics of a model (default: the active one) |
-| `email-town-labeler personalize [--strength X]` | Adapt the active model to your corrections, locally |
+| `email-town-labeler learn [--dry-run] [--reset] [--export FILE]` | Learn from your corrections (and Town's labels) now: personal head + thresholds, locally. The service does this daily. `--reset` goes back to the model as shipped |
+| `email-town-labeler personalize [--strength X] [--reset]` | Refit a head-based model's own head on your corrections; for other models (like `town-modernbert`) the same as `learn` |
 | `email-town-labeler contacts rebuild \| count [--json]` | Rescan sent mail for the addresses you write to (headers only) / show how many are stored. `contacts list --yes-show-addresses` is the only command that prints them |
 | `email-town-labeler service install \| uninstall \| status` | Manage the background service |
 | `email-town-labeler doctor [--redact]` | Check config, token, scopes, Gmail access, model, labels |
@@ -271,18 +275,27 @@ evaluated and accepted: [docs/models.md](docs/models.md).
 ## Learning from your corrections
 
 Fix labels in Gmail the way you normally would: remove the email-town-labeler label, or swap it for
-the right `email-town-labeler/...` one. email-town-labeler records each correction (ids and class names only).
-Then:
+the right `email-town-labeler/...` one. email-town-labeler records each correction (ids and class
+names only). If you still run Town, the labels Town puts on the same mail are used as ground
+truth too (turn that off with `[learn] teacher = "off"`). Reading or archiving mail is never used.
+
+The service learns from these once a day, on your machine, from numbers it stored when it
+labeled each message (no mail is re-read):
+
+- a small **personal head** on the model's scores, pulled toward the unchanged model so a few
+  corrections only nudge it, and used **only if it beats the model on held-out signals**;
+- re-tuned `action_threshold` / `promotional_threshold`: `action needed` recall first, and
+  nothing important in `promotional`.
 
 ```bash
-email-town-labeler personalize
+email-town-labeler status          # signals so far; whether the personal head is active, its held-out score
+email-town-labeler learn           # learn now instead of waiting
+email-town-labeler learn --reset   # forget it all and use the model as shipped
 ```
 
-This re-fetches the corrected messages from Gmail, refits the model's small classifier head on
-your machine (anchored to the original so a few corrections don't overwrite it), saves it as
-`<model>-personal`, and switches to it (restart the service to load it). It needs at least 5
-corrections and works with `embedding_probe` and `onnx_classifier`.
-The personalized model is derived from your mail: keep it private.
+This works with every model, including `town-modernbert`. Details and settings:
+[docs/models.md](docs/models.md#improving-from-use-learn). The learned file is derived from your
+mail: keep it private.
 
 ## Undo
 
@@ -350,10 +363,11 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 - The default model `town-modernbert` learned from one person's inbox; on yours it will make
   more mistakes than its published numbers suggest, and it needs about 820 MB of disk and the
   `[onnx]` extra. `rules` is a heuristic baseline with limited quality.
-- `personalize` does not work with `town-modernbert` (a sequence classifier has no separate
-  head to refit); your corrections are still recorded.
+- Learning only re-weights what the model already sees (its scores plus a few yes/no facts);
+  retraining the model itself is an advanced, manual path
+  ([docs/models.md](docs/models.md#advanced-full-fine-tuning-not-built-in)).
 - Personal Gmail with an app in "Testing" status must log in again every 7 days.
-- `personalize` needs an `embedding_probe` or `onnx_classifier` model and some corrections per class.
+- Refitting a model's own head (`personalize`) needs an `embedding_probe` or `onnx_classifier` model.
 - Only new inbox mail is labeled automatically; archived mail and other folders are ignored.
 
 ## Documentation

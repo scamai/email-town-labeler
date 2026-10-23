@@ -136,7 +136,14 @@ class Ctx:
         model = (
             make_model(cfg, self.paths) if with_model else None
         )  # undo must work even if the model can't load
-        return Engine(client, make_labels(client, cfg), model, make_store(self.paths), cfg)
+        return Engine(
+            client,
+            make_labels(client, cfg),
+            model,
+            make_store(self.paths),
+            cfg,
+            learn_path=self.paths.learned,
+        )
 
 
 EMAIL_RE = re.compile(r"[\w.%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
@@ -217,6 +224,16 @@ def _manifest_or_none(cfg: Config, paths: Paths) -> Any:
     except Exception as e:  # noqa: BLE001 - informational
         log.debug("resolve failed: %s", type(e).__name__)
         return None
+
+
+def _learned_policy(paths: Paths, manifest: Any) -> dict[str, float] | None:
+    """Thresholds `learn` tuned for this model (personal.json), if any."""
+    if manifest is None:
+        return None
+    from . import learn
+
+    art = learn.load(paths.learned, manifest.id)
+    return dict(art.policy) if art else None
 
 
 def _policy_line(sources: dict[str, tuple[float, str]]) -> str:
@@ -415,7 +432,7 @@ def cmd_setup(ctx: Ctx) -> int:
         )
     ctx.out(
         "\nDone. New mail will be labeled from now on. Label recent mail with `email-town-labeler backfill --days 7`;"
-        "\ncheck on it with `email-town-labeler status`. Move a wrong label in Gmail and it is recorded as a correction (`personalize` uses them where the model supports it)."
+        "\ncheck on it with `email-town-labeler status`. Move a wrong label in Gmail and it is recorded as a correction; the service learns from your corrections daily, locally (`email-town-labeler learn --reset` undoes it)."
     )
     return 0
 
@@ -502,7 +519,9 @@ def status_info(ctx: Ctx) -> dict:
         problem = f"no successful poll in the last {int(age)}s (limit {stale_after}s)"
     else:
         problem = None
-    pol = cfg.policy_sources(_manifest_or_none(cfg, p))
+    man = _manifest_or_none(cfg, p)
+    learning = learning_info(cfg, p, store, man)
+    pol = cfg.policy_sources(man, learning.pop("_policy"))
     return {
         "version": __version__,
         "account": store.get("account_email"),
@@ -519,6 +538,7 @@ def status_info(ctx: Ctx) -> dict:
         "by_class": {c: st["by_class"].get(c, 0) for c in LABEL_CLASSES},  # final classes
         "feedback": st["feedback"],
         "contacts": st["contacts"],
+        "learning": learning,
         "service": svc,
         "config_dir": str(p.config_dir),
         "data_dir": str(p.data_dir),
@@ -549,8 +569,9 @@ def cmd_status(ctx: Ctx) -> int:
     rows += [
         ("feedback", f"{i['feedback']} corrections"),
         ("contacts", f"{i['contacts']} addresses you have sent mail to"),
-        ("service", i["service"].get("state", "?")),
     ]
+    rows += _learning_rows(i["learning"])
+    rows += [("service", i["service"].get("state", "?"))]
     for k, v in rows:
         ctx.out(f"{k:<14} {v}")
     if not i["healthy"]:
@@ -634,7 +655,12 @@ def cmd_doctor(ctx: Ctx) -> int:
     )
     check(
         "policy",
-        lambda: _policy_line(ctx.cfg.policy_sources(loaded[0].manifest if loaded else None)),
+        lambda: _policy_line(
+            ctx.cfg.policy_sources(
+                loaded[0].manifest if loaded else None,
+                _learned_policy(p, loaded[0].manifest if loaded else None),
+            )
+        ),
         f"edit [policy] in {p.config_file}",
         needs=bool(cfg_ok),
     )
@@ -722,7 +748,7 @@ def cmd_model(ctx: Ctx) -> int:
             ctx.out(f"{OK} model.ref = {a.ref} (restart the service to pick it up)")
         return 0
     man = registry.resolve(a.ref or ref, models_dir=p.models_dir, download=False)
-    pol = ctx.cfg.policy_sources(man)
+    pol = ctx.cfg.policy_sources(man, _learned_policy(p, man))
     info = {
         "id": man.id,
         "name": man.name,
@@ -743,17 +769,175 @@ def cmd_model(ctx: Ctx) -> int:
     return 0
 
 
+def _learn_model_id(ctx: Ctx, store: Any, man: Any) -> str | None:
+    """The model learning is for: the configured one if it resolves, else the one the last poll used."""
+    return man.id if man is not None else store.get("model_id")
+
+
+def learning_info(cfg: Config, p: Paths, store: Any, man: Any) -> dict:
+    """Signal counts, the personal head and learned thresholds, for `status`. `_policy` is popped by callers."""
+    from . import learn
+
+    mid = man.id if man is not None else store.get("model_id")
+    art = learn.load(p.learned, mid) if mid else None
+    counts = learn.collect(store, mid, cfg).counts() if mid else {k: 0 for k in learn.KINDS}
+    head = art.active_head if art else None
+    m = (art.metrics if art else {}) or {}
+    hb, hh = m.get("heldout_base") or {}, m.get("heldout_head") or {}
+    last = store.get(learn.LAST_TS)
+    return {
+        "signals": counts,
+        "teacher": cfg.learn_teacher,
+        "teacher_labels_seen": store.stats().get("teacher", 0),
+        "auto": cfg.learn_auto,
+        "interval_hours": cfg.learn_interval_hours,
+        "last_run": float(last) if last else None,
+        "head": head.id if head else None,
+        "head_active": head is not None,
+        "reason": art.reason if art else None,
+        "heldout": {
+            "n": hh.get("n"),
+            "head_acc": hh.get("acc_strong"),
+            "base_acc": hb.get("acc_strong"),
+            "head_log_loss": hh.get("log_loss"),
+            "base_log_loss": hb.get("log_loss"),
+        }
+        if hh
+        else None,
+        "learned_policy": dict(art.policy) if art else {},
+        "_policy": dict(art.policy) if art else None,
+    }
+
+
+def _fmt_pct(v: Any) -> str:
+    return "?" if v is None else f"{100 * v:.1f}%"
+
+
+def _learning_rows(li: dict) -> list[tuple[str, str]]:
+    s = li["signals"]
+    sig = (
+        f"{s['correction']} corrections, {s['removal']} removals, {s['teacher']} teacher labels, "
+        f"{s['teacher_none']} teacher-unlabeled, {s['confirm']} kept labels"
+    )
+    rows = [("signals", sig)]
+    if li["head_active"]:
+        h = li["heldout"] or {}
+        head = f"{li['head']} active; held-out accuracy {_fmt_pct(h.get('head_acc'))} vs model {_fmt_pct(h.get('base_acc'))}"
+        head += f" on {h.get('n')} signals"
+    else:
+        head = (
+            f"none ({li['reason']})" if li["reason"] else "none (`email-town-labeler learn` has not run yet)"
+        )
+    rows.append(("personal head", head))
+    auto = f"every {li['interval_hours']} h with new signals (last run {_fmt_ts(li['last_run'])})"
+    rows.append(("learning", auto if li["auto"] else "manual (`[learn] auto = false`)"))
+    return rows
+
+
+def cmd_learn(ctx: Ctx) -> int:
+    """Fit the personal head on the stored signals and re-tune thresholds. Local, no Gmail calls."""
+    from . import learn
+
+    p, cfg, a = ctx.paths, ctx.cfg, ctx.args
+    store = make_store(p)
+    if a.reset:
+        existed = learn.reset(store, p.learned)
+        ctx.out(
+            f"{OK} {'removed the personal head and learned thresholds' if existed else 'nothing learned yet'}; "
+            "the model is used as shipped. Signals from before now are no longer used."
+        )
+        if cfg.learn_auto:
+            ctx.out(
+                "  learning restarts from new signals; to stop it, set `[learn] auto = false` in config.toml"
+            )
+        ctx.out(
+            "  restart the service only if it is older than this version (it reloads personal.json itself)"
+        )
+        return 0
+    if a.export:
+        return _learn_export(ctx, store)
+    man = _manifest_or_none(cfg, p)
+    mid = _learn_model_id(ctx, store, man)
+    if not mid:
+        raise CLIError("no decisions yet: run `email-town-labeler run` (or `once`) first")
+    res = learn.learn_once(store, p.learned, mid, cfg, man, save_it=not a.dry_run)
+    art = res.artifact
+    if a.json:
+        ctx.out(
+            json.dumps(
+                {**art.to_json(), "changed_policy": res.changed_policy, "dry_run": a.dry_run},
+                sort_keys=True,
+                default=str,
+            )
+        )
+        return 0
+    s = res.examples
+    ctx.out(f"signals for {mid}: " + ", ".join(f"{k} {v}" for k, v in s.items()))
+    if art.active_head:
+        hh, hb = art.metrics["heldout_head"], art.metrics["heldout_base"]
+        ctx.out(
+            f"{OK} personal head {art.active_head.id}: held-out accuracy {_fmt_pct(hh['acc_strong'])} "
+            f"(model {_fmt_pct(hb['acc_strong'])}), log-loss {hh['log_loss']:.3f} (model {hb['log_loss']:.3f})"
+        )
+    else:
+        ctx.out(f"{SKIP} no personal head: {art.reason}")
+    for k, (before, after) in res.changed_policy.items():
+        ctx.out(f"{OK} {k}: {before:g} -> {after:g}")
+    if not res.changed_policy:
+        ctx.out(f"{SKIP} thresholds unchanged")
+    ctx.out(
+        "(dry run: nothing saved)"
+        if a.dry_run
+        else f"saved {p.learned.name}; the running service picks it up on its next poll"
+    )
+    return 0
+
+
+def _learn_export(ctx: Ctx, store: Any) -> int:
+    """JSON lines of (message id, class or not-class, kind, weight, scores, features): no mail content."""
+    from . import learn
+    from .taxonomy import CLASSES
+
+    p, cfg = ctx.paths, ctx.cfg
+    mid = _learn_model_id(ctx, store, _manifest_or_none(cfg, p))
+    if not mid:
+        raise CLIError("no decisions yet: nothing to export")
+    ex = learn.collect(store, mid, cfg)
+    out = Path(ctx.args.export)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", encoding="utf-8") as f:
+        for i in range(len(ex)):
+            row = {
+                "msg_id": ex.ids[i],
+                "label": CLASSES[ex.y[i]] if ex.y[i] >= 0 else None,
+                "not_label": CLASSES[ex.neg[i]] if ex.neg[i] >= 0 else None,
+                "kind": ex.kind[i],
+                "weight": float(ex.w[i]),
+                "scores": [round(float(v), 5) for v in ex.X[i, : learn.K]],
+                "features": dict(zip(learn.FEATURES, (int(v) for v in ex.X[i, learn.K :]))),
+                "model": mid,
+            }
+            f.write(json.dumps(row, sort_keys=True) + "\n")
+    try:
+        os.chmod(out, 0o600)
+    except OSError:  # pragma: no cover
+        pass
+    ctx.out(f"{OK} wrote {len(ex)} signals to {out} (message ids and numbers only; keep it private)")
+    return 0
+
+
 def cmd_personalize(ctx: Ctx) -> int:
     from . import personalize as pz
     from .models import registry
 
     p, cfg = ctx.paths, ctx.cfg
+    if ctx.args.reset:
+        return cmd_learn(ctx)
     man = registry.resolve(cfg.model_ref, models_dir=p.models_dir, download=False)
     if man.backend not in pz.HEAD_BACKENDS or man.path is None:
-        raise CLIError(
-            f"model {man.id} ({man.backend}) cannot be personalised; use one with a trainable head "
-            f"({', '.join(pz.HEAD_BACKENDS)}), see `email-town-labeler model list`"
-        )
+        # no separate head to refit (e.g. town-modernbert): learn a personal head on its scores instead
+        ctx.out(f"{man.id} ({man.backend}) has no trainable head: learning on its stored scores instead")
+        return cmd_learn(ctx)
     fb = [f for f in make_store(p).feedback() if f["corrected"]]
     if len(fb) < ctx.args.min_examples:
         raise CLIError(
@@ -954,10 +1138,27 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_model)
 
-    s = sub.add_parser("personalize", help="refit the model head on your label corrections")
+    s = sub.add_parser(
+        "personalize",
+        help="adapt the model to you: refit its head on your corrections, or `learn` if it has none",
+    )
     s.add_argument("--strength", type=float, default=1.0, help="how far corrections move the model")
     s.add_argument("--min-examples", type=int, default=5)
-    s.set_defaults(fn=cmd_personalize)
+    s.add_argument(
+        "--reset", action="store_true", help="forget the learned head and thresholds (= learn --reset)"
+    )
+    s.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
+    s.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    s.set_defaults(fn=cmd_personalize, export=None)
+
+    s = sub.add_parser(
+        "learn", help="learn from your corrections and Town's labels: personal head + thresholds (local)"
+    )
+    s.add_argument("--dry-run", action="store_true", help="fit and report, save nothing")
+    s.add_argument("--reset", action="store_true", help="forget the learned head and thresholds; start over")
+    s.add_argument("--export", metavar="FILE", help="write the signals as JSON lines (ids and numbers only)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_learn)
 
     s = sub.add_parser("contacts", help="the addresses you have sent mail to (used by the policy)")
     cs = _Sub(s.add_subparsers(dest="contacts_cmd", metavar="ACTION", required=True))

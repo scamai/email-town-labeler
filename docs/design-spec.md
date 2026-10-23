@@ -56,7 +56,8 @@ src/email_town_labeler/
   models/backends/hf_sequence_classifier.py    fine-tuned transformers classifier inside the package
   models/backends/onnx_sequence_classifier.py  the same as one ONNX graph, onnxruntime only
   models/backends/ollama_choice.py    local LLM via Ollama HTTP (optional)
-  personalize.py     refit the head from the user's own corrections
+  personalize.py     refit a head-based model's head from the user's own corrections
+  learn.py           improving from use: signals -> personal head on stored scores + re-tuned thresholds
 tests/
   fakes/fake_service.py   googleapiclient-shaped in-memory Gmail (history semantics)
   fakes/fake_client.py    in-memory GmailClient (same interface)
@@ -68,7 +69,9 @@ docker/ Dockerfile, compose.yaml; docs/; scripts/gcp_setup.sh; .github/workflows
 ### types.py
 `EmailRecord` dict keys: `id, thread_id, label_ids, internal_date (ms), history_id, size_estimate,
 snippet, headers (lower-case name → value), body_text, body_source, has_calendar, attachments`.
-`Prediction(cls: str, prob: float, probs: dict[str, float])`.
+`Prediction(cls: str, prob: float, probs: dict[str, float], logits: list[float] | None = None)` —
+`logits` are the model's raw scores in CLASSES order when it has them (rules, head and sequence
+backends set them; `learn.base_scores` falls back to log `probs`).
 `HistoryEvent(kind: "added"|"label_added"|"label_removed", message_id: str, label_ids: list[str],
 message_label_ids: list[str])` — `label_ids` = labels added/removed by this event;
 `message_label_ids` = the message's labels after the event (as Gmail reports).
@@ -162,23 +165,62 @@ class Store:
     def __init__(self, path: Path): ...          # sqlite, WAL, schema versioned
     def get(self, key: str, default=None) / set(self, key: str, value: str)
     def record_decision(self, msg_id, cls, prob, probs, model_id, applied: bool, *, dry_run=False,
-                        model_cls: str | None = None) -> None   # cls = final class; model_cls, prob,
-                                                                # probs = what the model said
+                        model_cls: str | None = None, scores=None, feats=None, head_id=None) -> None
+        # cls = final class; model_cls, prob, probs = what the model said (after the personal head
+        # head_id, if any); scores = the base model's log-probabilities over CLASSES; feats =
+        # learn.FEATURES (yes/no)
     def decision(self, msg_id) -> dict | None
     def recent_decisions(self, n: int = 20) -> list[dict]
     def record_feedback(self, msg_id, predicted: str | None, corrected: str | None) -> None
     def feedback(self) -> list[dict]
+    def record_teacher(self, msg_id, cls: str | None) / delete_teacher(msg_id) / teacher(msg_id)
+    def learning_rows(self, model_id, *, since_ts=None, limit=20000) -> list[dict]
+        # newest decisions by model_id with scores + feats, joined with feedback and teacher
     def add_contacts(self, sent: Mapping[str, int | None]) -> int     # address -> first sent ms; new count
     def replace_contacts(self, sent) -> int / known_contacts(addrs) -> set[str] / contacts_count() -> int
     def stats(self) -> dict                      # incl. "contacts" (a count)
 ```
 Schema v3: `contacts(address TEXT PRIMARY KEY, first_sent_ms INTEGER)` (lower-cased, nothing else) and
-`decisions.model_cls`.
+`decisions.model_cls`. Schema v4: `decisions.scores`, `decisions.feats` (JSON lists), `decisions.head_id`,
+and `teacher(msg_id TEXT PRIMARY KEY, cls TEXT, ts REAL)` (cls NULL: a teacher label with no class).
+
+### learn.py
+```python
+FEATURES: list[str]                      # known_contact, bulk, primary, promotions, social, updates_tab,
+                                         # forums, calendar
+def base_scores(pred) -> np.ndarray      # log-probabilities over CLASSES, clipped at FLOOR (-20)
+def features(rec, *, known_contact) -> list[float]
+def collect(store, model_id, cfg, *, now=None) -> Examples   # signals since the last reset
+def fit(ex, *, lam, init=None) -> (W, c)  # weighted CE / complement loss + lam/2 mean |dlogits|^2
+def run(store, model_id, cfg, *, current_policy, base_policy, now=None) -> Result   # pure
+def learn_once(store, path, model_id, cfg, manifest=None, *, now=None, save_it=True) -> Result
+def load(path, model_id=None) -> Artifact | None / save(path, Artifact) / reset(store, path)
+def due(store, model_id, cfg, *, now=None) -> (bool, n)      # interval_hours passed + min_new_signals
+class PersonalHead: proba(scores, feats), predictions(scores, feats) -> list[Prediction]
+```
+Signals per message, first match wins: correction (feedback with a class), removal (feedback
+without: "not predicted"; none for new_sender), teacher (teacher row with a class; a NULL class
+gives no signal), teacher_none (no teacher row, older than teacher_wait_days, decided before the
+newest teacher-labeled decision, outside recorded history gaps: `unknown`), confirm (applied, not
+dry-run, current == cls, older than confirm_days). new_sender maps to unknown. A head is fit with
+≥ min_examples strong signals (correction, removal, teacher) and active only if 5-fold
+out-of-fold it has lower weighted log-loss, strong-signal accuracy ≥ the model's, kept-label
+accuracy ≥ the model's − 0.02, and action-needed recall at its re-tuned threshold ≥
+min(model's, action_recall_target). `tune_policy` never touches keys set in config.toml; moves
+toward safety are immediate, the others need more (and unbiased) evidence and are rate-limited.
+`personal.json` (`Paths.learned`) holds weights, thresholds, counts and metrics; no ids, no content.
 
 ### engine.py
 ```python
 class Engine:
-    def __init__(self, client, labels: LabelMap, model: Classifier, store: Store, cfg: Config, *, clock=time.time): ...
+    def __init__(self, client, labels: LabelMap, model: Classifier, store: Store, cfg: Config, *,
+                 clock=time.time, learn_path: Path | None = None): ...
+        # learn_path: personal.json; applied if it matches model.manifest.id, reloaded when it changes
+    def learn(self, *, dry_run=False) -> learn.Result      # one learning run now (no Gmail calls)
+    def maybe_learn(self) -> learn.Result | None           # [learn] auto: run_forever calls it after
+                                                            # each good poll (hourly check, never raises
+                                                            # into the loop)
+    def capture_teacher(self, events) -> int               # teacher labels on decided mail
     def sync_once(self) -> dict      # one poll: history since stored id (bootstrap from profile on
                                      # first run; on HistoryExpired fall back to an inbox scan);
                                      # classify eligible new mail; capture feedback; return counts
@@ -201,6 +243,12 @@ History expiry: scan inbox mail `after:` the start of the last successful poll (
 Store `bootstrap_ts` (written by `bootstrap()`): mail that predates setup stays backfill-only. Dry-run records, never
 modifies. Feedback: if the user removes our label and/or adds a different one of ours on a message
 we decided, record `(predicted, corrected)`; corrected=None when only removed.
+Teacher: label ids whose names match `cfg.teacher_names()` (case-insensitive, never under our prefix;
+`learn.teacher = "auto"` needs ≥ 3 of them in the account) are read from history events on decided
+mail and from the message at classification; the final set decides (none left: the row is deleted).
+Each classified batch: model.predict → `learn.base_scores` + `learn.features` → personal head (if
+active) → policy.decide; the decision stores the base scores and features. `recover()` records a
+history gap.
 
 ### config.py
 TOML at `paths.config_dir/config.toml`; `EMAIL_TOWN_LABELER_HOME` overrides all paths (Docker: `/data`).
@@ -225,14 +273,22 @@ protect_known_contacts = true
 new_sender = true
 contacts_scan_days = 730     # 1 .. 3650
 contacts_scan_limit = 5000   # 0 .. 100000
+[learn]                      # only keys the user set are written back (QUIET_SECTIONS)
+auto = true                  # interval_hours = 24, min_new_signals = 20, min_examples = 30,
+teacher = "auto"             # prior_strength = 10, *_weight, teacher_wait_days = 3, confirm_days = 7,
+tune_policy = true           # action_recall_target = 0.9, promo_important_max_rate = 0.01,
+                             # max_examples = 20000 (see configuration.md)
+[teacher_labels]             # optional: meaning -> Town label name
 ```
 Files: `config_dir/client_secret.json`, `config_dir/token.json`, `data_dir/state.sqlite`,
+`data_dir/personal.json` (learn.py),
 `data_dir/models/`, `data_dir/logs/`.
 
 ### cli.py (`email-town-labeler …`)
 `setup` (wizard: client secret → login → pick model → dry run on 5 newest → offer service install),
 `login [--headless]`, `run` (foreground daemon), `once`, `backfill [--days N] [--limit N] [--dry-run]`,
-`status [--json] [--redact]`, `undo`, `model list|pull <ref>|info`, `personalize`,
+`status [--json] [--redact]`, `undo`, `model list|pull <ref>|info`, `personalize [--reset]` (head backends: refit the head; else
+`learn`), `learn [--dry-run] [--reset] [--export FILE] [--json]`,
 `service install|uninstall|status`, `contacts rebuild|count [--json]|list --yes-show-addresses`,
 `doctor [--redact]` (checks: config, token, scopes, Gmail
 reachable, model loads, labels exist), `gcp-setup --print`, `--version`. `--home` / `-v` work

@@ -26,6 +26,8 @@ class Prediction:
     cls: str
     prob: float
     probs: dict[str, float] = field(default_factory=dict)
+    # the model's raw scores over CLASSES (same order), when it has them; learn.py stores these
+    logits: list[float] | None = None
 
 
 @dataclass

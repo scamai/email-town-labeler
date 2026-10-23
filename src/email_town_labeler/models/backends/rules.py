@@ -104,7 +104,7 @@ class RulesClassifier:
         if not records:
             return []
         Z = np.array([[logits(r)[c] for c in CLASSES] for r in records]) / TEMPERATURE
-        return to_predictions(softmax(Z), CLASSES)
+        return to_predictions(softmax(Z), CLASSES, logits=Z)
 
 
 def load(manifest: ModelManifest | None = None, *, device: str = "cpu", **_: object) -> RulesClassifier:

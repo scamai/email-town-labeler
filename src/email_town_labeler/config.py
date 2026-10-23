@@ -25,6 +25,20 @@ REMOTE_ENDPOINT_ENV = (
     "EMAIL_TOWN_LABELER_ALLOW_REMOTE_ENDPOINT"  # "1": same as [model] allow_remote_endpoint = true
 )
 UNKNOWN_ACTIONS = ("skip", "label")
+QUIET_SECTIONS = ("learn",)  # dump_config writes only the keys of these sections that the user set
+TEACHER_MODES = ("auto", "on", "off")
+# Town's default Gmail label names (top level, matched case-insensitively). Keys are what the label
+# means: a model class, `new_sender` (the model's `unknown`) or `awaiting_reply` (no class: ignored).
+TEACHER_LABELS = {
+    "action_needed": "action needed",
+    "newsletters": "newsletters",
+    "promotional": "promotional",
+    "orders": "orders",
+    "travel": "travel",
+    "updates": "updates",
+    "new_sender": "new sender",
+    "awaiting_reply": "awaiting reply",
+}
 # [policy] keys a model package may recommend (model.json config.recommended_policy); config.toml wins
 MODEL_POLICY_KEYS = ("action_threshold", "promotional_threshold")
 log = logging.getLogger("email_town_labeler.config")
@@ -71,6 +85,11 @@ class Paths:
         return self.data_dir / "state.sqlite"
 
     @property
+    def learned(self) -> Path:
+        """learn.py's output: the personal head and learned thresholds (derived from your mail; private)."""
+        return self.data_dir / "personal.json"
+
+    @property
     def models_dir(self) -> Path:
         return self.data_dir / "models"
 
@@ -103,6 +122,23 @@ _LAYOUT: list[tuple[str, str, str]] = [
     ("policy", "new_sender", "new_sender"),
     ("policy", "contacts_scan_days", "contacts_scan_days"),
     ("policy", "contacts_scan_limit", "contacts_scan_limit"),
+    ("learn", "auto", "learn_auto"),
+    ("learn", "interval_hours", "learn_interval_hours"),
+    ("learn", "min_new_signals", "learn_min_new_signals"),
+    ("learn", "min_examples", "learn_min_examples"),
+    ("learn", "prior_strength", "learn_prior_strength"),
+    ("learn", "correction_weight", "learn_correction_weight"),
+    ("learn", "removal_weight", "learn_removal_weight"),
+    ("learn", "teacher", "learn_teacher"),
+    ("learn", "teacher_weight", "learn_teacher_weight"),
+    ("learn", "teacher_none_weight", "learn_teacher_none_weight"),
+    ("learn", "teacher_wait_days", "learn_teacher_wait_days"),
+    ("learn", "confirm_weight", "learn_confirm_weight"),
+    ("learn", "confirm_days", "learn_confirm_days"),
+    ("learn", "tune_policy", "learn_tune_policy"),
+    ("learn", "action_recall_target", "learn_action_recall_target"),
+    ("learn", "promo_important_max_rate", "learn_promo_important_max_rate"),
+    ("learn", "max_examples", "learn_max_examples"),
 ]
 
 
@@ -126,9 +162,28 @@ class Config:
     new_sender: bool = True  # label unknown Primary mail from never-written-to addresses "new sender"
     contacts_scan_days: int = 730  # setup scans sent mail this far back for contacts...
     contacts_scan_limit: int = 5000  # ...but at most this many sent messages
+    # [learn]: improving from use (learn.py). Signals: your corrections, Town's labels, kept labels.
+    learn_auto: bool = True  # `run` re-learns on its own every interval_hours when there are new signals
+    learn_interval_hours: int = 24
+    learn_min_new_signals: int = 20  # ...and at least this many new signals since the last run
+    learn_min_examples: int = 30  # strong signals (corrections, removals, teacher labels) before fitting
+    learn_prior_strength: float = 10.0  # pull toward the unchanged model; higher = needs more evidence
+    learn_correction_weight: float = 2.0  # you moved our label to another of ours
+    learn_removal_weight: float = 1.0  # you removed our label without adding another: "not that class"
+    learn_teacher: str = "auto"  # Town's labels as ground truth: "auto" (if they exist), "on", "off"
+    learn_teacher_weight: float = 1.0
+    learn_teacher_none_weight: float = 0.5  # Town running but left it unlabeled -> unknown (0 = off)
+    learn_teacher_wait_days: float = 3.0
+    learn_confirm_weight: float = 0.2  # our label kept untouched for confirm_days: weak positive (0 = off)
+    learn_confirm_days: float = 7.0
+    learn_tune_policy: bool = True  # re-tune action/promotional thresholds from the same signals
+    learn_action_recall_target: float = 0.9  # keep action needed recall at least this
+    learn_promo_important_max_rate: float = 0.01  # of mail labeled promotional, at most this is important
+    learn_max_examples: int = 20000  # newest decisions used per run (bounds time and memory)
     label_names: dict[str, str] = field(default_factory=dict)  # optional [labels] overrides
     # optional [label_colors] overrides: class -> {"background", "text"} or False (leave that label alone)
     label_color_overrides: dict[str, Any] = field(default_factory=dict)
+    teacher_labels: dict[str, str] = field(default_factory=dict)  # optional [teacher_labels] overrides
     # field names the user set in config.toml (filled by config_from_dict), and names for_model() filled in
     _explicit: set[str] = field(default_factory=set, repr=False, compare=False)
     _from_model: set[str] = field(default_factory=set, repr=False, compare=False)
@@ -140,25 +195,38 @@ class Config:
         default = next(f.default for f in fields(self) if f.name == name)
         return name not in self._from_model and getattr(self, name) != default
 
-    def policy_sources(self, manifest: Any = None) -> dict[str, tuple[float, str]]:
-        """MODEL_POLICY_KEYS -> (effective value, source): "config", "model" (recommended_policy) or "default"."""
+    def policy_sources(
+        self, manifest: Any = None, learned: dict[str, float] | None = None
+    ) -> dict[str, tuple[float, str]]:
+        """MODEL_POLICY_KEYS -> (effective value, source): "config", "learned" (learn.py, from your
+        signals), "model" (recommended_policy) or "default", in that order of precedence."""
         rec = _recommended_policy(manifest)
+        learned = _valid_policy(learned or {}, "learned policy")
         out: dict[str, tuple[float, str]] = {}
         for k in MODEL_POLICY_KEYS:
             if self.is_explicit(k):
                 out[k] = (getattr(self, k), "config")
+            elif k in learned:
+                out[k] = (learned[k], "learned")
             elif k in rec:
                 out[k] = (rec[k], "model")
             else:
                 out[k] = (getattr(self, k), "model" if k in self._from_model else "default")
         return out
 
-    def for_model(self, manifest: Any) -> Config:
-        """This config with the model's recommended thresholds for keys the user did not set (else self)."""
-        changes = {k: v for k, (v, src) in self.policy_sources(manifest).items() if src == "model"}
+    def for_model(self, manifest: Any, learned: dict[str, float] | None = None) -> Config:
+        """This config with learned, else the model's recommended, thresholds for keys the user did not set."""
+        changes = {
+            k: v
+            for k, (v, src) in self.policy_sources(manifest, learned).items()
+            if src in ("model", "learned")
+        }
         if not changes or all(getattr(self, k) == v for k, v in changes.items()):
             return self
         return replace(self, **changes, _from_model=self._from_model | set(changes))
+
+    def teacher_names(self) -> dict[str, str]:
+        return {**TEACHER_LABELS, **self.teacher_labels}
 
     def display_names(self) -> dict[str, str]:
         return {**DISPLAY_NAMES, **self.label_names}
@@ -219,6 +287,7 @@ class Config:
             )
         if not self.model_ref.strip():
             errs.append('model.ref must not be empty (try "rules")')
+        errs += self._validate_learn()
         bad = sorted(set(self.label_names) - set(LABEL_CLASSES))
         if bad:
             errs.append(f"[labels] has unknown classes {bad}; valid: {LABEL_CLASSES}")
@@ -245,10 +314,50 @@ class Config:
             raise ConfigError("invalid config:\n  - " + "\n  - ".join(errs))
         return self
 
+    def _validate_learn(self) -> list[str]:
+        errs: list[str] = []
+        ranges: list[tuple[str, str, float, float]] = [
+            ("learn_interval_hours", "interval_hours", 1, 24 * 365),
+            ("learn_min_new_signals", "min_new_signals", 0, 1_000_000),
+            ("learn_min_examples", "min_examples", 1, 1_000_000),
+            ("learn_correction_weight", "correction_weight", 0, 100),
+            ("learn_removal_weight", "removal_weight", 0, 100),
+            ("learn_teacher_weight", "teacher_weight", 0, 100),
+            ("learn_teacher_none_weight", "teacher_none_weight", 0, 100),
+            ("learn_teacher_wait_days", "teacher_wait_days", 0, 365),
+            ("learn_confirm_weight", "confirm_weight", 0, 100),
+            ("learn_confirm_days", "confirm_days", 0, 365),
+            ("learn_promo_important_max_rate", "promo_important_max_rate", 0, 1),
+            ("learn_max_examples", "max_examples", 100, 1_000_000),
+        ]
+        for name, key, lo, hi in ranges:
+            v = getattr(self, name)
+            if not (math.isfinite(v) and lo <= v <= hi):
+                errs.append(f"learn.{key} must be between {lo:g} and {hi:g} (got {v})")
+        if not (math.isfinite(self.learn_prior_strength) and 0 < self.learn_prior_strength <= 1e6):
+            errs.append(f"learn.prior_strength must be above 0 (got {self.learn_prior_strength})")
+        if not 0 < self.learn_action_recall_target <= 1:
+            errs.append(
+                f"learn.action_recall_target must be above 0 and at most 1 (got {self.learn_action_recall_target})"
+            )
+        if self.learn_teacher not in TEACHER_MODES:
+            errs.append(f"learn.teacher must be one of {list(TEACHER_MODES)} (got '{self.learn_teacher}')")
+        bad = sorted(set(self.teacher_labels) - set(TEACHER_LABELS))
+        if bad:
+            errs.append(f"[teacher_labels] has unknown keys {bad}; valid: {list(TEACHER_LABELS)}")
+        for c, n in self.teacher_labels.items():
+            if not str(n).strip():
+                errs.append(f"[teacher_labels] {c} must be a non-empty label name")
+        return errs
+
 
 def _recommended_policy(manifest: Any) -> dict[str, float]:
     """Valid entries of manifest.config.recommended_policy (invalid ones are ignored, with a warning)."""
     rec = (getattr(manifest, "config", None) or {}).get("recommended_policy") or {}
+    return _valid_policy(rec, "the model's recommended_policy")
+
+
+def _valid_policy(rec: Any, what: str) -> dict[str, float]:
     if not isinstance(rec, dict):
         return {}
     out: dict[str, float] = {}
@@ -260,7 +369,7 @@ def _recommended_policy(manifest: Any) -> dict[str, float]:
         if num and (0.0 < v <= 1.0 if k == "action_threshold" else 0.0 <= v <= 1.0):
             out[k] = float(v)
         else:
-            log.warning("ignoring the model's recommended_policy.%s: not a valid threshold", k)
+            log.warning("ignoring %s.%s: not a valid threshold", what, k)
     return out
 
 
@@ -282,6 +391,23 @@ _EXPECT = {
     "new_sender": bool,
     "contacts_scan_days": int,
     "contacts_scan_limit": int,
+    "learn_auto": bool,
+    "learn_interval_hours": int,
+    "learn_min_new_signals": int,
+    "learn_min_examples": int,
+    "learn_prior_strength": float,
+    "learn_correction_weight": float,
+    "learn_removal_weight": float,
+    "learn_teacher": str,
+    "learn_teacher_weight": float,
+    "learn_teacher_none_weight": float,
+    "learn_teacher_wait_days": float,
+    "learn_confirm_weight": float,
+    "learn_confirm_days": float,
+    "learn_tune_policy": bool,
+    "learn_action_recall_target": float,
+    "learn_promo_important_max_rate": float,
+    "learn_max_examples": int,
 }
 
 
@@ -310,7 +436,7 @@ def _coerce(section: str, key: str, name: str, value: Any) -> Any:
 
 def config_from_dict(data: dict[str, Any]) -> Config:
     cfg = Config()
-    known = {s for s, _, _ in _LAYOUT} | {"labels", "label_colors"}
+    known = {s for s, _, _ in _LAYOUT} | {"labels", "label_colors", "teacher_labels"}
     unknown_sections = sorted(set(data) - known)
     if unknown_sections:
         raise ConfigError(f"unknown config section(s) {unknown_sections}; expected {sorted(known)}")
@@ -335,6 +461,10 @@ def config_from_dict(data: dict[str, Any]) -> Config:
             '[label_colors] must map class names to false or { background = "...", text = "..." }'
         )
     cfg.label_color_overrides = {c: v if v is False else dict(v) for c, v in colors.items()}
+    teacher = data.get("teacher_labels", {})
+    if not isinstance(teacher, dict) or not all(isinstance(v, str) for v in teacher.values()):
+        raise ConfigError("[teacher_labels] must map meanings to Gmail label names (strings)")
+    cfg.teacher_labels = dict(teacher)
     return cfg.validate()
 
 
@@ -369,6 +499,8 @@ def dump_config(cfg: Config) -> str:
     out: list[str] = ["# email-town-labeler config. See docs/configuration.md"]
     section = None
     for s, k, n in _LAYOUT:
+        if s in QUIET_SECTIONS and not cfg.is_explicit(n):
+            continue  # [learn]: only what the user set; the defaults are in docs/configuration.md
         if s != section:
             out += ["", f"[{s}]"]
             section = s
@@ -389,6 +521,10 @@ def dump_config(cfg: Config) -> str:
                 else f"{{ background = {_toml_value(v['background'])}, text = {_toml_value(v['text'])} }}"
             )
             out.append(f"{json.dumps(c)} = {val}")
+    if cfg.teacher_labels:
+        out += ["", "[teacher_labels]"] + [
+            f"{json.dumps(c)} = {_toml_value(n)}" for c, n in sorted(cfg.teacher_labels.items())
+        ]
     return "\n".join(out) + "\n"
 
 

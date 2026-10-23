@@ -17,6 +17,21 @@ contain breaking changes; they are called out.
   turn it off with `[gmail] label_colors = false`. A color Gmail rejects (400, outside its
   palette) is logged and the label stays uncolored. `GmailClient.list_labels` now returns a
   label's `color`; new `GmailClient.set_label_color`.
+- **Improving from use, for every model (including `town-modernbert`).** Each decision now
+  stores the model's scores (log-probabilities) and eight yes/no features (schema v4), so
+  `learn.py` trains without re-reading mail or re-running the model. Signals: your corrections
+  and removals, Town's labels on mail we decided (`[learn] teacher = "auto"`: used when Town's
+  labels exist in the account; `[teacher_labels]` renames them), Town leaving mail unlabeled, and
+  (weakly) labels kept for a week. Reading/archiving is never used. A small personal head on the
+  scores (anchored to the unchanged model) is activated only when it beats the model on 5-fold
+  held-out signals; `action_threshold` / `promotional_threshold` are re-tuned from the same
+  signals (action-needed recall first, nothing important in promotional; explicit config wins).
+  Stored as `<data dir>/personal.json`, reloaded by the running service when it changes.
+- `email-town-labeler learn [--dry-run] [--reset] [--export FILE] [--json]`; `personalize` runs
+  `learn` for models without a trainable head, and `personalize --reset` is the escape hatch.
+  The service learns on its own every `interval_hours` with `min_new_signals` new signals
+  (`[learn] auto`). `status` shows signal counts, the personal head and its held-out score, and
+  thresholds with the source `learned`. New `[learn]` and `[teacher_labels]` config sections.
 
 - Published default model `town-modernbert` (ModernBERT-large, ONNX, `[onnx]` extra; 824 MB) and
   `town-modernbert-torch` (`[embed]`; 635 MB) in a built-in catalog (`models/catalog.py`):

@@ -4,6 +4,11 @@ Between model.predict and labeling, policy.decide turns probabilities into the f
 thresholds, the known-contact guard, the confidence bar, the new-sender rule). Contacts (addresses you have
 sent mail to) come from a one-time scan of sent mail and then from SENT messages seen in history.
 
+Each decision also stores the model's own scores and a few yes/no features (learn.py), and labels another
+labeler (Town, the "teacher") puts on mail we decided. With `learn_path`, a personal head and learned
+thresholds from learn.py are applied, reloaded when the file changes, and (in `run_forever`) re-learned on
+schedule.
+
 Logs carry message ids, classes, probabilities and counts only — never mail content or addresses.
 """
 
@@ -14,8 +19,10 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Iterable
+from pathlib import Path
 from typing import Any
 
+from . import learn
 from .config import Config
 from .contacts import recipient_addresses, sender_address
 from .policy import Decision, decide
@@ -36,6 +43,8 @@ LABEL_CACHE_SECONDS = 3600.0
 CONTACT_HEADERS = ["To", "Cc", "Bcc"]
 CONTACTS_TS = "contacts_ts"  # kv: when the sent-mail contacts scan last completed
 PRIMARY = "CATEGORY_PERSONAL"
+TEACHER_AUTO_MIN = 3  # learn.teacher = "auto": at least this many teacher label names exist in the account
+LEARN_RECHECK = 3600.0  # seconds between checks whether a scheduled learning run is due
 
 
 def is_history_expired(exc: BaseException) -> bool:
@@ -60,13 +69,124 @@ class Engine:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] | None = None,
         batch_size: int = BATCH,
+        learn_path: Path | None = None,
     ):
-        # the model's recommended [policy] thresholds apply to keys config.toml does not set
-        cfg = cfg.for_model(getattr(model, "manifest", None)) if model is not None else cfg
-        self.client, self.labels, self.model, self.store, self.cfg = client, labels, model, store, cfg
+        self.client, self.labels, self.model, self.store = client, labels, model, store
         self.clock, self._sleep_fn, self.batch_size = clock, sleep, batch_size
+        self.config = cfg  # as loaded; self.cfg adds the model's / learned thresholds
+        self.learn_path = Path(learn_path) if learn_path is not None else None
+        self.artifact: learn.Artifact | None = None
+        self._artifact_stamp: tuple[int, int] | None = None
+        self._next_learn_check = float("-inf")
         self._label_index: dict[str, str] = {}  # label id -> name
         self._label_index_ts = float("-inf")
+        self._set_cfg()
+        self.reload_learned(force=True)
+
+    # -- learned head + thresholds ------------------------------------------------------------
+    def _set_cfg(self) -> None:
+        # thresholds: config.toml, else learned (learn.py), else the model's recommended, else defaults
+        manifest = getattr(self.model, "manifest", None) if self.model is not None else None
+        learned = self.artifact.policy if self.artifact else None
+        self.cfg = self.config.for_model(manifest, learned) if self.model is not None else self.config
+
+    @property
+    def head(self) -> learn.PersonalHead | None:
+        return self.artifact.active_head if self.artifact else None
+
+    def reload_learned(self, force: bool = False) -> bool:
+        """(Re)load learn_path if it changed (another process may have run `learn`). True if it changed."""
+        if self.learn_path is None or self.model is None:
+            return False
+        try:
+            st = self.learn_path.stat()
+            stamp: tuple[int, int] | None = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            stamp = None
+        if not force and stamp == self._artifact_stamp:
+            return False
+        self._artifact_stamp = stamp
+        before = self.head.id if self.head else None
+        self.artifact = learn.load(self.learn_path, self.model_id) if stamp else None
+        self._set_cfg()
+        after = self.head.id if self.head else None
+        if after != before or not force:
+            log.info(
+                "learned settings: head %s; action_threshold %g, promotional_threshold %g",
+                after or "none",
+                self.cfg.action_threshold,
+                self.cfg.promotional_threshold,
+            )
+        return True
+
+    def learn(self, *, dry_run: bool = False) -> learn.Result:
+        """One learning run now (needs learn_path). No Gmail calls, no mail content."""
+        if self.learn_path is None or self.model is None:
+            raise RuntimeError("learning needs a model and learn_path")
+        res = learn.learn_once(
+            self.store,
+            self.learn_path,
+            self.model_id,
+            self.config,
+            self.model.manifest,
+            now=self.clock(),
+            save_it=not dry_run,
+        )
+        if not dry_run:
+            self.reload_learned(force=True)
+        return res
+
+    def maybe_learn(self) -> learn.Result | None:
+        """The scheduled run (`[learn] auto`): every interval_hours, when there are enough new signals."""
+        if self.learn_path is None or self.model is None or not self.config.learn_auto:
+            return None
+        now = self.clock()
+        if now < self._next_learn_check:
+            return None
+        self._next_learn_check = now + LEARN_RECHECK
+        ok, _ = learn.due(self.store, self.model_id, self.config, now=now)
+        return self.learn() if ok else None
+
+    # -- teacher labels -----------------------------------------------------------------------
+    def _teacher_ids(self) -> dict[str, str | None]:
+        """Gmail label id -> the model class a teacher (Town) label means (None: no class), if enabled."""
+        mode = self.config.learn_teacher
+        if mode == "off":
+            return {}
+        by_name: dict[str, str] = {}
+        for key, name in self.config.teacher_names().items():
+            by_name.setdefault(name.strip().casefold(), key)
+        p = self.cfg.label_prefix.casefold()
+        out: dict[str, str | None] = {}
+        for lid, name in self._label_index.items():
+            n = name.strip().casefold()
+            if n in by_name and n != p and not n.startswith(p + "/"):
+                out[lid] = learn.model_class(by_name[n])
+        if mode == "auto" and len(out) < TEACHER_AUTO_MIN:
+            return {}
+        return out
+
+    def capture_teacher(self, events: list[HistoryEvent]) -> int:
+        """Teacher labels added to / removed from messages we decided -> teacher rows. Returns changes."""
+        tids = self._teacher_ids()
+        if not tids:
+            return 0
+        touched: dict[str, list[HistoryEvent]] = {}
+        for e in events:
+            if e.kind in ("label_added", "label_removed") and set(e.label_ids) & set(tids):
+                touched.setdefault(e.message_id, []).append(e)
+        n = 0
+        for mid, evs in touched.items():
+            if self.store.decision(mid) is None:
+                continue  # not decided (yet): classification reads the label off the message instead
+            final = {lid for lid in evs[-1].message_label_ids if lid in tids}
+            added = [lid for e in evs if e.kind == "label_added" for lid in e.label_ids if lid in tids]
+            if final:
+                self.store.record_teacher(mid, tids[_pick(final, added)])
+            else:
+                self.store.delete_teacher(mid)
+            n += 1
+        return n
 
     @property
     def model_id(self) -> str:
@@ -121,27 +241,58 @@ class Engine:
             return "skip_label"
         return None
 
-    def decisions(self, recs: list[EmailRecord], preds: list[Prediction]) -> list[Decision]:
-        """policy.decide for each message: needs its sender's contact status and its Gmail category."""
+    def contact_flags(self, recs: list[EmailRecord]) -> list[tuple[bool, bool]]:
+        """(known contact, new address) per message; both False when unknowable (before the scan)."""
         senders = [sender_address(r) for r in recs]
         ready = self.cfg.uses_contacts() and self.contacts_ready()
         known = self.store.known_contacts([s for s in senders if s]) if ready else set()
         me = (self.store.get("account_email") or "").lower()
         out = []
-        for rec, pred, s in zip(recs, preds, senders):
+        for s in senders:
             is_known = bool(s) and (s in known or s == me)
-            out.append(
-                decide(
-                    pred,
-                    known_contact=is_known,
-                    new_address=ready and bool(s) and not is_known,  # unknowable before the scan
-                    primary=PRIMARY in (rec.get("label_ids") or []),
-                    cfg=self.cfg,
-                )
-            )
+            out.append((is_known, ready and bool(s) and not is_known))
         return out
 
-    def _apply(self, rec: EmailRecord, pred: Prediction, d: Decision, counts: dict[str, Any]) -> None:
+    def decisions(
+        self,
+        recs: list[EmailRecord],
+        preds: list[Prediction],
+        flags: list[tuple[bool, bool]] | None = None,
+    ) -> list[Decision]:
+        """policy.decide for each message: needs its sender's contact status and its Gmail category."""
+        flags = self.contact_flags(recs) if flags is None else flags
+        return [
+            decide(
+                pred,
+                known_contact=known,
+                new_address=new,
+                primary=PRIMARY in (rec.get("label_ids") or []),
+                cfg=self.cfg,
+            )
+            for rec, pred, (known, new) in zip(recs, preds, flags)
+        ]
+
+    def predict(self, recs: list[EmailRecord]) -> tuple[list[Prediction], list[Any], list[list[float]], list]:
+        """The model (then the personal head, if active): predictions, base scores, features, contact flags."""
+        preds = self.model.predict(recs)
+        if len(preds) != len(recs):
+            raise RuntimeError(f"model returned {len(preds)} predictions for {len(recs)} messages")
+        flags = self.contact_flags(recs)
+        scores = [learn.base_scores(p) for p in preds]
+        feats = [learn.features(r, known_contact=k) for r, (k, _) in zip(recs, flags)]
+        head = self.head
+        return (head.predictions(scores, feats) if head and recs else preds), scores, feats, flags
+
+    def _apply(
+        self,
+        rec: EmailRecord,
+        pred: Prediction,
+        d: Decision,
+        counts: dict[str, Any],
+        *,
+        scores: Any = None,
+        feats: list[float] | None = None,
+    ) -> None:
         cls = d.cls
         mid = rec["id"]
         apply = not (cls == UNKNOWN and self.cfg.unknown_action == "skip") and not self.cfg.dry_run
@@ -161,7 +312,14 @@ class Engine:
             apply,
             dry_run=self.cfg.dry_run,
             model_cls=pred.cls,
+            scores=None if scores is None else list(scores),
+            feats=feats,
+            head_id=self.head.id if self.head else None,
         )
+        tids = self._teacher_ids()
+        on = [lid for lid in rec.get("label_ids") or [] if lid in tids]
+        if on:  # the teacher labeled it before we did
+            self.store.record_teacher(mid, tids[_pick(set(on), on)])
         counts["by_class"][cls] = counts["by_class"].get(cls, 0) + 1
         log.debug("decided %s -> %s (model %s p=%.3f) applied=%s", mid, cls, pred.cls, pred.prob, apply)
 
@@ -188,11 +346,9 @@ class Engine:
                 ok.append(r)
         for i in range(0, len(ok), self.batch_size):
             batch = ok[i : i + self.batch_size]
-            preds = self.model.predict(batch)
-            if len(preds) != len(batch):
-                raise RuntimeError(f"model returned {len(preds)} predictions for {len(batch)} messages")
-            for rec, pred, d in zip(batch, preds, self.decisions(batch, preds)):
-                self._apply(rec, pred, d, counts)
+            preds, scores, feats, flags = self.predict(batch)
+            for rec, pred, d, z, f in zip(batch, preds, self.decisions(batch, preds, flags), scores, feats):
+                self._apply(rec, pred, d, counts, scores=z, feats=f)
         return counts
 
     # -- contacts -----------------------------------------------------------------------------
@@ -329,6 +485,7 @@ class Engine:
             )
         counts = self.classify_ids(ids)
         counts["contacts_added"] = added
+        learn.add_history_gap(self.store, since, self.clock())  # teacher label events here are lost
         self.store.set("history_id", str(prof["historyId"]))
         counts["recovered"] = True
         counts["new"] = len(ids)
@@ -337,6 +494,7 @@ class Engine:
     def sync_once(self) -> dict[str, Any]:
         t0 = self.clock()
         self.store.set("model_id", self.model_id)
+        self.reload_learned()
         start = self.store.get("history_id")
         if start is None:
             counts = self.bootstrap()
@@ -353,6 +511,7 @@ class Engine:
                 counts["events"] = len(events)
                 counts["contacts_added"] = self.learn_contacts(_sent_ids(events))  # before classifying
                 counts["feedback"] = self.capture_feedback(events)
+                counts["teacher"] = self.capture_teacher(events)
                 added = list(dict.fromkeys(e.message_id for e in events if e.kind == "added"))
                 counts["new"] = len(added)
                 self.classify_ids(added, counts)
@@ -402,6 +561,11 @@ class Engine:
                 self.sync_once()
                 failures = 0
                 delay = float(self.cfg.poll_seconds)
+                try:
+                    self.maybe_learn()
+                except Exception as e:  # learning must never stop labeling
+                    log.warning("learning failed (%s); labeling continues", _err_name(e))
+                    log.debug("learning failure detail", exc_info=True)
             except Exception as e:  # transient API/network/model errors must not kill the daemon
                 failures += 1
                 delay = min(15.0 * 2 ** (failures - 1), MAX_BACKOFF)
@@ -434,10 +598,12 @@ class Engine:
         """Classify the n newest inbox messages without recording or modifying anything."""
         ids = self.client.list_message_ids(label_ids=["INBOX"], max_results=n)
         recs = self.client.get_records(ids[:n])
-        preds = self.model.predict(recs) if recs else []
+        if not recs:
+            return []
+        preds, _, _, flags = self.predict(recs)
         return [
             {"id": r["id"], "cls": p.cls, "prob": p.prob, "final": d.cls}
-            for r, p, d in zip(recs, preds, self.decisions(recs, preds))
+            for r, p, d in zip(recs, preds, self.decisions(recs, preds, flags))
         ]
 
     def undo(self) -> int:
@@ -495,6 +661,7 @@ def _counts() -> dict[str, Any]:
         "skipped": 0,
         "already_decided": 0,
         "feedback": 0,
+        "teacher": 0,
         "contacts_added": 0,
         "by_class": {},
         "skip_reasons": {},

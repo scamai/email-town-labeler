@@ -67,6 +67,25 @@ new_sender = true              # label Primary mail with no other label from a s
 contacts_scan_days = 730       # setup reads sent mail this far back to learn your contacts (1 .. 3650)
 contacts_scan_limit = 5000     # ...but at most this many sent messages (0 = no scan)
 
+[learn]                        # improving from use (see docs/models.md#improving-from-use-learn)
+auto = true                    # the service re-learns on its own
+interval_hours = 24            # ...at most this often (1 .. 8760)
+min_new_signals = 20           # ...and only with this many new signals since the last run
+min_examples = 30              # corrections + removals + teacher labels before a personal head is fit
+prior_strength = 10.0          # pull toward the unchanged model (~ this many messages it gets right)
+correction_weight = 2.0        # you moved our label to another of ours
+removal_weight = 1.0           # you removed our label without adding another ("not that class")
+teacher = "auto"               # Town's labels as ground truth: "auto" (if they exist), "on", "off"
+teacher_weight = 1.0
+teacher_none_weight = 0.5      # Town running but left it unlabeled for teacher_wait_days: unknown
+teacher_wait_days = 3.0
+confirm_weight = 0.2           # our label kept for confirm_days: weak "that class" (0 = off)
+confirm_days = 7.0
+tune_policy = true             # re-tune action/promotional thresholds from the same signals
+action_recall_target = 0.9     # keep action needed recall at least this
+promo_important_max_rate = 0.01  # of mail labeled promotional, at most this may be important
+max_examples = 20000           # newest decisions per run (100 .. 1000000)
+
 [labels]                       # optional: rename the Gmail labels per class
 # action_needed = "todo"
 # newsletters = "reading"
@@ -74,7 +93,11 @@ contacts_scan_limit = 5000     # ...but at most this many sent messages (0 = no 
 [label_colors]                 # optional: per-class color, or false to leave that label alone
 # orders = { background = "#b99aff", text = "#000000" }
 # promotional = false
+[teacher_labels]               # optional: Town's label names, if you renamed them there
+# newsletters = "reading"
 ```
+
+`setup` and `personalize` write only the `[learn]` keys you set; the rest use the defaults above.
 
 ### `[gmail]`
 
@@ -131,7 +154,13 @@ have **not** set in `config.toml`; a key you set always wins. `setup` writes the
 commented out, so the model's values apply until you uncomment one. The published
 `town-modernbert` recommends `action_threshold = 0.07` and `promotional_threshold = 0.8`.
 `email-town-labeler status` and `doctor` show the values in effect and where each one comes
-from: `model`, `config` or `default` (the built-in values below).
+from: `config`, `learned`, `model` or `default` (the built-in values below), in that order of
+precedence.
+
+**Thresholds learned from your signals.** With `[learn] tune_policy` on (the default), `learn`
+re-tunes the two thresholds you have not set from your corrections and Town's labels, putting
+action-needed recall first and keeping important mail out of `promotional`; see
+[models.md](models.md#re-tuned-thresholds). `learn --reset` drops them.
 
 - **`action_threshold`** (default `0.2`): if the model gives `action needed` at least this
   probability, the message is labeled `action needed`, even when another class scored higher.
@@ -210,6 +239,32 @@ also update existing class labels under `label_prefix` whose color is missing or
 the config (not in `dry_run`). Labels outside `label_prefix`, including Town's own, are never
 changed. If you recolor one of our labels in Gmail, the next start puts the configured color
 back; set that class to `false` (or pick your color here) to keep yours.
+### `[learn]`
+
+How email-town-labeler improves from use; the full description is in
+[models.md](models.md#improving-from-use-learn). Everything runs locally on numbers stored at
+decision time; no key here makes anything leave your machine.
+
+- **`auto`**: `run` (the service) checks hourly and learns when `interval_hours` have passed and
+  there are `min_new_signals` new signals. `false`: only when you run `email-town-labeler learn`.
+- **`min_examples`**, **`prior_strength`**: how much evidence the personal head needs before it is
+  fit, and how strongly it is pulled toward the unchanged model. A fitted head is only used if it
+  beats the model on held-out signals.
+- **`*_weight`**: how much each kind of signal counts. `0` turns a kind off. `confirm_weight`
+  (kept labels) is low on purpose: a kept label may just be unread.
+- **`teacher`**: `auto` uses Town's labels as ground truth when at least three of its label
+  names exist in your account; `on` with any; `off` never. Their names come from
+  `[teacher_labels]` (defaults: `action needed`, `newsletters`, `promotional`, `orders`,
+  `travel`, `updates`, `new sender`, `awaiting reply`; top-level, case-insensitive). Do not list
+  them in `skip_label_names` if you want them used: skipped mail is never decided.
+- **`tune_policy`**, **`action_recall_target`**, **`promo_important_max_rate`**: threshold
+  re-tuning. Keys set in `[policy]` are never tuned.
+
+### `[teacher_labels]`
+
+Maps a meaning to the Gmail label name your teacher uses. Valid keys: `action_needed`,
+`newsletters`, `promotional`, `orders`, `travel`, `updates`, `new_sender` (counts as `unknown`),
+`awaiting_reply` (ignored).
 
 ## What is eligible for labeling
 

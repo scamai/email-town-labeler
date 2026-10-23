@@ -62,7 +62,8 @@ to disk.
 | `config.toml` | your settings | No |
 | `client_secret.json` | your OAuth client id/secret from Google Cloud | No |
 | `token.json` | OAuth access + refresh token for your Gmail. Mode 0600 on macOS/Linux. | No, but it grants access to your mail: protect it like a password. |
-| `state.sqlite` | Gmail message ids, the model's class and probabilities and the final class we labeled, model id, whether a label was applied, your corrections (predicted class, corrected class), the last Gmail history id, setup and poll timestamps, your account address (shown by `status`), counters, and the **contacts** table: lower-cased addresses you have sent mail to, each with the time you first did (see [Contacts](#contacts)) | No subjects, senders, snippets or bodies. Addresses only in the contacts table. |
+| `state.sqlite` | Gmail message ids, the model's class, probabilities and scores (log-probabilities over the seven classes) and the final class we labeled, eight yes/no facts per decision (known contact, mailing-list headers, Gmail tab, calendar invite), model id, whether a label was applied, your corrections (predicted class, corrected class), which class a Town label on a message we decided means (if you use Town), the last Gmail history id, setup and poll timestamps, your account address (shown by `status`), counters, and the **contacts** table: lower-cased addresses you have sent mail to, each with the time you first did (see [Contacts](#contacts)) | No subjects, senders, snippets or bodies. Addresses only in the contacts table. |
+| `personal.json` | the personal head (a 7x16 weight matrix) and learned thresholds from `learn`, with signal counts and held-out scores | Numbers only, no ids or content, but derived from your mail: keep it private. Delete it (or `learn --reset`) to go back to the model as shipped. |
 | `models/` | model packages (`model.json` + weights) | Not from your mail, unless you ran `personalize` (the refitted head is derived from it). The published `town-modernbert` was trained on someone else's consenting inbox: see [below](#the-published-model-and-whose-mail-it-learned-from). |
 | `logs/` | operational logs | No. See below. |
 
@@ -118,7 +119,7 @@ What the code actually does with it:
 
 | Allowed by the scope | Does email-town-labeler do it? |
 |---|---|
-| Read messages and labels | Yes: new inbox messages (to classify), their label ids (to detect your corrections), and the To/Cc/Bcc headers of mail you sent (to know your contacts). |
+| Read messages and labels | Yes: new inbox messages (to classify), their label ids (to detect your corrections and, if you use Town, Town's labels on mail we decided), and the To/Cc/Bcc headers of mail you sent (to know your contacts). Town's labels are only read, never changed. |
 | Create labels | Yes, only under its own prefix (default `email-town-labeler/`). |
 | Add / remove labels on messages | Yes, only labels under its own prefix. |
 | Touch other labels (INBOX, UNREAD, STARRED, IMPORTANT, CATEGORY_*, your labels) | No. Never added, never removed. Nothing is archived or marked read. |
@@ -188,10 +189,14 @@ weights at all, or a model you train yourself.
 
 ### Models trained on your mail stay private
 
-- `email-town-labeler personalize` refits a small classifier head from **your own** corrections,
-  on your machine, and writes it under your `models/` directory.
-- That personalized package is derived from your mail. Treat it as private: do not upload it,
-  share it or attach it to an issue. The model card it writes says so.
+- `email-town-labeler learn` (also run by the service, `[learn] auto`) fits a small personal head
+  and thresholds from **your own** corrections and Town's labels, on your machine, from numbers
+  stored at decision time (no mail is re-read), and writes `personal.json` in the data directory.
+  `learn --export` writes your signals (message ids and numbers) to a file you name.
+- `email-town-labeler personalize` (head-based models) refits a small classifier head from
+  **your own** corrections, on your machine, and writes it under your `models/` directory.
+- Those files are derived from your mail. Treat them as private: do not upload them,
+  share them or attach them to an issue. The model card it writes says so.
 - The same goes for anything you train yourself from your labels
   ([models.md](models.md#training-your-own-model-from-your-labels)): publishing it would publish
   a trace of your mail and of your correspondents' words. Do it only with the eyes-open consent

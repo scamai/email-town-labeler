@@ -1,6 +1,7 @@
-"""SQLite state: decisions, feedback, contacts and a small key/value table.
+"""SQLite state: decisions, feedback, teacher labels, contacts and a small key/value table.
 
-Ids, classes, probs and timestamps only, plus the lower-cased addresses you have sent mail to (contacts).
+Ids, classes, probs, scores, yes/no features and timestamps only, plus the lower-cased addresses you have
+sent mail to (contacts).
 In `decisions`, `cls` is the final class (what was labeled or recorded), `model_cls` the model's own top
 class and `prob` / `probs` the model's probabilities, so an evaluation can tell the model from the policy.
 """
@@ -11,7 +12,7 @@ import json
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,17 @@ MIGRATIONS: list[str] = [
     """
     CREATE TABLE contacts (address TEXT PRIMARY KEY, first_sent_ms INTEGER);
     ALTER TABLE decisions ADD COLUMN model_cls TEXT;
+    """,
+    # v4 (learning from use, learn.py): the model's own scores (log-probabilities over CLASSES, JSON list)
+    # and a few yes/no features (JSON list, learn.FEATURES order) at decision time, so a personal head can
+    # be trained without re-running the model or keeping any mail; which personal head (if any) was
+    # applied; and labels another labeler (Town, the "teacher") put on mail we decided. teacher.cls is
+    # the model class the teacher's label means, NULL for one that names no class (awaiting reply).
+    """
+    ALTER TABLE decisions ADD COLUMN scores TEXT;
+    ALTER TABLE decisions ADD COLUMN feats TEXT;
+    ALTER TABLE decisions ADD COLUMN head_id TEXT;
+    CREATE TABLE teacher (msg_id TEXT PRIMARY KEY, cls TEXT, ts REAL NOT NULL);
     """,
 ]
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -122,12 +134,17 @@ class Store:
         *,
         dry_run: bool = False,
         model_cls: str | None = None,
+        scores: Sequence[float] | None = None,
+        feats: Sequence[float] | None = None,
+        head_id: str | None = None,
     ) -> None:
-        """`cls` is the final class; `model_cls`, `prob` and `probs` are what the model said."""
+        """`cls` is the final class; `model_cls`, `prob` and `probs` are what the model said (after the
+        personal head `head_id`, if one was applied). `scores` are the base model's own log-probabilities
+        over CLASSES and `feats` the learn.FEATURES values, both kept for learning."""
         with self._lock:
             self._db.execute(
                 "INSERT OR REPLACE INTO decisions (msg_id, cls, prob, probs, model_id, applied, ts, current,"
-                " dry_run, model_cls) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " dry_run, model_cls, scores, feats, head_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     msg_id,
                     cls,
@@ -139,14 +156,18 @@ class Store:
                     cls if applied else None,
                     int(bool(dry_run)),
                     model_cls,
+                    None if scores is None else json.dumps([round(float(v), 5) for v in scores]),
+                    None if feats is None else json.dumps([round(float(v), 5) for v in feats]),
+                    head_id,
                 ),
             )
 
     @staticmethod
     def _row(r: sqlite3.Row) -> dict:
         d = dict(r)
-        if "probs" in d:
-            d["probs"] = json.loads(d["probs"])
+        for k in ("probs", "scores", "feats"):
+            if d.get(k) is not None:
+                d[k] = json.loads(d[k])
         for k in ("applied", "dry_run"):
             if k in d:
                 d[k] = bool(d[k])
@@ -251,6 +272,43 @@ class Store:
             rows = self._db.execute("SELECT * FROM feedback ORDER BY ts, rowid").fetchall()
         return [dict(r) for r in rows]
 
+    # -- teacher labels and learning ---------------------------------------------------------
+    def record_teacher(self, msg_id: str, cls: str | None) -> None:
+        """The teacher's (Town's) label on a message we decided: the model class it means, or None."""
+        with self._lock:
+            self._db.execute("INSERT OR REPLACE INTO teacher VALUES (?, ?, ?)", (msg_id, cls, self.clock()))
+
+    def delete_teacher(self, msg_id: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM teacher WHERE msg_id = ?", (msg_id,))
+
+    def teacher(self, msg_id: str) -> dict | None:
+        with self._lock:
+            r = self._db.execute("SELECT * FROM teacher WHERE msg_id = ?", (msg_id,)).fetchone()
+        return dict(r) if r else None
+
+    def learning_rows(
+        self, model_id: str, *, since_ts: float | None = None, limit: int = 20000
+    ) -> list[dict]:
+        """The newest decisions by `model_id` that kept scores, joined with any feedback and teacher label.
+
+        Keys: msg_id, cls, applied, current, dry_run, ts, scores, feats, fb (0/1), fb_predicted,
+        fb_corrected, t (0/1), t_cls. Ids, classes and numbers only."""
+        q = (
+            "SELECT d.msg_id, d.cls, d.applied, d.current, d.dry_run, d.ts, d.scores, d.feats,"
+            " f.msg_id IS NOT NULL AS fb, f.predicted AS fb_predicted, f.corrected AS fb_corrected,"
+            " t.msg_id IS NOT NULL AS t, t.cls AS t_cls"
+            " FROM decisions d LEFT JOIN feedback f ON f.msg_id = d.msg_id"
+            " LEFT JOIN teacher t ON t.msg_id = d.msg_id"
+            " WHERE d.model_id = ? AND d.scores IS NOT NULL AND d.feats IS NOT NULL AND d.ts >= ?"
+            " ORDER BY d.ts DESC, d.rowid DESC LIMIT ?"
+        )
+        with self._lock:
+            rows = self._db.execute(
+                q, (model_id, float("-inf") if since_ts is None else since_ts, int(limit))
+            ).fetchall()
+        return [self._row(r) for r in rows]
+
     def stats(self) -> dict:
         with self._lock:
             by_cls = {
@@ -261,7 +319,9 @@ class Store:
             fb = self._db.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]
             last = self._db.execute("SELECT MAX(ts) FROM decisions").fetchone()[0]
             contacts = self._db.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+            teacher = self._db.execute("SELECT COUNT(*) FROM teacher").fetchone()[0]
         return {
+            "teacher": teacher,
             "contacts": contacts,
             "decisions": total,
             "applied": applied,

@@ -60,7 +60,8 @@ the reference; in short:
   keys in `config.toml` ([configuration.md](configuration.md#policy)).
 - **Speed:** CPU, 6 threads: about 0.2–0.3 s per email.
 - **License:** Apache-2.0, like the base model (answerdotai/ModernBERT-large).
-- Not personalizable (`personalize` needs a head-based backend).
+- No separate head to refit, but it improves from use like every model: `learn` fits a small
+  personal head on its stored scores ([below](#improving-from-use-learn)).
 
 ### Mirrors and offline installs
 
@@ -371,7 +372,119 @@ control, opt in yourself with `[model] allow_remote_endpoint = true` in `config.
 `EMAIL_TOWN_LABELER_ALLOW_REMOTE_ENDPOINT=1` (see [privacy.md](privacy.md#model-endpoints)). A
 package cannot set this.
 
-## Learning from your corrections: `personalize`
+## Improving from use: `learn`
+
+email-town-labeler gets better at *your* mail from how you and (optionally) Town treat its labels.
+This works for every model, `town-modernbert` included, is local, needs no Gmail calls and no mail
+content, and takes seconds of CPU. The service does it on its own (`[learn] auto`, default on).
+
+### What it learns from
+
+When it decides a message, the engine stores, next to the decision in `state.sqlite`, the
+model's own scores (log-probabilities over the seven classes) and eight yes/no facts it already
+has: sender is a known contact, mailing-list headers, Gmail tab (Primary, Promotions, Social,
+Updates, Forums), calendar invite. No text. Learning later combines those numbers with signals:
+
+| Signal | When | Means | Weight (`[learn]`) |
+|---|---|---|---|
+| correction | you move our label to another `email-town-labeler/...` label | that class | `correction_weight` 2.0 |
+| removal | you remove our label and add none of ours | "not that class" | `removal_weight` 1.0 |
+| teacher | a [Town](https://www.town.com) label (`action needed`, `newsletters`, ...) appears on a message we decided | that class (`new sender` means `unknown`; `awaiting reply` is ignored) | `teacher_weight` 1.0 |
+| teacher-unlabeled | Town was running (it labeled later mail) but left this message unlabeled for `teacher_wait_days` (3) | `unknown` | `teacher_none_weight` 0.5 |
+| kept label | our label stayed untouched for `confirm_days` (7) | that class (weak) | `confirm_weight` 0.2 |
+
+One signal per message; earlier rows win (your correction beats Town's label). Reading,
+archiving, starring or deleting mail is never used as a label. Kept labels only count when no
+teacher is in use for that message.
+
+**Town as a teacher.** If you still run Town, its labels are free, unbiased ground truth: the
+published model was trained on exactly those labels. `[learn] teacher = "auto"` (the default)
+uses them when at least three of Town's label names exist in your account; `"on"` uses them
+with any number, `"off"` never. Rename them in `[teacher_labels]` if you renamed them in Town.
+If Town labels mail before email-town-labeler does, the label is read off the message; either
+way only messages email-town-labeler decided (and so has scores for) count. History gaps (Gmail
+history expired) are remembered, so missed Town events there are not mistaken for "unlabeled".
+
+### The personal head
+
+A multinomial logistic regression on `[scores, yes/no facts]`, started at (and pulled towards)
+the identity: with no signals, or with the head off, the model's own probabilities are used
+unchanged. Its prior penalises the mean squared change of the model's logits over the training
+messages, scaled by `prior_strength` (10): it behaves like that many messages on which the model
+is right, so a handful of signals only nudges it while many consistent ones (say, Town calling
+your bulk "promotional" mail newsletters) change it.
+
+A head is fit once there are at least `min_examples` (30) strong signals (corrections,
+removals, teacher labels), and **activated only if it beats the unchanged model** on 5-fold
+out-of-fold predictions: lower weighted log-loss, accuracy on strong signals no lower, at most 2
+points lower on kept labels, and action-needed recall (each at its own re-tuned threshold) at the
+target. Otherwise it is kept for `status` but not used.
+
+### Re-tuned thresholds
+
+The same out-of-fold probabilities (the head's when active, else the model's) re-tune the two
+policy thresholds, with your priorities:
+
+- `action_threshold`: the highest value (0.02 .. 0.5) that keeps action-needed recall at
+  `action_recall_target` (0.9) over all action-needed signals. It falls at once when recall is
+  short. It rises at most 0.05 per run, and only with 30+ action-needed signals of which 10+ are
+  corrections or teacher labels (kept labels all sit above the current threshold, so on their own
+  they would ratchet it up).
+- `promotional_threshold`: the lowest value (0.5 .. 1) at which at most
+  `promo_important_max_rate` (1%) of mail labeled promotional is important (action needed,
+  personal/`unknown`, or a promotional label you removed). It rises at once when important mail is
+  being labeled promotional. It falls at most 0.1 per run and only with 20+ promotional signals
+  (10+ not from kept labels).
+
+A key set in `config.toml` is never tuned. `status`, `doctor` and `model info` show tuned values
+with the source `learned`. Precedence: config.toml, learned, the model's recommendation, defaults.
+
+### Running it
+
+```bash
+email-town-labeler status            # signals so far, personal head and its held-out score
+email-town-labeler learn             # run now (the service runs it every interval_hours anyway)
+email-town-labeler learn --dry-run   # fit and report, save nothing
+email-town-labeler learn --reset     # escape hatch (= personalize --reset): back to the model as
+                                     # shipped; later runs use only signals from after the reset
+```
+
+The service checks hourly and runs when `interval_hours` (24) have passed since the last run and
+there are `min_new_signals` (20) new signals. A run on 20,000 signals takes a few seconds and a
+few MB. The result is `<data dir>/personal.json` (weights, thresholds, counts, held-out scores; no
+ids, no content). The service reloads it when it changes, so `learn` and `learn --reset` take
+effect at the next poll without a restart. It is only used with the model it was trained for:
+switching models starts learning afresh. Decisions made before this version have no stored
+scores and are not used.
+
+**`personal.json` is derived from your mail.** It is small and holds no text, but keep it
+private like the rest of the data directory.
+
+### Advanced: full fine-tuning (not built in)
+
+The personal head can only re-weight what the model already sees. To retrain the model itself,
+e.g. ModernBERT on a GPU from many months of signals:
+
+1. `email-town-labeler learn --export signals.jsonl` writes one line per signal: message id,
+   class (or "not class"), kind, weight, the stored scores and yes/no facts. Ids and numbers
+   only; keep the file private.
+2. On a machine you control, re-fetch those messages with your own token and render them with
+   `email_town_labeler.features.email_text` (exactly what the model sees), then fine-tune the
+   base checkpoint on the (text, class, weight) triples, ideally mixed with the original training
+   distribution so it does not forget. "Not class" rows need a complement loss
+   (`-log(1 - p_k)`) or can be dropped.
+3. Hold out a slice of the signals by time and compare against the shipped model following the
+   [evaluation methodology](#evaluation-methodology), then package it
+   (`scripts/package_model.py`, `scripts/export_onnx.py --seq-classifier`) and point `model.ref`
+   at the new package. Its scores differ from the old model's, so learning starts afresh.
+
+This keeps everything local, but the fine-tuned weights can memorise your mail: never publish them.
+
+## Refitting a model's own head: `personalize`
+
+For head-based models (`embedding_probe`, `onnx_classifier`), `personalize` can also refit the
+model's own head on the corrected messages' embeddings. For every other model (including
+`town-modernbert`) `personalize` runs `learn`.
 
 Every time you change a label email-town-labeler applied, it records the correction (message id,
 predicted class, corrected class) in `state.sqlite`:
@@ -398,7 +511,8 @@ Requirements and limits:
 
 - Works for head-based backends (`embedding_probe`, `onnx_classifier`). `rules`,
   `ollama_choice` and the sequence classifiers (`hf_sequence_classifier`,
-  `onnx_sequence_classifier`) have no separate trainable head.
+  `onnx_sequence_classifier`) have no separate trainable head; for them `personalize` runs
+  [`learn`](#improving-from-use-learn), which works with every model.
 - It needs at least 5 corrections to a specific class (`--min-examples`, default 5); removals
   without a replacement label are not used for training. The fit converges for any number of
   examples, but expect noticeable changes only after a few corrections per class.

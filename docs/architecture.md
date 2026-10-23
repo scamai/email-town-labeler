@@ -20,6 +20,8 @@ flowchart TB
   mdl --> be["models/backends/*<br/>rules, embedding_probe, onnx_classifier,<br/>hf_sequence_classifier, onnx_sequence_classifier, ollama_choice"]
   mdl --> hub["models/hub.py<br/>HF / URL download, sha256"]
   be --> feat["features.py<br/>email_text(record)"]
+  eng --> lrn["learn.py<br/>personal head on stored scores,<br/>re-tuned thresholds"]
+  lrn --> st
   cli --> pers["personalize.py<br/>refit head from corrections"]
   cli --> svc["service.py<br/>launchd / systemd --user / Task Scheduler"]
   cli --> cfg["config.py<br/>TOML + paths"]
@@ -74,12 +76,22 @@ Properties that matter:
 - **Never destructive.** The only label changes are adds/removes of labels under the
   configured prefix (see [privacy.md](privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does)).
 
-## Feedback capture
+## Feedback capture and learning
 
 The same history call that delivers new mail also reports label changes. When a label under
 our prefix is removed from, or added to, a message email-town-labeler decided on, the engine records
-`(message id, predicted class, corrected class or none)`. No content is stored, only ids and
-class names. `personalize` later re-fetches those messages from Gmail to train on them.
+`(message id, predicted class, corrected class or none)`. When a Town label (the "teacher",
+`[teacher_labels]`) appears on such a message, it records the class it means. No content is
+stored, only ids and class names.
+
+Each decision also keeps the model's scores (log-probabilities) and eight yes/no features, so
+`learn.py` can train without the model or the mail: it turns corrections, removals, teacher
+labels and long-kept labels into weighted examples, fits a small logistic-regression head on
+`[scores, features]` anchored to the identity, activates it only if it beats the model on 5-fold
+held-out predictions, and re-tunes the policy thresholds. The result is `personal.json`; the
+engine applies it between `model.predict` and `policy.decide` and reloads it when it changes.
+`run_forever` runs learning on schedule (`[learn] auto`). `personalize` (head-based models only)
+instead re-fetches corrected messages from Gmail to refit the model's own head.
 
 ## Models
 
@@ -90,8 +102,9 @@ a backend. The engine only sees the `Classifier` protocol from `models/base.py`.
 ## State
 
 `state.sqlite` (WAL mode, versioned schema) has key/value settings (history id, bootstrap
-info), decisions (id, class, probability, probabilities, model id, applied flag, time), and
-feedback (id, predicted, corrected, time). Nothing in it is mail content.
+info, learning schedule), decisions (id, class, probability, probabilities, scores, yes/no
+features, model id, personal head id, applied flag, time), feedback (id, predicted, corrected,
+time) and teacher labels (id, class, time). Nothing in it is mail content.
 
 ## Background service
 

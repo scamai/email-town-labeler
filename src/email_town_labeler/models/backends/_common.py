@@ -126,17 +126,27 @@ class SoftmaxHead:
         return softmax(X @ self.coef.T + self.intercept)
 
 
-def to_predictions(P: np.ndarray, classes: Sequence[str]) -> list[Prediction]:
-    """Rows of probabilities over `classes` -> Predictions whose probs cover every class in CLASSES."""
+def to_predictions(
+    P: np.ndarray, classes: Sequence[str], logits: np.ndarray | None = None
+) -> list[Prediction]:
+    """Rows of probabilities over `classes` -> Predictions whose probs cover every class in CLASSES.
+
+    `logits` (same shape as P), when given, are kept on each Prediction in CLASSES order (a class the
+    model does not have gets -inf), so the engine can store them for learn.py."""
     out = []
-    for row in np.asarray(P, dtype=np.float64):
+    Z = None if logits is None else np.asarray(logits, dtype=np.float64)
+    for i, row in enumerate(np.asarray(P, dtype=np.float64)):
         probs = {c: 0.0 for c in CLASSES}
         for c, p in zip(classes, row):
             probs[c] = float(p)
         s = sum(probs.values())
         probs = {c: p / s for c, p in probs.items()} if s > 0 else {c: float(c == UNKNOWN) for c in CLASSES}
         best = max(CLASSES, key=lambda c: probs[c])  # ties resolve in CLASSES order: deterministic
-        out.append(Prediction(cls=best, prob=probs[best], probs=probs))
+        z = None
+        if Z is not None:
+            by = dict(zip(classes, Z[i].tolist()))
+            z = [float(by.get(c, float("-inf"))) for c in CLASSES]
+        out.append(Prediction(cls=best, prob=probs[best], probs=probs, logits=z))
     return out
 
 
@@ -156,8 +166,9 @@ class HeadClassifier:
         if not records:
             return []
         mbc = int(self.manifest.config.get("max_body_chars", 2000))
-        X = self.embed([email_text(r, max_body_chars=mbc) for r in records])
-        return to_predictions(self.head.proba(X), self.head.classes)
+        X = np.asarray(self.embed([email_text(r, max_body_chars=mbc) for r in records]), dtype=np.float64)
+        h = self.head
+        return to_predictions(h.proba(X), h.classes, logits=X @ h.coef.T + h.intercept)
 
 
 # ------------------------------------------------- sequence classifiers (text -> logits, no head file)
@@ -234,7 +245,7 @@ class SequenceClassifier:
         mbc, prompt = self.settings["max_body_chars"], self.settings["prompt"]
         return [prompt + email_text(r, max_body_chars=mbc) for r in records]
 
-    def proba(self, texts: list[str]) -> np.ndarray:
+    def checked_logits(self, texts: list[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, len(self.labels)))
         z = np.asarray(self.logits(texts), dtype=np.float64)
@@ -242,10 +253,14 @@ class SequenceClassifier:
             raise ValueError(
                 f"model returned logits of shape {z.shape}, expected ({len(texts)}, {len(self.labels)})"
             )
-        return softmax(z)
+        return z
+
+    def proba(self, texts: list[str]) -> np.ndarray:
+        return softmax(self.checked_logits(texts))
 
     def predict(self, records: list) -> list[Prediction]:
         records = list(records)
         if not records:
             return []
-        return to_predictions(self.proba(self.texts(records)), self.labels)
+        z = self.checked_logits(self.texts(records))
+        return to_predictions(softmax(z), self.labels, logits=z)
