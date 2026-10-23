@@ -460,11 +460,13 @@ def test_redact_masks_address_and_home(app, monkeypatch, tmp_path):
     app.call("setup", "--client-secret", str(app.secret), "--headless", "--yes")
     for argv, has_paths in ((["status"], False), (["status", "--json"], True), (["doctor"], True)):
         out = app.call(*argv)[1]
-        assert "me@example.test" in out and (str(tmp_path) in out) is has_paths, argv
+        shown = str(tmp_path) in out or json.dumps(str(tmp_path))[1:-1] in out  # --json escapes backslashes
+        assert "me@example.test" in out and shown is has_paths, argv
         out = app.call(*argv, "--redact")[1]
         assert "me@example.test" not in out and str(tmp_path) not in out and "<email>" in out, argv
         assert ("~" in out) is has_paths
     assert cli.redact("C:\\Users\\pat\\x a@b.example", home="C:\\Users\\pat") == "~\\x <email>"
+    assert cli.redact('{"p": "C:\\\\Users\\\\pat\\\\x"}', home="C:\\Users\\pat") == '{"p": "~\\\\x"}'
 
 
 def test_global_options_after_the_subcommand(tmp_path, capsys):

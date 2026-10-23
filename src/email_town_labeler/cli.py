@@ -147,7 +147,8 @@ def redact(text: str, home: str | None = None) -> str:
     text = EMAIL_RE.sub("<email>", text)
     home = home if home is not None else str(Path.home())
     if len(home) > 1:
-        for h in {home, home.replace("\\", "/")}:
+        # also the JSON-escaped form (Windows paths print as C:\\\\Users\\\\... inside --json output)
+        for h in sorted({home, home.replace("\\", "/"), home.replace("\\", "\\\\")}, key=len, reverse=True):
             text = text.replace(h, "~")
     return text
 
@@ -411,7 +412,7 @@ def cmd_setup(ctx: Ctx) -> int:
         )
     ctx.out(
         "\nDone. New mail will be labeled from now on. Label recent mail with `email-town-labeler backfill --days 7`;"
-        "\ncheck on it with `email-town-labeler status`. Fix a wrong label in Gmail and email-town-labeler learns from it."
+        "\ncheck on it with `email-town-labeler status`. Move a wrong label in Gmail and it is recorded as a correction (`personalize` uses them where the model supports it)."
     )
     return 0
 
