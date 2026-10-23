@@ -549,7 +549,7 @@ def cmd_status(ctx: Ctx) -> int:
         ("service", i["service"].get("state", "?")),
     ]
     for k, v in rows:
-        ctx.out(f"{k:<14}{v}")
+        ctx.out(f"{k:<14} {v}")
     if not i["healthy"]:
         ctx.out(f"\n{BAD} unhealthy: {i['problem']} — try `email-town-labeler doctor`")
     return 0 if i["healthy"] else 1
