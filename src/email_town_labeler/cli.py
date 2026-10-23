@@ -57,7 +57,7 @@ def make_client(paths: Paths) -> Any:
 def make_labels(client: Any, cfg: Config) -> Any:
     from .gmail.labels import LabelMap
 
-    return LabelMap(client, cfg.label_prefix, cfg.display_names())
+    return LabelMap(client, cfg.label_prefix, cfg.display_names(), colors=cfg.colors())
 
 
 def make_model(cfg: Config, paths: Paths) -> Any:
@@ -386,7 +386,10 @@ def cmd_setup(ctx: Ctx) -> int:
     wanted = wanted_labels(cfg)
     for c in wanted:
         labels.ensure(c)
+    recolored = labels.sync_colors()  # existing labels from an earlier setup or another color config
     ctx.out(f"  {OK} account {prof_email}; {len(wanted)} labels under {cfg.label_prefix}/")
+    if recolored:
+        ctx.out(f"  {OK} updated the color of {recolored} label(s)")
     if cfg.uses_contacts():
         ctx.out(f"  {OK} {store.contacts_count()} contacts (addresses you have sent mail to)")
 

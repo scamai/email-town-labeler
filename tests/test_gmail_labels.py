@@ -96,3 +96,87 @@ def test_refresh_sees_labels_created_elsewhere():
     lid = g.add_label("email-town-labeler/orders")
     lm.refresh()
     assert lm.class_of(lid) == "orders"
+
+
+# -- colors --------------------------------------------------------------------------------
+
+ORANGE = {"textColor": "#000000", "backgroundColor": "#ffad47"}
+PURPLE = {"textColor": "#000000", "backgroundColor": "#b99aff"}
+
+
+def make_colored(g=None, colors=None, prefix="email-town-labeler"):
+    g = g or FakeGmail()
+    client = GmailClient(g, sleep=lambda s: None, max_gets_per_minute=None)
+    return g, LabelMap(client, prefix, DISPLAY_NAMES, colors=colors)
+
+
+def color_of(g, name):
+    return g._labels[g.label_id(name)].get("color")
+
+
+def test_new_class_labels_are_created_colored_parent_uncolored():
+    g, lm = make_colored(colors={"action_needed": ORANGE})
+    lm.ensure("action_needed")
+    lm.ensure("orders")  # no color configured for this class
+    assert color_of(g, "email-town-labeler/action needed") == ORANGE
+    assert color_of(g, "email-town-labeler") is None
+    assert color_of(g, "email-town-labeler/orders") is None
+
+
+def test_sync_colors_patches_missing_and_different_only_under_prefix():
+    g = FakeGmail()
+    g.add_label("email-town-labeler")
+    g.add_label("email-town-labeler/action needed")  # uncolored: patched
+    wrong = g.add_label("email-town-labeler/orders")
+    g._labels[wrong]["color"] = {"textColor": "#FFFFFF", "backgroundColor": "#000000"}  # differs: patched
+    ok = g.add_label("email-town-labeler/travel")
+    g._labels[ok]["color"] = {"textColor": "#000000", "backgroundColor": "#A4C2F4"}  # same (case): kept
+    town = g.add_label("action needed")  # Town's own label, same class name: never touched
+    other = g.add_label("Projects/orders")
+    travel = {"textColor": "#000000", "backgroundColor": "#a4c2f4"}
+    colors = {"action_needed": ORANGE, "orders": PURPLE, "travel": travel, "updates": ORANGE}
+    g, lm = make_colored(g, colors)
+    assert lm.sync_colors() == 2
+    assert g.calls.count("labels.patch") == 2
+    assert color_of(g, "email-town-labeler/action needed") == ORANGE
+    assert color_of(g, "email-town-labeler/orders") == PURPLE
+    assert color_of(g, "email-town-labeler") is None  # parent never colored
+    assert "color" not in g._labels[town] and "color" not in g._labels[other]
+    assert g.label_id("email-town-labeler/updates") is None  # sync never creates labels
+    assert lm.sync_colors() == 0  # idempotent: the cache knows the new colors
+
+
+def test_sync_colors_without_colors_makes_no_calls():
+    g = FakeGmail()
+    g.add_label("email-town-labeler/orders")
+    g, lm = make_colored(g, colors={})
+    assert lm.sync_colors() == 0 and "labels.patch" not in g.calls
+
+
+def test_rejected_color_on_create_falls_back_to_uncolored(caplog):
+    g, lm = make_colored(colors={"orders": PURPLE})
+    g.invalid_colors.add("#b99aff")
+    lid = lm.ensure("orders")
+    assert g._labels[lid]["name"] == "email-town-labeler/orders" and "color" not in g._labels[lid]
+    assert "rejected color" in caplog.text
+
+
+def test_rejected_color_on_patch_is_logged_and_skipped(caplog):
+    g = FakeGmail()
+    g.add_label("email-town-labeler/orders")
+    g.add_label("email-town-labeler/action needed")
+    g.invalid_colors.add("#b99aff")
+    g, lm = make_colored(g, {"orders": PURPLE, "action_needed": ORANGE})
+    assert lm.sync_colors() == 1
+    assert color_of(g, "email-town-labeler/orders") is None
+    assert color_of(g, "email-town-labeler/action needed") == ORANGE
+    assert "rejected color" in caplog.text
+
+
+def test_sync_colors_other_errors_propagate():
+    g = FakeGmail()
+    g.add_label("email-town-labeler/orders")
+    g, lm = make_colored(g, {"orders": PURPLE})
+    g.fail_next(1, 404, method="labels.patch")
+    with pytest.raises(HttpError):
+        lm.sync_colors()

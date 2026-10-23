@@ -6,12 +6,13 @@ import json
 import logging
 import math
 import os
+import re
 import sys
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
-from .taxonomy import DISPLAY_NAMES, LABEL_CLASSES
+from .taxonomy import DEFAULT_LABEL_COLORS, DISPLAY_NAMES, LABEL_CLASSES
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -27,6 +28,7 @@ UNKNOWN_ACTIONS = ("skip", "label")
 # [policy] keys a model package may recommend (model.json config.recommended_policy); config.toml wins
 MODEL_POLICY_KEYS = ("action_threshold", "promotional_threshold")
 log = logging.getLogger("email_town_labeler.config")
+HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 class ConfigError(ValueError):
@@ -87,6 +89,7 @@ _LAYOUT: list[tuple[str, str, str]] = [
     ("gmail", "label_prefix", "label_prefix"),
     ("gmail", "poll_seconds", "poll_seconds"),
     ("gmail", "skip_label_names", "skip_label_names"),
+    ("gmail", "label_colors", "label_colors"),
     ("model", "ref", "model_ref"),
     ("model", "min_confidence", "min_confidence"),
     ("model", "unknown_action", "unknown_action"),
@@ -108,6 +111,7 @@ class Config:
     label_prefix: str = "email-town-labeler"
     poll_seconds: int = 60
     skip_label_names: list[str] = field(default_factory=list)
+    label_colors: bool = True  # color our class labels (DEFAULT_LABEL_COLORS + [label_colors] overrides)
     model_ref: str = "rules"
     min_confidence: float = 0.55
     unknown_action: str = "skip"
@@ -123,6 +127,8 @@ class Config:
     contacts_scan_days: int = 730  # setup scans sent mail this far back for contacts...
     contacts_scan_limit: int = 5000  # ...but at most this many sent messages
     label_names: dict[str, str] = field(default_factory=dict)  # optional [labels] overrides
+    # optional [label_colors] overrides: class -> {"background", "text"} or False (leave that label alone)
+    label_color_overrides: dict[str, Any] = field(default_factory=dict)
     # field names the user set in config.toml (filled by config_from_dict), and names for_model() filled in
     _explicit: set[str] = field(default_factory=set, repr=False, compare=False)
     _from_model: set[str] = field(default_factory=set, repr=False, compare=False)
@@ -156,6 +162,18 @@ class Config:
 
     def display_names(self) -> dict[str, str]:
         return {**DISPLAY_NAMES, **self.label_names}
+
+    def colors(self) -> dict[str, dict[str, str]]:
+        """class -> Gmail color {"textColor", "backgroundColor"} to apply; empty when colors are off."""
+        if not self.label_colors:
+            return {}
+        out = {c: dict(v) for c, v in DEFAULT_LABEL_COLORS.items()}
+        for c, v in self.label_color_overrides.items():
+            if v is False:
+                out.pop(c, None)
+            else:
+                out[c] = {"textColor": v["text"].lower(), "backgroundColor": v["background"].lower()}
+        return out
 
     def uses_contacts(self) -> bool:
         """Whether anything needs the contacts table (and so the sent-mail scan)."""
@@ -207,6 +225,22 @@ class Config:
         for c, n in self.label_names.items():
             if not str(n).strip() or "/" in str(n):
                 errs.append(f"[labels] {c} must be a non-empty name without '/'")
+        bad = sorted(set(self.label_color_overrides) - set(LABEL_CLASSES))
+        if bad:
+            errs.append(f"[label_colors] has unknown classes {bad}; valid: {LABEL_CLASSES}")
+        for c, v in sorted(self.label_color_overrides.items()):
+            if v is False:
+                continue
+            ok = (
+                isinstance(v, dict)
+                and set(v) == {"background", "text"}
+                and all(isinstance(x, str) and HEX_COLOR.fullmatch(x) for x in v.values())
+            )
+            if not ok:
+                errs.append(
+                    f'[label_colors] {c} must be false or {{ background = "#rrggbb", text = "#rrggbb" }} '
+                    "(colors from Gmail's label palette)"
+                )
         if errs:
             raise ConfigError("invalid config:\n  - " + "\n  - ".join(errs))
         return self
@@ -234,6 +268,7 @@ _EXPECT = {
     "label_prefix": str,
     "poll_seconds": int,
     "skip_label_names": list,
+    "label_colors": bool,
     "model_ref": str,
     "min_confidence": float,
     "unknown_action": str,
@@ -275,7 +310,7 @@ def _coerce(section: str, key: str, name: str, value: Any) -> Any:
 
 def config_from_dict(data: dict[str, Any]) -> Config:
     cfg = Config()
-    known = {s for s, _, _ in _LAYOUT} | {"labels"}
+    known = {s for s, _, _ in _LAYOUT} | {"labels", "label_colors"}
     unknown_sections = sorted(set(data) - known)
     if unknown_sections:
         raise ConfigError(f"unknown config section(s) {unknown_sections}; expected {sorted(known)}")
@@ -294,6 +329,12 @@ def config_from_dict(data: dict[str, Any]) -> Config:
     if not isinstance(labels, dict) or not all(isinstance(v, str) for v in labels.values()):
         raise ConfigError("[labels] must map class names to label names (strings)")
     cfg.label_names = dict(labels)
+    colors = data.get("label_colors", {})
+    if not isinstance(colors, dict) or not all(v is False or isinstance(v, dict) for v in colors.values()):
+        raise ConfigError(
+            '[label_colors] must map class names to false or { background = "...", text = "..." }'
+        )
+    cfg.label_color_overrides = {c: v if v is False else dict(v) for c, v in colors.items()}
     return cfg.validate()
 
 
@@ -339,6 +380,15 @@ def dump_config(cfg: Config) -> str:
         out += ["", "[labels]"] + [
             f"{json.dumps(c)} = {_toml_value(n)}" for c, n in sorted(cfg.label_names.items())
         ]
+    if cfg.label_color_overrides:
+        out += ["", "[label_colors]"]
+        for c, v in sorted(cfg.label_color_overrides.items()):
+            val = (
+                "false"
+                if v is False
+                else f"{{ background = {_toml_value(v['background'])}, text = {_toml_value(v['text'])} }}"
+            )
+            out.append(f"{json.dumps(c)} = {val}")
     return "\n".join(out) + "\n"
 
 

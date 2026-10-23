@@ -10,7 +10,7 @@ bodies) of the methods email-town-labeler uses:
     users().messages().get(userId, id, format=full|minimal|metadata|raw, metadataHeaders, fields)
     users().messages().modify(userId, id, body={addLabelIds, removeLabelIds})
     users().messages().batchModify(userId, body={ids, addLabelIds, removeLabelIds})
-    users().labels().list/get/create(userId, ...)
+    users().labels().list/get/create/patch(userId, ...)  (create/patch accept body.color)
     users().history().list(userId, startHistoryId, historyTypes, labelId, pageToken, maxResults) + list_next
     new_batch_http_request(callback) -> .add(request, callback=None, request_id=None) / .execute()
 
@@ -257,6 +257,11 @@ class _Labels(_Resource):
     def create(self, **kw) -> FakeRequest:
         return self.g._req("labels.create", kw, {"body", "fields"}, self.g._create_label, required={"body"})
 
+    def patch(self, **kw) -> FakeRequest:
+        return self.g._req(
+            "labels.patch", kw, {"id", "body", "fields"}, self.g._patch_label, required={"id", "body"}
+        )
+
 
 class _History(_Resource):
     def list(self, **kw) -> FakeRequest:
@@ -312,6 +317,8 @@ class FakeGmail:
         self._failures: list[_Failure] = []
         self._n = 0
         self._label_n = 0
+        # backgroundColor/textColor values labels.create/patch reject with 400 (Gmail: outside its palette)
+        self.invalid_colors: set[str] = set()
 
     # -- service surface -------------------------------------------------------------------
 
@@ -642,6 +649,8 @@ class FakeGmail:
             raise http_error(400, "Invalid label name")
         if self.label_id(name) is not None:  # Gmail collides case-insensitively
             raise http_error(409, path="labels")
+        color = body.get("color")
+        self._check_color(color)
         self._label_n += 1
         lb = {
             "id": f"Label_{self._label_n}",
@@ -650,7 +659,26 @@ class FakeGmail:
             "labelListVisibility": body.get("labelListVisibility", "labelShow"),
             "messageListVisibility": body.get("messageListVisibility", "show"),
         }
+        if color:
+            lb["color"] = dict(color)
         self._labels[lb["id"]] = lb
+        return lb
+
+    def _check_color(self, color) -> None:
+        if color is None:
+            return
+        if set(color) != {"textColor", "backgroundColor"} or set(color.values()) & self.invalid_colors:
+            raise http_error(400, "Label color is not on the allowed color palette", path="labels")
+
+    def _patch_label(self, id, body, fields=None) -> dict:
+        lb = self._labels.get(id)
+        if lb is None:
+            raise http_error(404, path=f"labels/{id}")
+        if lb["type"] != "user":
+            raise http_error(400, "Invalid update to system label", path=f"labels/{id}")
+        self._check_color(body.get("color"))
+        if "color" in body:
+            lb["color"] = dict(body["color"])
         return lb
 
     def _list_history(

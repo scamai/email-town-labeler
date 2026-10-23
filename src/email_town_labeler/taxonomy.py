@@ -32,3 +32,17 @@ DESCRIPTIONS = {
     "unknown": "none of these: personal or work mail that needs no category",
     "new_sender": "personal mail (Primary, no other label) from an address you have never written to",
 }
+
+# Default Gmail label colors per class, matching the colors Town gives its own labels. Values must
+# come from Gmail's fixed label palette (labels.create/patch reject anything else with a 400).
+# `unknown` has no Town counterpart and stays uncolored, as does the `<prefix>` parent label.
+# Users can override or disable these in config ([label_colors], [gmail] label_colors).
+DEFAULT_LABEL_COLORS: dict[str, dict[str, str]] = {
+    "action_needed": {"backgroundColor": "#ffad47", "textColor": "#000000"},
+    "newsletters": {"backgroundColor": "#16a766", "textColor": "#ffffff"},
+    "promotional": {"backgroundColor": "#f691b3", "textColor": "#000000"},
+    "orders": {"backgroundColor": "#b99aff", "textColor": "#000000"},
+    "travel": {"backgroundColor": "#a4c2f4", "textColor": "#000000"},
+    "updates": {"backgroundColor": "#fad165", "textColor": "#000000"},
+    "new_sender": {"backgroundColor": "#4a86e8", "textColor": "#ffffff"},
+}

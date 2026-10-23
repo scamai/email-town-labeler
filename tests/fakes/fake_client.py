@@ -203,13 +203,20 @@ class FakeGmailClient:
         self._call("list_labels")
         return [dict(lb) for lb in self.labels.values()]
 
-    def create_label(self, name: str) -> dict:
+    def create_label(self, name: str, color: dict[str, str] | None = None) -> dict:
         self._call("create_label", name)
         if self.label_id(name):
             raise ValueError(f"label exists: {name}")
         lid = f"Label_{next(self._label_ids)}"
         self.labels[lid] = {"id": lid, "name": name, "type": "user"}
+        if color:
+            self.labels[lid]["color"] = dict(color)
         return dict(self.labels[lid])
+
+    def set_label_color(self, id: str, color: dict[str, str]) -> dict:
+        self._call("set_label_color", id)
+        self.labels[id]["color"] = dict(color)
+        return dict(self.labels[id])
 
     def modify(self, id: str, *, add: Iterable[str] = (), remove: Iterable[str] = ()) -> None:
         self._call("modify", id, tuple(add), tuple(remove))
@@ -227,8 +234,10 @@ class FakeGmailClient:
 class FakeLabelMap:
     """Same contract as email_town_labeler.gmail.labels.LabelMap, backed by any client."""
 
-    def __init__(self, client: Any, prefix: str, names: dict[str, str]):
+    def __init__(self, client: Any, prefix: str, names: dict[str, str], colors: dict | None = None):
         self.client, self.prefix, self.names = client, prefix, names
+        self.colors = dict(colors or {})
+        self.color_syncs = 0
 
     def _by_name(self) -> dict[str, str]:
         return {lb["name"]: lb["id"] for lb in self.client.list_labels()}
@@ -238,7 +247,11 @@ class FakeLabelMap:
         if self.prefix not in by:
             self.client.create_label(self.prefix)
         full = f"{self.prefix}/{self.names[cls]}"
-        return by.get(full) or self.client.create_label(full)["id"]
+        return by.get(full) or self.client.create_label(full, color=self.colors.get(cls))["id"]
+
+    def sync_colors(self) -> int:
+        self.color_syncs += 1
+        return 0
 
     def class_of(self, label_id: str) -> str | None:
         rev = {f"{self.prefix}/{n}": c for c, n in self.names.items()}

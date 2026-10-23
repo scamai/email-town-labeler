@@ -81,6 +81,17 @@ class Engine:
             if force and hasattr(self.labels, "refresh"):
                 self.labels.refresh()  # the real LabelMap caches label names too
 
+    def sync_label_colors(self) -> int:
+        """Bring our existing class labels' colors in line with config (not in dry-run). Never raises:
+        a color problem must not stop the daemon."""
+        if self.cfg.dry_run or not hasattr(self.labels, "sync_colors"):
+            return 0
+        try:
+            return self.labels.sync_colors()
+        except Exception as e:  # noqa: BLE001 - a color problem must not stop the daemon
+            log.warning("could not update label colors (%s); continuing", _err_name(e))
+            return 0
+
     def _ours(self) -> set[str]:
         p = self.cfg.label_prefix
         under = {i for i, n in self._label_index.items() if n == p or n.startswith(p + "/")}
@@ -385,6 +396,7 @@ class Engine:
         log.info(
             "running: model=%s poll=%ss dry_run=%s", self.model_id, self.cfg.poll_seconds, self.cfg.dry_run
         )
+        self.sync_label_colors()
         while not stop.is_set():
             try:
                 self.sync_once()

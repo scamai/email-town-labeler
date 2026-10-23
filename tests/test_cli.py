@@ -88,7 +88,9 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_auth", lambda: auth)
     monkeypatch.setattr(cli, "make_client", lambda paths: (_need_token(paths), client)[1])
     monkeypatch.setattr(
-        cli, "make_labels", lambda c, cfg: FakeLabelMap(c, cfg.label_prefix, cfg.display_names())
+        cli,
+        "make_labels",
+        lambda c, cfg: FakeLabelMap(c, cfg.label_prefix, cfg.display_names(), colors=cfg.colors()),
     )
     monkeypatch.setattr(cli, "make_model", lambda cfg, paths: FakeClassifier())
     monkeypatch.setattr(cli, "service_runner", lambda: run)
@@ -174,6 +176,9 @@ def test_setup_noninteractive_headless(app):
         "email-town-labeler/orders",
         "email-town-labeler/action needed",
     } <= names and "email-town-labeler/unknown" not in names
+    by_name = {lb["name"]: lb for lb in app.client.labels.values()}
+    assert by_name["email-town-labeler/orders"]["color"]["backgroundColor"] == "#b99aff"
+    assert "color" not in by_name["email-town-labeler"]  # the parent stays uncolored
     preview = [ln for ln in out.splitlines() if ln.strip().startswith("m0")]
     assert len(preview) == 5 and all(len(ln.split()) >= 3 for ln in preview)
     assert not app.client.modifies  # dry run on 5 newest changed nothing

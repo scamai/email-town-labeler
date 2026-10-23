@@ -272,17 +272,31 @@ class GmailClient:
         )
 
     def list_labels(self) -> list[dict]:
-        """[{"id", "name", "type"}] for every system and user label. Cheap."""
-        resp = self._execute(self._users.labels().list(userId=ME))
-        return [
-            {"id": lb["id"], "name": lb["name"], "type": lb.get("type", "user")}
-            for lb in resp.get("labels", [])
-        ]
+        """[{"id", "name", "type"[, "color"]}] for every system and user label. Cheap.
 
-    def create_label(self, name: str) -> dict:
-        """Create a visible user label. A 409 (exists) HttpError propagates to the caller."""
-        body = {"name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show"}
+        "color" ({"textColor", "backgroundColor"}) is present only on labels that have one.
+        """
+        resp = self._execute(self._users.labels().list(userId=ME))
+        out = []
+        for lb in resp.get("labels", []):
+            row = {"id": lb["id"], "name": lb["name"], "type": lb.get("type", "user")}
+            if lb.get("color"):
+                row["color"] = dict(lb["color"])
+            out.append(row)
+        return out
+
+    def create_label(self, name: str, color: dict[str, str] | None = None) -> dict:
+        """Create a visible user label, optionally colored ({"textColor", "backgroundColor"}, Gmail
+        palette values only). A 409 (exists) or 400 (e.g. a color outside the palette) HttpError
+        propagates to the caller."""
+        body: dict = {"name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show"}
+        if color:
+            body["color"] = dict(color)
         return self._execute(self._users.labels().create(userId=ME, body=body))
+
+    def set_label_color(self, id: str, color: dict[str, str]) -> dict:
+        """labels.patch the color of one user label. A 400 (color outside the palette) propagates."""
+        return self._execute(self._users.labels().patch(userId=ME, id=id, body={"color": dict(color)}))
 
     def modify(self, id: str, *, add: Iterable[str] = (), remove: Iterable[str] = ()) -> None:
         """Add/remove label ids on one message. No call when both are empty."""

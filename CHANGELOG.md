@@ -9,6 +9,15 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- Gmail label colors. Class labels get the same colors as Town's labels of the same name by
+  default (`taxonomy.DEFAULT_LABEL_COLORS`; `unknown` and the `<prefix>` parent stay
+  uncolored). New labels are created colored; `setup` and service start patch existing class
+  labels under `label_prefix` whose color is missing or differs, and never touch labels outside
+  the prefix. Override per class under `[label_colors]` (`{ background, text }` or `false`), or
+  turn it off with `[gmail] label_colors = false`. A color Gmail rejects (400, outside its
+  palette) is logged and the label stays uncolored. `GmailClient.list_labels` now returns a
+  label's `color`; new `GmailClient.set_label_color`.
+
 - Published default model `town-modernbert` (ModernBERT-large, ONNX, `[onnx]` extra; 824 MB) and
   `town-modernbert-torch` (`[embed]`; 635 MB) in a built-in catalog (`models/catalog.py`):
   `model pull town-modernbert [--use]`, `[model] ref = "town-modernbert"`; `model list` shows

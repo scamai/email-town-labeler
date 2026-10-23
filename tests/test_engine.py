@@ -282,6 +282,29 @@ def test_run_forever_survives_transient_errors(env, caplog):
     assert "made-up" not in text and "example.test" not in text  # no content in logs
 
 
+def test_run_forever_syncs_label_colors_and_survives_errors(env, caplog):
+    eng, _, store = env()
+    calls = []
+
+    def sync():
+        calls.append(1)
+        raise TransientError("503")
+
+    eng.labels.sync_colors = sync
+    stop = threading.Event()
+    eng._sleep_fn = lambda s: stop.set()
+    with caplog.at_level(logging.WARNING, logger="email_town_labeler.engine"):
+        eng.run_forever(stop)
+    assert calls == [1] and "could not update label colors" in caplog.text
+    assert store.get("history_id") is not None  # polling went on
+
+
+def test_dry_run_does_not_sync_label_colors(env):
+    eng, _, _ = env(dry_run=True)
+    eng.labels.sync_colors = lambda: pytest.fail("synced colors in dry run")
+    assert eng.sync_label_colors() == 0
+
+
 def test_model_error_does_not_lose_mail(env):
     eng, client, store = env()
     eng.sync_once()

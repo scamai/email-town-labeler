@@ -45,6 +45,7 @@ All keys with their defaults:
 label_prefix = "email-town-labeler"     # labels are created as "<prefix>/<name>"
 poll_seconds = 60              # 10 .. 86400
 skip_label_names = []          # never classify mail carrying any of these labels
+label_colors = true            # color the class labels (Town's colors unless [label_colors] says otherwise)
 
 [model]
 ref = "rules"                  # e.g. "town-modernbert"; see docs/models.md for ref forms
@@ -69,6 +70,10 @@ contacts_scan_limit = 5000     # ...but at most this many sent messages (0 = no 
 [labels]                       # optional: rename the Gmail labels per class
 # action_needed = "todo"
 # newsletters = "reading"
+
+[label_colors]                 # optional: per-class color, or false to leave that label alone
+# orders = { background = "#b99aff", text = "#000000" }
+# promotional = false
 ```
 
 ### `[gmail]`
@@ -82,6 +87,9 @@ contacts_scan_limit = 5000     # ...but at most this many sent messages (0 = no 
 - **`skip_label_names`**: label *names* (as shown in Gmail, for example `"Clients/Acme"`).
   Messages carrying any of them are never classified. Use it to stay out of the way of
   another tool or your own filters.
+- **`label_colors`** (default `true`): give the class labels Gmail colors (see
+  [`[label_colors]`](#label_colors)). `false` turns color management off entirely: labels are
+  created uncolored and existing colors are left exactly as they are (not removed).
 
 ### `[model]`
 
@@ -173,6 +181,35 @@ model's own top class for each message, so you can see what the policy changed.
 Maps a class to a different display name. Names must not contain `/`. Valid classes:
 `action_needed`, `newsletters`, `promotional`, `orders`, `travel`, `updates`, `unknown`,
 `new_sender`.
+
+### `[label_colors]`
+
+By default the class labels get the same colors Town uses for its labels of the same name:
+
+| class | background | text |
+|---|---|---|
+| `action_needed` | `#ffad47` (orange) | `#000000` |
+| `newsletters` | `#16a766` (green) | `#ffffff` |
+| `promotional` | `#f691b3` (pink) | `#000000` |
+| `orders` | `#b99aff` (purple) | `#000000` |
+| `travel` | `#a4c2f4` (light blue) | `#000000` |
+| `updates` | `#fad165` (yellow) | `#000000` |
+| `new_sender` | `#4a86e8` (blue) | `#ffffff` |
+| `unknown` | none | none |
+
+The `<prefix>` parent label is never colored. Override a class with
+`orders = { background = "#rrggbb", text = "#rrggbb" }`, or set it to `false` to leave that
+label's color alone. Gmail only accepts colors from its fixed label palette (the swatches in
+Gmail's "Label color" menu; the full list is under `color` in the
+[labels resource reference](https://developers.google.com/gmail/api/reference/rest/v1/users.labels)).
+A color outside it is rejected by Gmail: email-town-labeler logs a warning and leaves the label
+uncolored instead of failing.
+
+New class labels are created with their color. `setup` and the service, each time it starts,
+also update existing class labels under `label_prefix` whose color is missing or differs from
+the config (not in `dry_run`). Labels outside `label_prefix`, including Town's own, are never
+changed. If you recolor one of our labels in Gmail, the next start puts the configured color
+back; set that class to `false` (or pick your color here) to keep yours.
 
 ## What is eligible for labeling
 

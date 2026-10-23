@@ -38,7 +38,7 @@ def test_spec_example_parses(tmp_path):
         "[engine]\ndry_run = false\n"
     )
     assert load_config(p) == Config()
-    assert dump_config(Config()).count("=") == 16
+    assert dump_config(Config()).count("=") == 17
 
 
 @pytest.mark.parametrize(
@@ -52,6 +52,13 @@ def test_spec_example_parses(tmp_path):
         ("[nope]\n", "unknown config section"),
         ("[engine]\ndry_run = 'yes'\n", "true or false"),
         ("[labels]\nspam = 'x'\n", "unknown classes"),
+        ("[gmail]\nlabel_colors = 'yes'\n", "true or false"),
+        ("[label_colors]\nspam = false\n", "unknown classes"),
+        ("[label_colors]\norders = true\n", "label_colors"),
+        ("[label_colors]\norders = 'red'\n", "label_colors"),
+        ("[label_colors]\norders = { background = '#b99aff' }\n", "label_colors"),
+        ("[label_colors]\norders = { background = 'purple', text = '#000000' }\n", "label_colors"),
+        ("[label_colors]\norders = { background = '#b99aff', text = '#000', x = 1 }\n", "label_colors"),
         ("[policy]\naction_threshold = 0\n", "action_threshold"),
         ("[policy]\naction_threshold = 1.5\n", "action_threshold"),
         ("[policy]\npromotional_threshold = -0.1\n", "promotional_threshold"),
@@ -174,3 +181,30 @@ def test_unset_thresholds_stay_unset_when_saved(tmp_path):
     assert not load_config(p).is_explicit("action_threshold")
     save_config(Config(action_threshold=0.3), p)
     assert load_config(p).policy_sources(_man(REC))["action_threshold"] == (0.3, "config")
+
+
+def test_label_colors_default_to_towns(tmp_path):
+    from email_town_labeler.taxonomy import DEFAULT_LABEL_COLORS
+
+    cfg = load_config(tmp_path / "nope.toml")
+    assert cfg.label_colors is True and cfg.colors() == DEFAULT_LABEL_COLORS
+    assert "unknown" not in cfg.colors()
+    assert cfg.colors()["action_needed"] == {"backgroundColor": "#ffad47", "textColor": "#000000"}
+
+
+def test_label_colors_overrides_and_disable(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text(
+        "[label_colors]\n"
+        'orders = { background = "#FB4C2F", text = "#ffffff" }\n'
+        'unknown = { background = "#cccccc", text = "#000000" }\n'
+        "promotional = false\n"
+    )
+    cfg = load_config(p)
+    colors = cfg.colors()
+    assert colors["orders"] == {"backgroundColor": "#fb4c2f", "textColor": "#ffffff"}
+    assert colors["unknown"] == {"backgroundColor": "#cccccc", "textColor": "#000000"}
+    assert "promotional" not in colors and "travel" in colors
+    assert load_config(save_config(cfg, tmp_path / "again.toml")) == cfg  # [label_colors] round-trips
+    p.write_text("[gmail]\nlabel_colors = false\n[label_colors]\norders = false\n")
+    assert load_config(p).colors() == {}

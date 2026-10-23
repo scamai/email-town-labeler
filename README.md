@@ -180,8 +180,8 @@ At most one email-town-labeler label per message. Which one is decided by a poli
 `[policy]` (see [configuration.md](docs/configuration.md#policy)): `action needed` as soon as
 the model gives it 20 %, `promotional` only above 60 % and never for people you have written
 to (built-in defaults; a model can recommend its own, and `town-modernbert` uses 7 % and
-80 %). Rename them under `[labels]` in the config, or
-change the `email-town-labeler` prefix with `label_prefix`.
+80 %). Rename them under `[labels]` in the config, recolor them under `[label_colors]` (by
+default they get Town's colors), or change the `email-town-labeler` prefix with `label_prefix`.
 
 ## Configuration
 

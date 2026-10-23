@@ -383,3 +383,20 @@ def test_get_metadata_batches_and_paces_on_its_own_bucket():
     assert sum(clock.waits) == pytest.approx(7.0)
     g.fail_next(2, 429, method="messages.get")
     assert len(c.get_metadata(ids[:5], ["To"])) == 5  # throttled items are retried
+
+
+def test_label_colors_round_trip():
+    g = FakeGmail()
+    c, _ = make(g)
+    color = {"textColor": "#000000", "backgroundColor": "#ffad47"}
+    lb = c.create_label("email-town-labeler/action needed", color=color)
+    plain = c.create_label("email-town-labeler")
+    by_id = {x["id"]: x for x in c.list_labels()}
+    assert by_id[lb["id"]]["color"] == color and "color" not in by_id[plain["id"]]
+    new = {"textColor": "#ffffff", "backgroundColor": "#16a766"}
+    c.set_label_color(lb["id"], new)
+    assert {x["id"]: x for x in c.list_labels()}[lb["id"]]["color"] == new
+    g.invalid_colors.add("#123456")
+    with pytest.raises(HttpError) as ei:
+        c.set_label_color(lb["id"], {"textColor": "#000000", "backgroundColor": "#123456"})
+    assert ei.value.resp.status == 400
