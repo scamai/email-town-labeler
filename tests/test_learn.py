@@ -284,6 +284,30 @@ def test_history_gap_blocks_teacher_none(tmp_path):
     assert kinds.get("a") == "teacher_none" and kinds.get("b") != "teacher_none"
 
 
+def test_backfilled_old_mail_gives_no_silence_signals(tmp_path):
+    """Old mail decided by a backfill never had Town (or you) look at it: no teacher_none, no confirm."""
+    s = Store(tmp_path / "s.sqlite")
+    z, f = [0.0] + [learn.FLOOR] * (K - 1), [0.0] * learn.F
+    rows = (
+        ("fresh", NOW - 20 * DAY, NOW - 20 * DAY - 3600),  # decided an hour after it arrived
+        ("backfilled", NOW - 20 * DAY, NOW - 400 * DAY),  # a year old when we decided it
+        ("backfilled_corr", NOW - 20 * DAY, NOW - 400 * DAY),
+        ("backfilled_teach", NOW - 20 * DAY, NOW - 90 * DAY),
+        ("later", NOW - 4 * DAY, NOW - 4 * DAY),
+    )
+    for mid, ts, mail in rows:
+        s.record_decision(mid, "updates", 0.9, {}, "m@1", True, scores=z, feats=f, mail_ts=mail)
+        s._db.execute("UPDATE decisions SET ts = ? WHERE msg_id = ?", (ts, mid))
+    s.record_teacher("later", "orders")
+    s.record_teacher("backfilled_teach", "travel")
+    s.record_feedback("backfilled_corr", "updates", "orders")
+    kinds = dict(zip((ex := learn.collect(s, "m@1", Config(), now=NOW)).ids, ex.kind))
+    assert kinds["fresh"] == "teacher_none" and "backfilled" not in kinds
+    assert kinds["backfilled_corr"] == "correction" and kinds["backfilled_teach"] == "teacher"
+    off = dict(zip((ex := learn.collect(s, "m@1", Config(learn_teacher="off"), now=NOW)).ids, ex.kind))
+    assert off["fresh"] == "confirm" and "backfilled" not in off
+
+
 # -- thresholds -------------------------------------------------------------------------------------
 def _ex(P, y, kinds=None, neg=None, known=None):
     n = len(y)

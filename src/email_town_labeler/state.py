@@ -53,6 +53,11 @@ MIGRATIONS: list[str] = [
     ALTER TABLE decisions ADD COLUMN head_id TEXT;
     CREATE TABLE teacher (msg_id TEXT PRIMARY KEY, cls TEXT, ts REAL NOT NULL);
     """,
+    # v5: when the message arrived (seconds; NULL when unknown), so learn.py can tell mail decided on
+    # arrival from old mail decided by a backfill (which Town never had the chance to label).
+    """
+    ALTER TABLE decisions ADD COLUMN mail_ts REAL;
+    """,
 ]
 SCHEMA_VERSION = len(MIGRATIONS)
 
@@ -137,14 +142,16 @@ class Store:
         scores: Sequence[float] | None = None,
         feats: Sequence[float] | None = None,
         head_id: str | None = None,
+        mail_ts: float | None = None,
     ) -> None:
         """`cls` is the final class; `model_cls`, `prob` and `probs` are what the model said (after the
         personal head `head_id`, if one was applied). `scores` are the base model's own log-probabilities
-        over CLASSES and `feats` the learn.FEATURES values, both kept for learning."""
+        over CLASSES and `feats` the learn.FEATURES values, both kept for learning. `mail_ts` is when the
+        message arrived (seconds)."""
         with self._lock:
             self._db.execute(
                 "INSERT OR REPLACE INTO decisions (msg_id, cls, prob, probs, model_id, applied, ts, current,"
-                " dry_run, model_cls, scores, feats, head_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " dry_run, model_cls, scores, feats, head_id, mail_ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     msg_id,
                     cls,
@@ -159,6 +166,7 @@ class Store:
                     None if scores is None else json.dumps([round(float(v), 5) for v in scores]),
                     None if feats is None else json.dumps([round(float(v), 5) for v in feats]),
                     head_id,
+                    None if mail_ts is None else float(mail_ts),
                 ),
             )
 
@@ -292,10 +300,10 @@ class Store:
     ) -> list[dict]:
         """The newest decisions by `model_id` that kept scores, joined with any feedback and teacher label.
 
-        Keys: msg_id, cls, applied, current, dry_run, ts, scores, feats, fb (0/1), fb_predicted,
+        Keys: msg_id, cls, applied, current, dry_run, ts, mail_ts, scores, feats, fb (0/1), fb_predicted,
         fb_corrected, t (0/1), t_cls. Ids, classes and numbers only."""
         q = (
-            "SELECT d.msg_id, d.cls, d.applied, d.current, d.dry_run, d.ts, d.scores, d.feats,"
+            "SELECT d.msg_id, d.cls, d.applied, d.current, d.dry_run, d.ts, d.mail_ts, d.scores, d.feats,"
             " f.msg_id IS NOT NULL AS fb, f.predicted AS fb_predicted, f.corrected AS fb_corrected,"
             " t.msg_id IS NOT NULL AS t, t.cls AS t_cls"
             " FROM decisions d LEFT JOIN feedback f ON f.msg_id = d.msg_id"

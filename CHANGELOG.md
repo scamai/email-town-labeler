@@ -27,6 +27,8 @@ contain breaking changes; they are called out.
   held-out signals; `action_threshold` / `promotional_threshold` are re-tuned from the same
   signals (action-needed recall first, nothing important in promotional; explicit config wins).
   Stored as `<data dir>/personal.json`, reloaded by the running service when it changes.
+  Decisions also store when the message arrived (schema v5): mail decided long after it arrived
+  (a `backfill` of old mail) gives no "Town left it unlabeled" or "label kept" signals.
 - `email-town-labeler learn [--dry-run] [--reset] [--export FILE] [--json]`; `personalize` runs
   `learn` for models without a trainable head, and `personalize --reset` is the escape hatch.
   The service learns on its own every `interval_hours` with `min_new_signals` new signals

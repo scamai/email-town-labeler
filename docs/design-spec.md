@@ -202,7 +202,8 @@ Signals per message, first match wins: correction (feedback with a class), remov
 without: "not predicted"; none for new_sender), teacher (teacher row with a class; a NULL class
 gives no signal), teacher_none (no teacher row, older than teacher_wait_days, decided before the
 newest teacher-labeled decision, outside recorded history gaps: `unknown`), confirm (applied, not
-dry-run, current == cls, older than confirm_days). new_sender maps to unknown. A head is fit with
+dry-run, current == cls, older than confirm_days). teacher_none and confirm also need the decision
+to be within teacher_wait_days of the message's arrival (decisions.mail_ts, schema v5) when it is known. new_sender maps to unknown. A head is fit with
 ≥ min_examples strong signals (correction, removal, teacher) and active only if 5-fold
 out-of-fold it has lower weighted log-loss, strong-signal accuracy ≥ the model's, kept-label
 accuracy ≥ the model's − 0.02, and action-needed recall at its re-tuned threshold ≥

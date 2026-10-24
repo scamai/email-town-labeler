@@ -99,7 +99,7 @@ def test_migrates_v2_database_to_contacts_and_model_cls(tmp_path):
     db.commit()
     db.close()
     s = Store(p)
-    assert s.schema_version == SCHEMA_VERSION == 4
+    assert s.schema_version == SCHEMA_VERSION == 5
     d = s.decision("m1")
     assert d["cls"] == "orders" and d["model_cls"] is None  # the raw class was never kept before v3
     s.record_decision("m2", "new_sender", 0.6, {"unknown": 0.6}, "rules@1", True, model_cls="unknown")

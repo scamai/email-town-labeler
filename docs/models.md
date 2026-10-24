@@ -395,7 +395,9 @@ Updates, Forums), calendar invite. No text. Learning later combines those number
 
 One signal per message; earlier rows win (your correction beats Town's label). Reading,
 archiving, starring or deleting mail is never used as a label. Kept labels only count when no
-teacher is in use for that message.
+teacher is in use for that message. Teacher-unlabeled and kept-label signals also need the message
+to have been decided within `teacher_wait_days` of arriving: old mail labeled by `backfill` was
+never in front of Town or you, so only your corrections and Town's labels on it count.
 
 **Town as a teacher.** If you still run Town, its labels are free, unbiased ground truth: the
 published model was trained on exactly those labels. `[learn] teacher = "auto"` (the default)

@@ -315,6 +315,7 @@ class Engine:
             scores=None if scores is None else list(scores),
             feats=feats,
             head_id=self.head.id if self.head else None,
+            mail_ts=rec["internal_date"] / 1000 if rec.get("internal_date") else None,
         )
         tids = self._teacher_ids()
         on = [lid for lid in rec.get("label_ids") or [] if lid in tids]

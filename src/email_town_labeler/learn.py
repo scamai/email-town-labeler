@@ -363,6 +363,10 @@ def collect(store: Any, model_id: str, cfg: Any, *, now: float | None = None) ->
                 add(r, "teacher", cfg.learn_teacher_weight, pos=c)
             continue  # a teacher label with no class (awaiting reply): no signal either way
         age = now - r["ts"]
+        # Silence (no teacher label, our label kept) only means something for mail decided on arrival:
+        # old mail labeled by a backfill was never in front of Town, or of you.
+        if r.get("mail_ts") is not None and r["ts"] - r["mail_ts"] > wait:
+            continue
         if (
             t_latest is not None
             and age >= wait
