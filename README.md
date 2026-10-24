@@ -1,120 +1,165 @@
-# email-town-labeler
+<div align="center">
 
-**Self-hosted Gmail auto-labeling with a small model that runs on your own machine.**
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <img alt="email-town-labeler: your Gmail, sorted by an AI that runs on your own computer" src="docs/assets/banner-light.svg" width="880">
+</picture>
 
-email-town-labeler watches your Gmail inbox, classifies each new message with a local model, and adds a
-label such as `email-town-labeler/action needed` or `email-town-labeler/newsletters`. It never archives, deletes
-or marks anything read. You decide what to do with the labels: filters, search, or just
-scanning the sidebar.
+**Colored, sorted Gmail — like Town's Auto Inbox — without sending a single email to anyone's servers.**<br>
+Free and open source. The AI model runs on your own computer.
 
 [![CI](https://github.com/scamai/email-town-labeler/actions/workflows/ci.yml/badge.svg)](https://github.com/scamai/email-town-labeler/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![macOS · Linux · Windows · Docker](https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows%20%C2%B7%20Docker-555.svg)
 
-## Why
+[**Get started**](#get-started-in-5-minutes) · [How it works](#how-it-works) · [Privacy](#what-it-can-see-and-what-it-will-never-do) · [FAQ](#faq) · [Docs](#documentation)
 
-Hosted inbox-sorting services work by sending your mail to their servers. email-town-labeler does not.
+</div>
 
-- **Your mail never leaves your machine.** email-town-labeler talks only to the Gmail API (Google already
-  has your mail) and, if you ask for one, downloads a model file. The model runs locally.
-- **Your own OAuth client.** You create the Google OAuth client in your own Google Cloud
-  project. There is no email-town-labeler server and no shared app that could be compromised.
-- **No telemetry.** No analytics, no crash reports, no update checks.
-- **Nothing about content is stored.** The local database holds message ids, predicted
-  classes and probabilities, a few yes/no facts, and your corrections. Logs never contain subjects, senders or bodies.
-- **Non-destructive and reversible.** It only adds and removes its own `email-town-labeler/...` labels.
-  `email-town-labeler undo` removes all of them.
+<br>
 
-Details: [docs/privacy.md](docs/privacy.md).
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/inbox-dark.svg">
+  <img alt="A Gmail inbox where every new email has one colored label: action needed, travel, newsletters, promotional, orders, updates, new sender" src="docs/assets/inbox-light.svg" width="880">
+</picture>
+
+<p align="center"><sub>Illustration with made-up emails, shown with the label prefix set to <code>e/</code>.</sub></p>
+
+<p align="center">
+  <b>87%</b> agreement with Town's labels on held-out mail&nbsp;&nbsp;·&nbsp;&nbsp;<b>~0.25 s</b> per email on a normal CPU&nbsp;&nbsp;·&nbsp;&nbsp;<b>$0</b>, no subscription, no account
+</p>
+
+## Why people use it
+
+- 🎨 **A calmer inbox at a glance.** Every new email gets exactly one colored label within a
+  minute: what needs you, what's a receipt, what's a sale you can ignore.
+- 🔒 **Private by design.** Your mail is read by a model on your machine. There is no
+  email-town-labeler server, no account, no telemetry.
+- 🙋 **It never hides important mail.** It leans towards flagging *action needed*, and it never
+  files mail from people you've written to under *promotional*.
+- 📈 **It gets better the more you use it.** Move a label in Gmail and it learns from that, on
+  your computer, once a day.
+- ↩️ **Nothing to lose.** It only adds labels. One command takes every one of them off again.
+
+## Hosted labelers vs. email-town-labeler
+
+| | Hosted inbox labelers | **email-town-labeler** |
+|---|---|---|
+| Where your email is read | On the company's servers | **On your own computer** |
+| Who holds a token to your mailbox | The company's app | **Only you** (your own Google Cloud app) |
+| Learns from your corrections | Their model, their servers | **Locally**, and only if it measurably helps |
+| Works if the company shuts down | No | **Yes**, it's yours |
+| Can you read the code | No | **Yes**, MIT license |
+| Price | Subscription | **Free** |
+
+## What it does to an email
+
+| A new email like… | gets | because |
+|---|---|---|
+| "Can you sign the lease renewal by Friday?" | <img src="docs/assets/chip-action-needed.svg" alt="action needed" height="21"> | it asks you to do something |
+| "Check-in is open for your flight to Lisbon" | <img src="docs/assets/chip-travel.svg" alt="travel" height="21"> | flights, hotels, itineraries |
+| "Your order #A-1042 has shipped" | <img src="docs/assets/chip-orders.svg" alt="orders" height="21"> | receipts, invoices, deliveries |
+| "Issue #212: small models, big inboxes" | <img src="docs/assets/chip-newsletters.svg" alt="newsletters" height="21"> | something you subscribed to |
+| "48 hours only: 30% off everything" | <img src="docs/assets/chip-promotional.svg" alt="promotional" height="21"> | marketing, and only when the model is very sure |
+| "New sign-in to your account" | <img src="docs/assets/chip-updates.svg" alt="updates" height="21"> | automated notifications |
+| "Hi! We met at the design meetup" | <img src="docs/assets/chip-new-sender.svg" alt="new sender" height="21"> | a person you've never written to |
+
+Everything else (most personal mail) is left alone. [All labels and how to rename them ↓](#under-the-hood)
 
 ## How it works
 
-```mermaid
-flowchart LR
-  G[("Gmail")] -- "history.list every 60 s<br/>(only what changed)" --> E["email-town-labeler engine<br/>(your machine)"]
-  E -- "new inbox messages" --> M["local model<br/>rules / embedding / ONNX / Ollama"]
-  M -- "class + probability" --> E
-  E -- "add label email-town-labeler/(class)" --> G
-  G -- "you change a label" --> E
-  G -- "Town's labels (optional)" --> E
-  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
-  DB -. "learn (daily, local)" .-> E
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/how-it-works-dark.svg">
+  <img alt="Gmail sends new mail to a model on your computer, which adds one label back in Gmail; your corrections teach it locally" src="docs/assets/how-it-works-light.svg" width="880">
+</picture>
+
+1. Every ~60 seconds it asks Gmail what's new (only what changed).
+2. A small AI model on your computer reads the sender, subject and the start of the email, in memory.
+3. It adds **one** label in Gmail. You use those labels however you like: filters, search, or just a glance.
+4. When you move or remove a label, it remembers. Once a day it quietly learns from that.
+
+## What it can see, and what it will never do
+
+**What it can see.** Your Gmail, through Google's `gmail.modify` permission. That's the
+narrowest permission that lets an app both read a message and change its labels. Google's
+consent screen describes it as "read, compose, and send"; email-town-labeler uses only the
+reading and labeling parts ([exactly what it does](docs/privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does)).
+
+**It will never:**
+
+- ❌ send, delete, archive, move or mark any email as read
+- ❌ upload your email anywhere (the only network traffic is the Gmail API, plus a model download you ask for)
+- ❌ phone home: no analytics, no crash reports, no update checks
+- ❌ store your email: its local database holds message ids, label names and numbers, never subjects, senders or bodies
+- ❌ touch any label except its own
+
+**How to take it all back:** `email-town-labeler undo` removes every label it ever added, and
+<https://myaccount.google.com/permissions> revokes its access. Full threat model: [docs/privacy.md](docs/privacy.md).
+
+## Get started in 5 minutes
+
+You need Python 3.10+ (macOS, Linux or Windows) and a Gmail or Google Workspace account.
+
+**1. Install**
+
+```bash
+pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"
 ```
 
-1. Every ~60 seconds email-town-labeler asks Gmail what changed since the last poll.
-2. New inbox messages are fetched, rendered to a short text (sender, subject, list headers,
-   start of the body) in memory, and classified by the local model.
-3. A labeling policy turns the model's probabilities into one `email-town-labeler/<class>` label: it
-   leans towards `action needed`, keeps uncertain mail and people you write to out of
-   `promotional`, and marks Primary mail from strangers as `new sender`.
-4. If you move a message to a different `email-town-labeler/...` label or remove ours, that is recorded
-   as a correction. If you also run Town, its labels count as ground truth. Once a day the
-   service learns from these, locally: a small personal layer on the model's scores (used only if
-   it beats the model on held-out signals) and re-tuned thresholds.
+**2. Create your own Google sign-in** (one time, about 10 minutes, free). This is what keeps
+anyone else from ever holding access to your mailbox. Follow the
+[step-by-step guide](docs/google-cloud-setup.md); you end up with a `client_secret_….json` file.
 
-## Quickstart
+**3. Run the setup wizard**
 
-Requires Python 3.10+ on macOS, Linux or Windows, and a Gmail or Google Workspace account.
+```bash
+email-town-labeler setup
+```
 
-> **Not on PyPI.** The name `email-town-labeler` on PyPI belongs to an unrelated project and the final
-> package name is not decided yet. Install from GitHub as shown below; **do not
-> `pip install email-town-labeler`**.
+It signs you in, downloads the model (about 820 MB, once, checksum-verified) and shows a
+**preview on your 5 newest emails** of the labels it would add. Nothing is changed yet.
 
-1. **Install** from GitHub, with the `onnx` extra the default model needs
+**4. Turn it on**
 
-   ```bash
-   pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"
-   ```
+```bash
+email-town-labeler service install
+```
 
-   ([pipx](https://pipx.pypa.io) keeps it in its own environment. In a virtualenv,
-   `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"`
-   works too, as does `uv tool install` with the same argument. Without `[onnx]` you get the
-   dependency-free `rules` model only.)
+That's it: new mail gets a label within a minute, in the background, after restarts too.
+Check on it any time with `email-town-labeler status`.
 
-2. **Create a Google OAuth client** (one time, about 10 minutes). Follow
-   [docs/google-cloud-setup.md](docs/google-cloud-setup.md), or print the gcloud commands for
-   the scriptable part and the console links for the rest:
+> [!NOTE]
+> **Not on PyPI yet.** The name `email-town-labeler` on PyPI belongs to an unrelated project.
+> Install from GitHub as shown; **do not** `pip install email-town-labeler`.
 
-   ```bash
-   email-town-labeler gcp-setup --print --project my-email-town-labeler   # prints the gcloud commands to paste
-   ```
+<details>
+<summary><b>More install options</b> (pip, uv, gcloud helper, personal-Gmail note)</summary>
 
-   (From a clone of this repository, `scripts/gcp_setup.sh` on macOS / Linux or
-   `scripts\gcp_setup.ps1` on Windows runs those commands for you. The scripts are not part
-   of the installed package.)
+- [pipx](https://pipx.pypa.io) keeps it in its own environment. In a virtualenv,
+  `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"`
+  works too, as does `uv tool install` with the same argument. Without `[onnx]` you get the
+  dependency-free `rules` model only.
+- Print the gcloud commands for the scriptable part of the Google Cloud setup, plus console links
+  for the rest:
 
-   You end up with a downloaded `client_secret_....json` for a **Desktop app** client.
+  ```bash
+  email-town-labeler gcp-setup --print --project my-email-town-labeler
+  ```
 
-   Personal Gmail users: read [step 4](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only)
-   of the guide. In Google's default "Testing" mode, logins expire every 7 days.
+  From a clone of this repository, `scripts/gcp_setup.sh` (macOS / Linux) or
+  `scripts\gcp_setup.ps1` (Windows) runs those commands for you.
+- **Personal Gmail:** read [step 4](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only)
+  of the guide. In Google's default "Testing" mode, logins expire every 7 days.
+- `service install` uses launchd (macOS), systemd `--user` (Linux) or Task Scheduler (Windows).
+- Want your existing inbox labeled too? `email-town-labeler backfill --days 30`.
 
-3. **Set up**
+</details>
 
-   ```bash
-   email-town-labeler setup
-   ```
+<details>
+<summary><b>Docker</b> (servers and home labs)</summary>
 
-   The wizard asks for the client JSON, opens Google's consent page, offers the default model
-   [`town-modernbert`](#models) and downloads it (about 820 MB, once; the archive's sha256 is
-   pinned), and shows a dry run on your 5 newest messages (class and confidence per message id;
-   nothing is changed).
-
-4. **Run it in the background**
-
-   ```bash
-   email-town-labeler service install
-   ```
-
-   This registers `email-town-labeler run` with launchd (macOS), systemd `--user` (Linux) or Task
-   Scheduler (Windows).
-
-5. **Done.** New mail gets labeled within a minute. Check on it with `email-town-labeler status`.
-   Want your existing inbox labeled too? `email-town-labeler backfill --days 30`.
-
-## Docker
-
-For servers and home labs. All state lives in the `/data` volume; the container runs as a
-non-root user and exposes no ports.
+All state lives in the `/data` volume; the container runs as a non-root user and exposes no ports.
 
 ```bash
 git clone https://github.com/scamai/email-town-labeler && cd email-town-labeler/docker
@@ -141,7 +186,32 @@ token, when no poll has succeeded yet 15 minutes after setup, or when the last s
 is older than `max(10 x poll_seconds, 15 min)`. The container reports `unhealthy` until you
 have logged in.
 
-## Commands
+</details>
+
+## What works today
+
+| Status | Feature | Where |
+|---|---|---|
+| ✅ | Automatic labels on new Gmail / Google Workspace mail | |
+| ✅ | Town's label colors, or your own | `[label_colors]` |
+| ✅ | Learns from your corrections (and from Town's labels, if you still run it) | `learn` |
+| ✅ | Background service on macOS, Linux and Windows; Docker | `service install` |
+| ✅ | Preview mode, full undo | `--dry-run`, `undo` |
+| ✅ | Bring your own model: ONNX, Hugging Face, or a local LLM via Ollama | [Models ↓](#under-the-hood) |
+| 🟡 | Personal Gmail in Google's "Testing" mode needs a re-login every 7 days | [why](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only) |
+| 🟡 | Install from PyPI | not yet: install from GitHub |
+| 🔴 | Outlook, IMAP, Fastmail | not planned yet |
+| 🔴 | Instant push instead of 60-second polling | not built |
+| ⛔ | Archiving, deleting, sending or auto-replying | never, by design |
+
+---
+
+## Under the hood
+
+Everything below is the technical detail, folded so the page stays short. Open what you need.
+
+<details>
+<summary><b>Commands</b></summary>
 
 | Command | What it does |
 |---|---|
@@ -167,7 +237,10 @@ Global options, before or after the command: `--home DIR` (same as `EMAIL_TOWN_L
 `-vv` for more logging. Exit codes: `0` success, `1` error, `2` usage error. Only one `run`,
 `once`, `backfill` or `undo` runs per data directory at a time; a second exits with `1`.
 
-## Labels
+</details>
+
+<details>
+<summary><b>Labels</b></summary>
 
 | Label in Gmail | Applied to |
 |---|---|
@@ -185,9 +258,13 @@ At most one email-town-labeler label per message. Which one is decided by a poli
 the model gives it 20 %, `promotional` only above 60 % and never for people you have written
 to (built-in defaults; a model can recommend its own, and `town-modernbert` uses 7 % and
 80 %). Rename them under `[labels]` in the config, recolor them under `[label_colors]` (by
-default they get Town's colors), or change the `email-town-labeler` prefix with `label_prefix`.
+default they get Town's colors), or shorten the `email-town-labeler` prefix with `label_prefix`
+(for example `label_prefix = "e"` gives `e/action needed`).
 
-## Configuration
+</details>
+
+<details>
+<summary><b>Configuration</b></summary>
 
 `email-town-labeler setup` writes `config.toml`; the defaults are sensible:
 
@@ -216,7 +293,10 @@ new_sender = true
 
 File locations per OS, every key, and `EMAIL_TOWN_LABELER_HOME`: [docs/configuration.md](docs/configuration.md).
 
-## Models
+</details>
+
+<details>
+<summary><b>Models</b>: the default model, its accuracy, and other backends</summary>
 
 ### The default: `town-modernbert`
 
@@ -272,7 +352,10 @@ email-town-labeler model pull hf:ORG/REPO@REVISION  # or a local directory, or a
 Then set `[model] ref` to the package name and restart the service. How models are packaged,
 evaluated and accepted: [docs/models.md](docs/models.md).
 
-## Learning from your corrections
+</details>
+
+<details>
+<summary><b>Learning from your corrections</b></summary>
 
 Fix labels in Gmail the way you normally would: remove the email-town-labeler label, or swap it for
 the right `email-town-labeler/...` one. email-town-labeler records each correction (ids and class
@@ -297,7 +380,33 @@ This works with every model, including `town-modernbert`. Details and settings:
 [docs/models.md](docs/models.md#improving-from-use-learn). The learned file is derived from your
 mail: keep it private.
 
-## Undo
+</details>
+
+<details>
+<summary><b>Architecture diagram</b></summary>
+
+```mermaid
+flowchart LR
+  G[("Gmail")] -- "history.list every 60 s<br/>(only what changed)" --> E["email-town-labeler engine<br/>(your machine)"]
+  E -- "new inbox messages" --> M["local model<br/>rules / embedding / ONNX / Ollama"]
+  M -- "class + probability" --> E
+  E -- "add label email-town-labeler/(class)" --> G
+  G -- "you change a label" --> E
+  G -- "Town's labels (optional)" --> E
+  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
+  DB -. "learn (daily, local)" .-> E
+```
+
+New inbox messages are fetched, rendered to a short text (sender, subject, list headers, start
+of the body) in memory, and classified by the local model. A labeling policy turns the model's
+probabilities into one `email-town-labeler/<class>` label: it leans towards `action needed`,
+keeps uncertain mail and people you write to out of `promotional`, and marks Primary mail from
+strangers as `new sender`. More: [docs/architecture.md](docs/architecture.md).
+
+</details>
+
+<details>
+<summary><b>Uninstall and undo</b></summary>
 
 ```bash
 email-town-labeler service uninstall   # stop the background labeler
@@ -307,54 +416,10 @@ email-town-labeler undo                # remove every email-town-labeler/... lab
 Then revoke access at <https://myaccount.google.com/permissions> and delete the config and
 data directories (see [docs/configuration.md](docs/configuration.md#files-and-directories)).
 
-## FAQ
+</details>
 
-**Does email-town-labeler send my email anywhere?**
-No. It reads mail from the Gmail API and classifies it in-process. The only other network
-traffic is a model download you ask for. The `ollama_choice` backend sends text to an Ollama
-server, and only on this machine (`localhost`) unless you opt in with
-`[model] allow_remote_endpoint = true`; a model package cannot change that
-([details](docs/privacy.md#model-endpoints)).
-
-**Why do I need my own Google Cloud project?**
-So that nobody else's app holds a token to your mailbox. It also means email-town-labeler has no
-server-side component that could leak or be shut down.
-
-**Why does Google say the app is unverified, or "unsafe"?**
-Because it is your own app and Google hasn't reviewed it. Verification is meant for apps
-distributed to the public. You are the developer here.
-[Details](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only).
-
-**Why does the consent screen say it can read, send and compose mail?**
-That is Google's description of the `gmail.modify` scope, the narrowest scope that allows
-both reading a message and changing its labels. email-town-labeler only adds and removes its own
-labels; [here is exactly what it does](docs/privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does).
-
-**What happens if my laptop sleeps or is off?**
-On the next poll email-town-labeler picks up everything that changed while it was away. If it was away
-so long that Gmail no longer has that history, it scans inbox mail received since its last
-successful poll instead (at most 30 days back, configurable, and never mail from before you
-set it up).
-
-**Does it label mail that was already there?**
-Only if you run `email-town-labeler backfill`. A backfill is limited by Gmail's API quota to roughly
-5,000 messages an hour.
-
-**Can I use it with several accounts?**
-Yes: one instance per account, each with its own `EMAIL_TOWN_LABELER_HOME` (or its own Docker volume).
-
-**Does it work with Outlook, IMAP or Fastmail?**
-No. Gmail and Google Workspace only, through the Gmail API.
-
-**Does it need a GPU?**
-No. Everything targets CPU. `device = "cuda"` is available for the embedding and ONNX
-backends.
-
-**What does it cost?**
-Nothing. The Gmail API is free at this usage level, and one mailbox stays far below Google's
-per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
-
-## Limitations
+<details>
+<summary><b>Limitations</b></summary>
 
 - Gmail and Google Workspace only.
 - Polling, not push: labels appear within about `poll_seconds` of arrival. Push via Pub/Sub
@@ -370,15 +435,105 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 - Refitting a model's own head (`personalize`) needs an `embedding_probe` or `onnx_classifier` model.
 - Only new inbox mail is labeled automatically; archived mail and other folders are ignored.
 
+</details>
+
+## FAQ
+
+<details>
+<summary><b>Does it send my email anywhere?</b></summary>
+
+No. It reads mail from the Gmail API and classifies it in-process. The only other network
+traffic is a model download you ask for. The `ollama_choice` backend sends text to an Ollama
+server, and only on this machine (`localhost`) unless you opt in with
+`[model] allow_remote_endpoint = true`; a model package cannot change that
+([details](docs/privacy.md#model-endpoints)).
+
+</details>
+
+<details>
+<summary><b>Why do I need my own Google Cloud project?</b></summary>
+
+So that nobody else's app holds a token to your mailbox. It also means email-town-labeler has no
+server-side component that could leak or be shut down.
+
+</details>
+
+<details>
+<summary><b>Why does Google say the app is unverified, or "unsafe"?</b></summary>
+
+Because it is your own app and Google hasn't reviewed it. Verification is meant for apps
+distributed to the public. You are the developer here.
+[Details](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only).
+
+</details>
+
+<details>
+<summary><b>Why does the consent screen say it can read, send and compose mail?</b></summary>
+
+That is Google's description of the `gmail.modify` scope, the narrowest scope that allows
+both reading a message and changing its labels. email-town-labeler only adds and removes its own
+labels; [here is exactly what it does](docs/privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does).
+
+</details>
+
+<details>
+<summary><b>What happens if my laptop sleeps or is off?</b></summary>
+
+On the next poll email-town-labeler picks up everything that changed while it was away. If it was away
+so long that Gmail no longer has that history, it scans inbox mail received since its last
+successful poll instead (at most 30 days back, configurable, and never mail from before you
+set it up).
+
+</details>
+
+<details>
+<summary><b>Does it label mail that was already there?</b></summary>
+
+Only if you run `email-town-labeler backfill`. A backfill is limited by Gmail's API quota to roughly
+5,000 messages an hour.
+
+</details>
+
+<details>
+<summary><b>Can I use it with several accounts?</b></summary>
+
+Yes: one instance per account, each with its own `EMAIL_TOWN_LABELER_HOME` (or its own Docker volume).
+
+</details>
+
+<details>
+<summary><b>Does it work with Outlook, IMAP or Fastmail?</b></summary>
+
+No. Gmail and Google Workspace only, through the Gmail API.
+
+</details>
+
+<details>
+<summary><b>Does it need a GPU?</b></summary>
+
+No. Everything targets CPU. `device = "cuda"` is available for the embedding and ONNX
+backends.
+
+</details>
+
+<details>
+<summary><b>What does it cost?</b></summary>
+
+Nothing. The Gmail API is free at this usage level, and one mailbox stays far below Google's
+per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
+
+</details>
+
 ## Documentation
 
-- [Google Cloud setup](docs/google-cloud-setup.md): OAuth client, consent screen, token expiry, quota
-- [Privacy and threat model](docs/privacy.md)
-- [Models](docs/models.md): backends, manifest, personalization, evaluation
-- [Configuration](docs/configuration.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Architecture](docs/architecture.md)
-- [Design spec](docs/design-spec.md): module contracts, for contributors
+| I want to… | Read |
+|---|---|
+| set up the Google sign-in step by step | [Google Cloud setup](docs/google-cloud-setup.md) |
+| know exactly what it can access and store | [Privacy and threat model](docs/privacy.md) |
+| change labels, colors, thresholds | [Configuration](docs/configuration.md) |
+| use or build a different model | [Models](docs/models.md) · [model card](docs/model-cards/town-modernbert.md) |
+| fix something that isn't working | [Troubleshooting](docs/troubleshooting.md) |
+| understand or contribute to the code | [Architecture](docs/architecture.md) · [Design spec](docs/design-spec.md) |
 
 ## Contributing
 
@@ -387,6 +542,8 @@ Bug reports, docs fixes, backends and models are welcome. Read
 any form, in code, tests, fixtures, issues or logs.** Security or privacy problems go to
 security@scam.ai, not to public issues ([SECURITY.md](SECURITY.md)).
 
+If it makes your inbox calmer, a ⭐ helps other people find it.
+
 ## License
 
-[MIT](LICENSE). Copyright (c) 2026 Reality Inc. (Scam.ai).
+[MIT](LICENSE). Copyright (c) 2026 Reality Inc. (Scam.ai). Not affiliated with Town.

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="250" viewBox="0 0 880 250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<title>email-town-labeler: your Gmail, sorted on your own machine</title>
+<rect width="880" height="250" rx="16" fill="#f6f8fc"/>
+<g transform="translate(372 30)">
+  <rect width="136" height="92" rx="14" fill="#ffffff" stroke="#e3e6ec" stroke-width="2"/>
+  <path d="M14 22 L68 58 L122 22" fill="none" stroke="#5f6368" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(86 52) rotate(-18)">
+    <path d="M0 0 h34 l12 12 l-12 12 h-34 z" fill="#ffad47"/>
+    <circle cx="7" cy="12" r="3.5" fill="#ffffff"/>
+  </g>
+</g>
+<text x="440" y="160" text-anchor="middle" font-size="34" font-weight="700" fill="#1f1f1f">email-town-labeler</text>
+<text x="440" y="190" text-anchor="middle" font-size="17" fill="#5f6368">Your Gmail, sorted by an AI that runs on your own computer.</text>
+<g transform="translate(134.0 210)"><rect x="0.0" y="0.0" width="108.6" height="21" rx="4" fill="#ffad47"/><text x="7.0" y="15.5" font-size="13" font-weight="600" fill="#000000">action needed</text><rect x="116.6" y="0.0" width="57.7" height="21" rx="4" fill="#a4c2f4"/><text x="123.6" y="15.5" font-size="13" font-weight="600" fill="#000000">travel</text><rect x="182.3" y="0.0" width="94.1" height="21" rx="4" fill="#16a766"/><text x="189.3" y="15.5" font-size="13" font-weight="600" fill="#ffffff">newsletters</text><rect x="284.4" y="0.0" width="94.1" height="21" rx="4" fill="#f691b3"/><text x="291.4" y="15.5" font-size="13" font-weight="600" fill="#000000">promotional</text><rect x="386.5" y="0.0" width="57.7" height="21" rx="4" fill="#b99aff"/><text x="393.5" y="15.5" font-size="13" font-weight="600" fill="#000000">orders</text><rect x="452.2" y="0.0" width="65.0" height="21" rx="4" fill="#fad165"/><text x="459.2" y="15.5" font-size="13" font-weight="600" fill="#000000">updates</text><rect x="525.1" y="0.0" width="86.8" height="21" rx="4" fill="#4a86e8"/><text x="532.1" y="15.5" font-size="13" font-weight="600" fill="#ffffff">new sender</text></g>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="220" viewBox="0 0 880 220" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<title>How it works: Gmail, then a model on your computer, then a label back in Gmail</title>
+<rect width="880" height="220" rx="14" fill="#161b22"/>
+<rect x="24" y="40" width="220" height="96" rx="14" fill="#1c2128" stroke="#30363d" stroke-width="2"/><text x="134" y="80" text-anchor="middle" font-size="17" font-weight="700" fill="#e6edf3">Gmail</text><text x="134" y="106" text-anchor="middle" font-size="13" fill="#9da7b3">a new email arrives</text>
+<rect x="330" y="40" width="220" height="96" rx="14" fill="#132339" stroke="#58a6ff" stroke-width="2"/><text x="440" y="80" text-anchor="middle" font-size="17" font-weight="700" fill="#e6edf3">Your computer</text><text x="440" y="106" text-anchor="middle" font-size="13" fill="#9da7b3">a local AI model reads it</text>
+<rect x="636" y="40" width="220" height="96" rx="14" fill="#1c2128" stroke="#30363d" stroke-width="2"/><text x="746" y="80" text-anchor="middle" font-size="17" font-weight="700" fill="#e6edf3">Gmail</text><text x="746" y="106" text-anchor="middle" font-size="13" fill="#9da7b3">one colored label is added</text>
+<line x1="244" y1="76" x2="322" y2="76" stroke="#7d8590" stroke-width="2"/><path d="M320 70 L330 76 L320 82 z" fill="#7d8590"/><text x="287.0" y="66" text-anchor="middle" font-size="12" fill="#9da7b3">every 60 s</text>
+<line x1="550" y1="76" x2="628" y2="76" stroke="#7d8590" stroke-width="2"/><path d="M626 70 L636 76 L626 82 z" fill="#7d8590"/><text x="593.0" y="66" text-anchor="middle" font-size="12" fill="#9da7b3">one label</text>
+<path d="M746 136 C 746 176, 440 176, 440 144" fill="none" stroke="#7d8590" stroke-width="2" stroke-dasharray="5 5"/>
+<path d="M434 152 L440 140 L446 152 z" fill="#7d8590"/>
+<text x="600" y="190" text-anchor="middle" font-size="12" fill="#9da7b3">you fix a label → it learns, on your computer</text>
+<text x="440" y="208" text-anchor="middle" font-size="12" font-weight="600" fill="#3fb950">Your email never goes to a third-party server.</text>
+</svg>
