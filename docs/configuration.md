@@ -135,7 +135,8 @@ max_examples = 20000           # newest decisions per run (100 .. 1000000)
   (the `embedding_probe`, `onnx_classifier`, `hf_sequence_classifier` and
   `onnx_sequence_classifier` backends; `town-modernbert` uses about 3 GB) in a separate process
   and ends that process after this many minutes without new mail, which gives all of its memory
-  back. The next mail starts it again (about a second for `town-modernbert` on an Apple M4 Pro).
+  back. The next mail starts it again: for `town-modernbert` on an Apple M4 Pro that took about
+  6 s in the macOS service (launchd runs it at background priority) and 1 to 2 s run by hand.
   `0` ends it after every poll that used it; `-1` loads the model once inside the service and
   keeps it, as versions before this setting did. `once`, `backfill` and `setup` are unaffected.
 
