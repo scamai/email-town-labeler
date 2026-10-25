@@ -311,7 +311,9 @@ email-town-labeler model pull town-modernbert --use
   ONNX so it runs without PyTorch (needs the `[onnx]` extra). An 824 MB download from the
   [v0.1.0 release](https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0); the
   archive's sha256 is pinned in the code and every file is checked against its manifest.
-  `town-modernbert-torch` is the same model as PyTorch weights (635 MB, `[embed]` extra).
+  `town-modernbert-torch` is the same model as PyTorch weights (635 MB, `[embed]` extra), and
+  `town-modernbert-int8` the same model with int8 weights (263 MB, about half the memory, nearly
+  the same labels; [model card](docs/model-cards/town-modernbert-int8.md)).
 - **What it was trained on:** 4,176 inbound emails from **one person's Gmail inbox** (English,
   July–October 2026), labeled by a hosted auto-labeling tool's six content labels. The mailbox
   owner consented to publishing the weights. Fine-tuned models can memorise fragments of their
@@ -429,7 +431,7 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
 - The default model `town-modernbert` learned from one person's inbox; on yours it will make
   more mistakes than its published numbers suggest. It needs the `[onnx]` extra, about 1.6 GB
   of disk (an 824 MB download) and about 3 GB of memory while it classifies (measured on an
-  Apple-silicon Mac); the background service gives that memory back after 10 minutes without
+  Apple-silicon Mac; the optional `town-modernbert-int8` peaked at about half); the background service gives that memory back after 10 minutes without
   mail (`[model] keep_loaded_minutes`). `rules` is a heuristic baseline with limited quality.
 - Learning only re-weights what the model already sees (its scores plus a few yes/no facts);
   retraining the model itself is an advanced, manual path

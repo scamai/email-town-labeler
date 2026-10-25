@@ -162,10 +162,11 @@ Changing your Google password also revokes tokens that carry Gmail scopes.
 
 ## The published model, and whose mail it learned from
 
-The default model, `town-modernbert` (and its PyTorch twin `town-modernbert-torch`), **was
-trained on one person's private mail**: 4,176 inbound emails from one Gmail inbox, labeled by a
-hosted auto-labeling tool. That person consented to publishing the weights. The
-[model card](model-cards/town-modernbert.md) says so; this section spells out what it means.
+The default model, `town-modernbert` (and its twins `town-modernbert-torch`, as PyTorch weights,
+and `town-modernbert-int8`, as int8 weights), **was trained on one person's private mail**: 4,176
+inbound emails from one Gmail inbox, labeled by a hosted auto-labeling tool. That person
+consented to publishing the weights. The [model card](model-cards/town-modernbert.md) says so;
+this section spells out what it means.
 
 **For your mail: nothing changes.** The model is a download. It runs on your machine and sends
 nothing anywhere; your mail is never used to train or update it. The privacy properties above
