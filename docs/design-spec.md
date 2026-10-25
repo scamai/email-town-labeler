@@ -50,6 +50,7 @@ src/email_town_labeler/
   models/registry.py load_model(ref) → Classifier
   models/hub.py      fetch model packages (HF Hub / https URL, sha256-checked; archive pin + progress)
   models/catalog.py  published models by name (town-modernbert): URL, archive sha256, size, extra
+  models/worker.py   `run`: a heavy backend in a child process that exits when idle (WorkerModel)
   models/backends/rules.py            no-ML baseline (Gmail categories + headers)
   models/backends/embedding_probe.py  sentence-transformers embedder + numpy softmax head
   models/backends/onnx_classifier.py  ONNX encoder + head, onnxruntime only
@@ -225,7 +226,9 @@ class Engine:
     def sync_once(self) -> dict      # one poll: history since stored id (bootstrap from profile on
                                      # first run; on HistoryExpired fall back to an inbox scan);
                                      # classify eligible new mail; capture feedback; return counts
-    def run_forever(self, stop: threading.Event | None = None) -> None   # poll every cfg.poll_seconds
+    def run_forever(self, stop: threading.Event | None = None) -> None   # poll every cfg.poll_seconds;
+                                     # after each poll model.release_if_idle(), at the end model.release(),
+                                     # when the model has them (models/worker.py)
     def backfill(self, *, days: int | None = None, limit: int | None = None) -> dict
     def undo(self) -> int            # remove our labels from every message that has one
     def rebuild_contacts(self) -> dict   # SENT newer_than contacts_scan_days, ≤ contacts_scan_limit
@@ -264,6 +267,7 @@ min_confidence = 0.55
 unknown_action = "skip"
 device = "cpu"
 allow_remote_endpoint = false
+keep_loaded_minutes = 10     # -1 .. 1440; run: end the model process after this long without mail
 [engine]
 dry_run = false
 recovery_max_days = 30

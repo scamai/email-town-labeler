@@ -557,26 +557,44 @@ class Engine:
             "running: model=%s poll=%ss dry_run=%s", self.model_id, self.cfg.poll_seconds, self.cfg.dry_run
         )
         self.sync_label_colors()
-        while not stop.is_set():
-            try:
-                self.sync_once()
-                failures = 0
-                delay = float(self.cfg.poll_seconds)
+        try:
+            while not stop.is_set():
                 try:
-                    self.maybe_learn()
-                except Exception as e:  # learning must never stop labeling
-                    log.warning("learning failed (%s); labeling continues", _err_name(e))
-                    log.debug("learning failure detail", exc_info=True)
-            except Exception as e:  # transient API/network/model errors must not kill the daemon
-                failures += 1
-                delay = min(15.0 * 2 ** (failures - 1), MAX_BACKOFF)
-                self.store.set("last_error", f"{_err_name(e)} at {self.clock():.0f}")
-                log.warning("poll failed (%s, %d in a row); retrying in %.0fs", _err_name(e), failures, delay)
-                log.debug("poll failure detail", exc_info=True)
-            if stop.is_set():
-                break
-            self._wait(delay, stop)
+                    self.sync_once()
+                    failures = 0
+                    delay = float(self.cfg.poll_seconds)
+                    try:
+                        self.maybe_learn()
+                    except Exception as e:  # learning must never stop labeling
+                        log.warning("learning failed (%s); labeling continues", _err_name(e))
+                        log.debug("learning failure detail", exc_info=True)
+                except Exception as e:  # transient API/network/model errors must not kill the daemon
+                    failures += 1
+                    delay = min(15.0 * 2 ** (failures - 1), MAX_BACKOFF)
+                    self.store.set("last_error", f"{_err_name(e)} at {self.clock():.0f}")
+                    log.warning(
+                        "poll failed (%s, %d in a row); retrying in %.0fs", _err_name(e), failures, delay
+                    )
+                    log.debug("poll failure detail", exc_info=True)
+                self._release_idle_model()
+                if stop.is_set():
+                    break
+                self._wait(delay, stop)
+        finally:
+            release = getattr(self.model, "release", None)  # models/worker.py: end the model process
+            if release is not None:
+                release()
         log.info("stopped")
+
+    def _release_idle_model(self) -> None:
+        """A WorkerModel (models/worker.py) ends its process after keep_loaded_minutes without mail."""
+        release = getattr(self.model, "release_if_idle", None)
+        if release is None:
+            return
+        try:
+            release()
+        except Exception as e:  # noqa: BLE001 - freeing memory must not stop labeling
+            log.warning("could not unload the model (%s); continuing", _err_name(e))
 
     # -- one-shot operations ------------------------------------------------------------------
     def backfill(self, *, days: int | None = None, limit: int | None = None) -> dict[str, Any]:

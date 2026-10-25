@@ -114,6 +114,7 @@ _LAYOUT: list[tuple[str, str, str]] = [
     ("model", "unknown_action", "unknown_action"),
     ("model", "device", "device"),
     ("model", "allow_remote_endpoint", "allow_remote_endpoint"),
+    ("model", "keep_loaded_minutes", "keep_loaded_minutes"),
     ("engine", "dry_run", "dry_run"),
     ("engine", "recovery_max_days", "recovery_max_days"),
     ("policy", "action_threshold", "action_threshold"),
@@ -153,6 +154,7 @@ class Config:
     unknown_action: str = "skip"
     device: str = "cpu"
     allow_remote_endpoint: bool = False  # let a model backend send mail text to a non-loopback host
+    keep_loaded_minutes: int = 10  # `run`: unload a large model after this long without mail; -1 = never
     dry_run: bool = False
     recovery_max_days: int = 30  # history expired: rescan at most this far back (never before setup)
     # [policy]: how model probabilities become a class (policy.py), then the new-sender rule (engine.py)
@@ -265,6 +267,10 @@ class Config:
             errs.append(f"engine.recovery_max_days must be between 1 and 365 (got {self.recovery_max_days})")
         if not 0.0 <= self.min_confidence <= 1.0:
             errs.append(f"model.min_confidence must be between 0 and 1 (got {self.min_confidence})")
+        if not -1 <= self.keep_loaded_minutes <= 1440:
+            errs.append(
+                f"model.keep_loaded_minutes must be between -1 and 1440 (got {self.keep_loaded_minutes})"
+            )
         if self.unknown_action not in UNKNOWN_ACTIONS:
             errs.append(
                 f"model.unknown_action must be one of {list(UNKNOWN_ACTIONS)} (got '{self.unknown_action}')"
@@ -384,6 +390,7 @@ _EXPECT = {
     "device": str,
     "dry_run": bool,
     "allow_remote_endpoint": bool,
+    "keep_loaded_minutes": int,
     "recovery_max_days": int,
     "action_threshold": float,
     "promotional_threshold": float,

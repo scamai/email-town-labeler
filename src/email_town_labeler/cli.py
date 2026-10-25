@@ -71,6 +71,19 @@ def make_model(cfg: Config, paths: Paths) -> Any:
     )
 
 
+def make_service_model(cfg: Config, paths: Paths) -> Any:
+    """The model for `run`: a large one lives in a worker process that exits when idle (models/worker.py)."""
+    from .models.worker import load_service_model
+
+    return load_service_model(
+        cfg.model_ref,
+        models_dir=paths.models_dir,
+        device=cfg.device,
+        allow_remote_endpoint=cfg.remote_endpoint_allowed(),
+        keep_loaded_minutes=cfg.keep_loaded_minutes,
+    )
+
+
 def make_store(paths: Paths) -> Any:
     from .state import Store
 
@@ -126,16 +139,15 @@ class Ctx:
         ans = self.ask(f"{prompt} ({'Y/n' if default else 'y/N'})").lower()
         return default if not ans else ans in ("y", "yes")
 
-    def engine(self, *, dry_run: bool | None = None, with_model: bool = True) -> Any:
+    def engine(self, *, dry_run: bool | None = None, with_model: bool = True, service: bool = False) -> Any:
         from .engine import Engine
 
         cfg = self.cfg
         if dry_run:
             cfg.dry_run = True
         client = make_client(self.paths)
-        model = (
-            make_model(cfg, self.paths) if with_model else None
-        )  # undo must work even if the model can't load
+        load = make_service_model if service else make_model
+        model = load(cfg, self.paths) if with_model else None  # undo must work even if the model can't load
         return Engine(
             client,
             make_labels(client, cfg),
@@ -439,7 +451,7 @@ def cmd_setup(ctx: Ctx) -> int:
 
 def cmd_run(ctx: Ctx) -> int:
     setup_logging(ctx.args.verbose, ctx.paths.ensure().logs_dir)
-    eng = ctx.engine(dry_run=ctx.args.dry_run)
+    eng = ctx.engine(dry_run=ctx.args.dry_run, service=True)
     stop = threading.Event()
     prev: dict[int, Any] = {}
     if threading.current_thread() is threading.main_thread():

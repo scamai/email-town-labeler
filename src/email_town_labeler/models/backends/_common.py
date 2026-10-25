@@ -29,12 +29,15 @@ class MissingExtraError(ImportError):
     """A backend needs an optional dependency group that is not installed."""
 
     def __init__(self, module: str, extra: str, backend: str = ""):
-        self.module, self.extra = module, extra
+        self.module, self.extra, self.backend = module, extra, backend
         who = f"backend {backend!r} " if backend else ""
         super().__init__(
             f'{who}needs {module!r}: install it with  pip install "email-town-labeler[{extra}] @ {SOURCE}"'
             f'  (pipx: pipx install --force "email-town-labeler[{extra}] @ {SOURCE}")'
         )
+
+    def __reduce__(self):  # crosses the models/worker.py process boundary intact
+        return type(self), (self.module, self.extra, self.backend)
 
 
 def require(module: str, backend: str = "", extra: str | None = None) -> Any:

@@ -539,3 +539,29 @@ def test_engine_uses_the_models_recommended_thresholds(tmp_path):
     cfg._explicit.add("action_threshold")  # as if config.toml set it
     eng = Engine(client, labels, model, Store(tmp_path / "s2.sqlite"), cfg)
     assert (eng.cfg.action_threshold, eng.cfg.promotional_threshold) == (0.2, 0.8)
+
+
+def test_run_forever_unloads_an_idle_model_after_each_poll(env, caplog):
+    eng, _, _ = env()
+    calls: list[str] = []
+
+    def release_if_idle():
+        calls.append("idle?")
+        if len(calls) == 2:
+            raise OSError("pipe")  # must not stop polling
+
+    eng.model.release_if_idle = release_if_idle
+    eng.model.release = lambda: calls.append("release")
+    stop = threading.Event()
+    sleeps: list[float] = []
+
+    def sleep(s):
+        sleeps.append(s)
+        if len(sleeps) >= 3:
+            stop.set()
+
+    eng._sleep_fn = sleep
+    with caplog.at_level(logging.WARNING, logger="email_town_labeler.engine"):
+        eng.run_forever(stop)
+    assert calls == ["idle?", "idle?", "idle?", "release"]
+    assert "could not unload the model" in caplog.text

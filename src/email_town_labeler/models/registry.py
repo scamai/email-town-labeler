@@ -40,9 +40,11 @@ __all__ = [
     "UnknownModelError",
     "backend_names",
     "list_models",
+    "load_manifest",
     "load_model",
     "register_backend",
     "resolve",
+    "resolve_loadable",
 ]
 
 
@@ -130,6 +132,29 @@ def _accepts(fn: Callable[..., object], name: str) -> bool:
     return any(p.name == name or p.kind is inspect.Parameter.VAR_KEYWORD for p in params)
 
 
+def resolve_loadable(ref: str, *, models_dir: Path) -> ModelManifest:
+    """resolve(), but a catalog model whose extra is missing fails before it is downloaded."""
+    entry = catalog.get(ref)
+    if (
+        entry is not None
+        and catalog.installed(entry, models_dir) is None
+        and not catalog.extra_installed(entry.extra)
+    ):
+        # fail before an ~800 MB download that could not run anyway
+        raise MissingExtraError(catalog.EXTRA_MODULES[entry.extra][0], entry.extra, ref)
+    return resolve(ref, models_dir=models_dir)
+
+
+def load_manifest(
+    man: ModelManifest, *, device: str = "cpu", allow_remote_endpoint: bool = False, **backend_kwargs
+) -> Classifier:
+    """Run a resolved manifest's backend (load_model without the resolving)."""
+    loader = get_backend(man.backend)
+    if _accepts(loader, "allow_remote_endpoint"):
+        backend_kwargs["allow_remote_endpoint"] = bool(allow_remote_endpoint)
+    return loader(man, device=device, **backend_kwargs)
+
+
 def load_model(
     ref: str, *, models_dir: Path, device: str = "cpu", allow_remote_endpoint: bool = False, **backend_kwargs
 ) -> Classifier:
@@ -139,19 +164,8 @@ def load_model(
     a server, such as ollama_choice: without it they refuse any host that is not loopback. It is passed to
     every backend whose loader accepts it; a model package can never set it.
     """
-    entry = catalog.get(ref)
-    if (
-        entry is not None
-        and catalog.installed(entry, models_dir) is None
-        and not catalog.extra_installed(entry.extra)
-    ):
-        # fail before an ~800 MB download that could not run anyway
-        raise MissingExtraError(catalog.EXTRA_MODULES[entry.extra][0], entry.extra, ref)
-    man = resolve(ref, models_dir=models_dir)
-    loader = get_backend(man.backend)
-    if _accepts(loader, "allow_remote_endpoint"):
-        backend_kwargs["allow_remote_endpoint"] = bool(allow_remote_endpoint)
-    return loader(man, device=device, **backend_kwargs)
+    man = resolve_loadable(ref, models_dir=models_dir)
+    return load_manifest(man, device=device, allow_remote_endpoint=allow_remote_endpoint, **backend_kwargs)
 
 
 def list_models(models_dir: Path) -> list[ModelManifest]:
