@@ -9,6 +9,15 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- The background service gives a large model's memory back when there is no mail. Under `run`,
+  the ML backends (`embedding_probe`, `onnx_classifier`, `hf_sequence_classifier`,
+  `onnx_sequence_classifier`) run in a child process (`models/worker.py`) that ends after
+  `[model] keep_loaded_minutes` (default 10) without new mail and starts again on the next mail.
+  With `town-modernbert` the idle service held about 3 GB; now about 40 MB (measured on an
+  Apple M4 Pro, macOS). Unloading in-process returned only about half, hence the process.
+  `-1` keeps the old behavior. `registry.resolve_loadable` / `registry.load_manifest` split
+  `load_model` in two; `MissingExtraError` now pickles.
+
 - Gmail label colors. Class labels get the same colors as Town's labels of the same name by
   default (`taxonomy.DEFAULT_LABEL_COLORS`; `unknown` and the `<prefix>` parent stay
   uncolored). New labels are created colored; `setup` and service start patch existing class

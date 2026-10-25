@@ -53,6 +53,7 @@ min_confidence = 0.55          # below this, the chosen class becomes "unknown" 
 unknown_action = "skip"        # "skip": record only; "label": add <prefix>/unknown
 device = "cpu"                 # "cpu" or "cuda" (embed/onnx backends only)
 allow_remote_endpoint = false  # true: let ollama_choice send mail text to a non-loopback host
+keep_loaded_minutes = 10       # `run`: free a large model's memory after this long without mail (-1 .. 1440)
 
 [engine]
 dry_run = false                # true: classify and record, never touch Gmail labels
@@ -130,6 +131,13 @@ max_examples = 20000           # newest decisions per run (100 .. 1000000)
   another machine you control; the environment variable `EMAIL_TOWN_LABELER_ALLOW_REMOTE_ENDPOINT=1`
   does the same. Nothing in a model package can turn this on. See
   [privacy.md](privacy.md#model-endpoints).
+- **`keep_loaded_minutes`**: default `10`. The background service (`run`) keeps a large model
+  (the `embedding_probe`, `onnx_classifier`, `hf_sequence_classifier` and
+  `onnx_sequence_classifier` backends; `town-modernbert` uses about 3 GB) in a separate process
+  and ends that process after this many minutes without new mail, which gives all of its memory
+  back. The next mail starts it again (about a second for `town-modernbert` on an Apple M4 Pro).
+  `0` ends it after every poll that used it; `-1` loads the model once inside the service and
+  keeps it, as versions before this setting did. `once`, `backfill` and `setup` are unaffected.
 
 ### `[engine]`
 

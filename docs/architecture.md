@@ -119,6 +119,14 @@ time) and teacher labels (id, class, time). Nothing in it is mail content.
 On servers, prefer Docker (`restart: unless-stopped`) or your own process manager running
 `email-town-labeler run`.
 
+**Memory.** Under `run`, a large model (the four ML backends) runs in a child process
+(`models/worker.py`, `WorkerModel`): records go to it and predictions come back over its
+stdin/stdout. After each poll `run_forever` calls `release_if_idle()`, which ends the child after
+`[model] keep_loaded_minutes` (10) without mail; the next mail starts a new one. A child process
+is used because dropping the onnxruntime session inside the service gave back only about half
+of its memory (about 1.4 of 3 GB, measured on macOS). `rules`, `ollama_choice`, third-party
+backends and `keep_loaded_minutes = -1` load in-process as before.
+
 ## Testing without Google
 
 `tests/fakes/fake_service.py` is an in-memory, `googleapiclient`-shaped Gmail with history

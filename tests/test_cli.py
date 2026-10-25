@@ -93,6 +93,7 @@ def app(tmp_path, monkeypatch):
         lambda c, cfg: FakeLabelMap(c, cfg.label_prefix, cfg.display_names(), colors=cfg.colors()),
     )
     monkeypatch.setattr(cli, "make_model", lambda cfg, paths: FakeClassifier())
+    monkeypatch.setattr(cli, "make_service_model", lambda cfg, paths: FakeClassifier())
     monkeypatch.setattr(cli, "service_runner", lambda: run)
     monkeypatch.setattr(
         cli,

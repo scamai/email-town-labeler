@@ -279,6 +279,7 @@ ref = "town-modernbert"      # or "rules": no ML dependencies, no download
 min_confidence = 0.55        # below this: "unknown"
 unknown_action = "skip"      # or "label"
 device = "cpu"
+keep_loaded_minutes = 10     # free the model's memory after 10 min without mail; -1: keep it loaded
 
 [engine]
 dry_run = false              # true: classify and record, never change Gmail
@@ -426,8 +427,10 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
   would need a Google Cloud Pub/Sub topic and is not implemented.
 - One label per message from a fixed set of seven classes (plus the rule-based `new sender`).
 - The default model `town-modernbert` learned from one person's inbox; on yours it will make
-  more mistakes than its published numbers suggest, and it needs about 820 MB of disk and the
-  `[onnx]` extra. `rules` is a heuristic baseline with limited quality.
+  more mistakes than its published numbers suggest. It needs the `[onnx]` extra, about 1.6 GB
+  of disk (an 824 MB download) and about 3 GB of memory while it classifies (measured on an
+  Apple-silicon Mac); the background service gives that memory back after 10 minutes without
+  mail (`[model] keep_loaded_minutes`). `rules` is a heuristic baseline with limited quality.
 - Learning only re-weights what the model already sees (its scores plus a few yes/no facts);
   retraining the model itself is an advanced, manual path
   ([docs/models.md](docs/models.md#advanced-full-fine-tuning-not-built-in)).

@@ -38,7 +38,7 @@ def test_spec_example_parses(tmp_path):
         "[engine]\ndry_run = false\n"
     )
     assert load_config(p) == Config()
-    assert dump_config(Config()).count("=") == 17
+    assert dump_config(Config()).count("=") == 18
 
 
 @pytest.mark.parametrize(
@@ -66,6 +66,9 @@ def test_spec_example_parses(tmp_path):
         ("[policy]\nnew_sender = 'no'\n", "true or false"),
         ("[policy]\ncontacts_scan_days = 0\n", "contacts_scan_days"),
         ("[policy]\ncontacts_scan_limit = -1\n", "contacts_scan_limit"),
+        ("[model]\nkeep_loaded_minutes = -2\n", "keep_loaded_minutes"),
+        ("[model]\nkeep_loaded_minutes = 1441\n", "keep_loaded_minutes"),
+        ("[model]\nkeep_loaded_minutes = 2.5\n", "whole number"),
         ("[policy]\nthreshold = 0.5\n", "unknown key"),
         ("[gmail]\nlabel_prefix = 'INBOX'\n", "system label"),
         ("not toml = = \n", "not valid TOML"),
@@ -208,3 +211,11 @@ def test_label_colors_overrides_and_disable(tmp_path):
     assert load_config(save_config(cfg, tmp_path / "again.toml")) == cfg  # [label_colors] round-trips
     p.write_text("[gmail]\nlabel_colors = false\n[label_colors]\norders = false\n")
     assert load_config(p).colors() == {}
+
+
+def test_keep_loaded_minutes(tmp_path):
+    p = tmp_path / "config.toml"
+    assert load_config(p).keep_loaded_minutes == 10
+    p.write_text("[model]\nkeep_loaded_minutes = -1\n")
+    cfg = load_config(p)
+    assert cfg.keep_loaded_minutes == -1 and "keep_loaded_minutes = -1" in dump_config(cfg)

@@ -51,9 +51,11 @@ goes or what code runs:
   every file path in a manifest must stay inside the package directory; archives are
   extracted with path, link and size checks. See [models.md](models.md).
 
-Classification happens in the email-town-labeler process, on your CPU (or GPU if you configure one).
-Message text is held in memory for the duration of one classification batch and is not written
-to disk.
+Classification happens on this machine, on your CPU (or GPU if you configure one): in the
+email-town-labeler process or, for a large model under `run`, in a child process it starts
+(`models/worker.py`, so the model's memory can be given back when idle). Message text crosses an
+operating-system pipe between those two processes, never a file or a network socket. It is held
+in memory for the duration of one classification batch and is not written to disk.
 
 ## What is stored on disk
 
