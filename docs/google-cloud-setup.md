@@ -217,7 +217,7 @@ invalidates every token it issued.
 | `Error 400: redirect_uri_mismatch` | OAuth client is "Web application" | Create a **Desktop app** client (step 6) and run `setup` again. |
 | `org_internal` error | Internal app, but the account is outside the project's organization | Use an account in that org, or switch **Audience** to External. |
 | `admin_policy_enforced` | Workspace admin blocks restricted Gmail scopes for third-party or internal apps | Ask the admin to allow the app's client ID (Admin console > Security > API controls). |
-| `accessNotConfigured` / "Gmail API has not been used in project" | Gmail API not enabled | Step 2. It can take a minute to propagate. |
+| "the Gmail API is not enabled in Google Cloud project N" (or `accessNotConfigured`, "Gmail API has not been used in project") | Gmail API not enabled | Step 2: the error prints the link to click. It can take a minute to propagate. |
 | "Google hasn't verified this app" | Expected for an unverified app in production | **Advanced > Go to email-town-labeler (unsafe)**. |
 
 More in [troubleshooting.md](troubleshooting.md).

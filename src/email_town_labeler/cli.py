@@ -256,6 +256,29 @@ def _is_auth_error(e: BaseException) -> bool:
     return type(e).__name__ in ("AuthError", "RefreshError")
 
 
+def _known_error(e: BaseException) -> tuple[str, str] | None:
+    """(what is wrong, how to fix it) for an error whose raw text is long and says little, else None."""
+    from .gmail.client import api_disabled_project
+
+    project = api_disabled_project(e)
+    if project is None:
+        return None
+    if project:
+        where = f"Google Cloud project {project}"
+        url = (
+            f"https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project={project}"
+        )
+    else:
+        where, url = (
+            "your Google Cloud project",
+            "https://console.cloud.google.com/apis/library/gmail.googleapis.com",
+        )
+    return (
+        f"the Gmail API is not enabled in {where}",
+        f"click Enable at {url}, wait a minute, then run this command again",
+    )
+
+
 # -- logging ------------------------------------------------------------------------------------
 _HANDLER_TAG = "_email_town_labeler_cli"
 
@@ -606,7 +629,8 @@ def cmd_doctor(ctx: Ctx) -> int:
         except Exception as e:  # noqa: BLE001 - every failure becomes a checklist line
             lines = [ln.strip(" -") for ln in str(e).splitlines() if ln.strip(" -")]
             msg = " ".join(lines) if lines else type(e).__name__
-            results.append((name, False, f"{msg}\n      fix: {fix}"))
+            msg, how = _known_error(e) or (msg, fix)
+            results.append((name, False, f"{msg}\n      fix: {how}"))
             return False
 
     def config() -> str:
@@ -1246,6 +1270,7 @@ def main(
         print(f"error: {e}", file=sys.stderr)
         return 1
     except Exception as e:
+        hint = _known_error(e)
         known = type(e).__name__ in (
             "AuthError",
             "UnknownModelError",
@@ -1254,7 +1279,8 @@ def main(
             "RemoteEndpointError",
             "AlreadyRunning",
         )
-        print(f"error: {e}" if known else f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        msg = f"{hint[0]}; {hint[1]}" if hint else str(e) if known else f"{type(e).__name__}: {e}"
+        print(f"error: {msg}", file=sys.stderr)
         log.debug("traceback", exc_info=True)
         return 1
 

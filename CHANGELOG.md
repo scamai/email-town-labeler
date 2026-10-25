@@ -80,6 +80,14 @@ contain breaking changes; they are called out.
 - State schema v3: a `contacts` table, and `decisions.model_cls` (the model's own class) next to
   `cls` (the final class). Decisions made before v3 have no `model_cls`.
 
+### Fixed
+
+- A Google Cloud project without the Gmail API enabled made `setup` (and any other command)
+  stop with Google's raw 403 `HttpError`, and made `doctor` say "check your network". A command
+  that stops on it, and `doctor`, now say in one line that the Gmail API is not enabled in
+  project N and link the page with its Enable button. The `run` service still logs it as
+  `HttpError 403` and retries. New `gmail.client.api_disabled_project`.
+
 ## [0.1.0] - unreleased
 
 First public version.

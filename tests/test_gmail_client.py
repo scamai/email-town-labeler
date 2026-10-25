@@ -1,9 +1,11 @@
 """GmailClient against FakeGmail: retries, batching, history, pacing. No network."""
 
+import json
+
 import pytest
 from googleapiclient.errors import HttpError
 
-from email_town_labeler.gmail.client import GmailClient, HistoryExpired, is_retryable
+from email_town_labeler.gmail.client import GmailClient, HistoryExpired, api_disabled_project, is_retryable
 from email_town_labeler.types import HistoryEvent
 from tests.fakes.fake_service import FakeGmail, http_error
 
@@ -56,6 +58,38 @@ def test_is_retryable(status, reason, want):
 
 def test_is_retryable_ignores_non_http_errors():
     assert not is_retryable(ValueError("x"))
+
+
+DISABLED = (
+    "Gmail API has not been used in project 123456789012 before or it is disabled. Enable it by "
+    "visiting https://console.developers.google.com/apis/api/gmail.googleapis.com/overview?project=123456789012"
+)
+
+
+@pytest.mark.parametrize(
+    "err,want",
+    [
+        (http_error(403, DISABLED, reason="accessNotConfigured", path="profile"), "123456789012"),
+        (http_error(403, "Gmail API is disabled.", reason="accessNotConfigured"), ""),
+        (http_error(403, reason="insufficientPermissions"), None),
+        (http_error(403, reason="userRateLimitExceeded"), None),
+        (http_error(404), None),
+        (ValueError("project 123"), None),
+    ],
+)
+def test_api_disabled_project(err, want):
+    assert api_disabled_project(err) == want
+
+
+def test_api_disabled_project_reads_error_info_details():
+    e = http_error(403, DISABLED, reason="forbidden")
+    body = json.loads(e.content)
+    body["error"]["details"] = [
+        {"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "SERVICE_DISABLED"}
+    ]
+    e.content = json.dumps(body).encode()
+    assert api_disabled_project(e) == "123456789012"
+    assert not is_retryable(e)
 
 
 # -- single-call retries ------------------------------------------------------------------
