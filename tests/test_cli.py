@@ -16,6 +16,7 @@ from email_town_labeler.service import Target
 from email_town_labeler.state import Store
 from tests._model_fixtures import head_package
 from tests.fakes.fake_client import FakeClassifier, FakeGmailClient, FakeLabelMap
+from tests.fakes.fake_service import http_error
 
 SECRET = {
     "installed": {"client_id": "x.apps.example", "client_secret": "s", "redirect_uris": ["http://localhost"]}
@@ -294,6 +295,29 @@ def test_service_commands(app):
 def test_errors_exit_1(app, capsys):
     rc, _ = app.call("once")
     assert rc == 1 and "not logged in" in capsys.readouterr().err
+
+
+def _api_disabled(paths):
+    raise http_error(
+        403,
+        "Gmail API has not been used in project 123456789012 before or it is disabled.",
+        reason="accessNotConfigured",
+        path="profile",
+    )
+
+
+def test_gmail_api_not_enabled_is_one_line_with_the_fix(app, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "make_client", _api_disabled)
+    app.paths.ensure()
+    app.paths.token.write_text("{}")
+    rc, _ = app.call("once")
+    err = capsys.readouterr().err
+    assert rc == 1 and err.count("\n") == 1 and "HttpError" not in err
+    assert "the Gmail API is not enabled in Google Cloud project 123456789012" in err
+    assert "gmail.googleapis.com/overview?project=123456789012" in err
+    rc, out = app.call("doctor")
+    assert rc == 1 and "✗ gmail reachable" in out and "fix: click Enable at" in out
+    assert "check your network" not in out and "HttpError" not in out
 
 
 def test_cli_against_real_gmail_layer_and_rules(tmp_path, monkeypatch):

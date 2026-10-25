@@ -38,7 +38,7 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `accessNotConfigured`, "Gmail API has not been used in project" | API not enabled | `gcloud services enable gmail.googleapis.com --project ID`, or the console link in [google-cloud-setup.md](google-cloud-setup.md#2-enable-the-gmail-api). Wait a minute. |
+| "the Gmail API is not enabled in Google Cloud project N" (older versions: `accessNotConfigured`, "Gmail API has not been used in project") | API not enabled | Open the link in the error and click **Enable**, or `gcloud services enable gmail.googleapis.com --project ID`, or the console link in [google-cloud-setup.md](google-cloud-setup.md#2-enable-the-gmail-api). Wait a minute and run the command again. |
 | Many `429` / `rateLimitExceeded` lines during `backfill` | Per-user quota (6,000 units/min); each message fetch costs 60 | Expected; email-town-labeler backs off and continues. Use `--limit` / `--days` to keep backfills small. |
 | Log says history expired, then an inbox scan | The stored history id is too old (Gmail documents history ids as typically valid for at least a week, occasionally only hours) | Nothing to do. email-town-labeler scans inbox mail received since its last successful poll (at most `[engine] recovery_max_days`, default 30, and never mail from before setup) and continues. |
 | Labels do not appear in the Gmail sidebar | Gmail hides nested labels under a collapsed parent | Expand `email-town-labeler` in the sidebar, or search `label:email-town-labeler-action-needed`. |

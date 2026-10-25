@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 from collections.abc import Callable, Iterable
 
@@ -25,6 +26,7 @@ log = logging.getLogger("email_town_labeler.gmail")
 ME = "me"
 HISTORY_TYPES = ["messageAdded", "labelAdded", "labelRemoved"]
 RATE_LIMIT_REASONS = {"rateLimitExceeded", "userRateLimitExceeded"}
+API_DISABLED_REASONS = {"accessNotConfigured", "SERVICE_DISABLED"}  # errors[] / details[] spelling
 MAX_BATCH = 50  # Gmail accepts 100 per batch but throttles above ~50
 MAX_BACKOFF = 64.0
 
@@ -37,13 +39,34 @@ def _status(e: BaseException) -> int | None:
     return getattr(getattr(e, "resp", None), "status", None)
 
 
-def _reasons(e: BaseException) -> set[str]:
-    """`error.errors[].reason` values from an HttpError body (e.g. 'rateLimitExceeded')."""
+def _error_body(e: BaseException) -> dict:
+    """The `error` object of an HttpError's JSON body, or {}."""
     try:
         err = json.loads((getattr(e, "content", b"") or b"").decode("utf-8"))["error"]
-        return {d.get("reason", "") for d in err.get("errors", []) if isinstance(d, dict)}
     except (ValueError, KeyError, TypeError, AttributeError):
-        return set()
+        return {}
+    return err if isinstance(err, dict) else {}
+
+
+def _reasons_in(items: object) -> set[str]:
+    return {d.get("reason", "") for d in items if isinstance(d, dict)} if isinstance(items, list) else set()
+
+
+def _reasons(e: BaseException) -> set[str]:
+    """`error.errors[].reason` values from an HttpError body (e.g. 'rateLimitExceeded')."""
+    return _reasons_in(_error_body(e).get("errors"))
+
+
+def api_disabled_project(e: BaseException) -> str | None:
+    """For the 403 "Gmail API has not been used in project N before or it is disabled": the project
+    number ("" if the body names none). None for any other error."""
+    if _status(e) != 403:
+        return None
+    body = _error_body(e)
+    if not (_reasons_in(body.get("errors")) | _reasons_in(body.get("details"))) & API_DISABLED_REASONS:
+        return None
+    m = re.search(r"\bprojects?[ /](\d+)", str(body.get("message", "")))
+    return m.group(1) if m else ""
 
 
 def is_retryable(e: BaseException) -> bool:
