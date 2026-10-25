@@ -9,6 +9,13 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- `town-modernbert-int8`, an optional catalog model: the default `town-modernbert` with int8
+  weights (onnxruntime dynamic quantization). On an Apple M4 Pro it peaked at 1.52 GB while
+  loaded instead of 2.96 GB, and 347 of 350 real inbound emails from one mailbox got the same
+  final label as with the float32 model (agreement, not accuracy). A 263 MB download in the
+  v0.1.0 release. `town-modernbert` stays the default. New `scripts/quantize_onnx.py` makes such
+  a package from any `onnx_sequence_classifier` package and records its parity on made-up emails.
+  [Model card](docs/model-cards/town-modernbert-int8.md).
 - The background service gives a large model's memory back when there is no mail. Under `run`,
   the ML backends (`embedding_probe`, `onnx_classifier`, `hf_sequence_classifier`,
   `onnx_sequence_classifier`) run in a child process (`models/worker.py`) that ends after

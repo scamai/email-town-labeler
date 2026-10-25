@@ -24,8 +24,9 @@ mismatch, and then checks every file against the package's `model.json` as usual
 |---|---|---|---|---|---|
 | `town-modernbert` (default) | `town-labels-modernbert-large-onnx@1` | `onnx_sequence_classifier` | `[onnx]` | 824 MB (1.6 GB on disk) | no PyTorch needed; slightly faster |
 | `town-modernbert-torch` | `town-labels-modernbert-large@1` | `hf_sequence_classifier` | `[embed]` | 635 MB (0.8 GB on disk) | the same model as PyTorch bf16 weights, run in float32 on CPU |
+| `town-modernbert-int8` | `town-labels-modernbert-large-onnx-int8@1` | `onnx_sequence_classifier` | `[onnx]` | 263 MB (0.4 GB on disk) | the default with int8 weights: about half the memory while it classifies ([below](#town-modernbert-int8)) |
 
-Both download from `https://github.com/scamai/email-town-labeler/releases/download/v0.1.0/`.
+All three download from `https://github.com/scamai/email-town-labeler/releases/download/v0.1.0/`.
 
 ```bash
 email-town-labeler model list                        # catalog: installed / not installed, sizes, extras
@@ -62,6 +63,23 @@ the reference; in short:
 - **License:** Apache-2.0, like the base model (answerdotai/ModernBERT-large).
 - No separate head to refit, but it improves from use like every model: `learn` fits a small
   personal head on its stored scores ([below](#improving-from-use-learn)).
+
+### `town-modernbert-int8`
+
+The same model with its weights quantized to int8 by `scripts/quantize_onnx.py` (onnxruntime
+dynamic quantization), for machines where memory matters. Optional; `town-modernbert` stays the
+default. Its [model card](model-cards/town-modernbert-int8.md) is the reference; in short, on one
+Apple M4 Pro (macOS), 350 emails in one batch:
+
+- **Memory and speed:** peak 1.52 GB while loaded instead of 2.96 GB; 150 ms per email instead
+  of 187 ms; a 263 MB download, 0.4 GB on disk.
+- **Labels:** on 350 real inbound emails from one mailbox that neither model was trained on, 347
+  final labels (99.1%) were the same as the float32 model's; the 3 others moved to
+  `action_needed`. On the 50 made-up emails of its parity check, the top class agreed on 45 (90%).
+  That is agreement with the float32 model, not accuracy: the float32 held-out numbers above
+  were not re-measured for int8.
+- **Switching:** `email-town-labeler model pull town-modernbert-int8 --use`, then restart the
+  service. Learning is kept per model, so `learn` starts over from the int8 model's decisions.
 
 ### Mirrors and offline installs
 

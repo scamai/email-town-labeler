@@ -48,6 +48,7 @@ def test_published_entries_are_pinned():
         assert e.extra in catalog.EXTRA_MODULES and e.description
     assert catalog.CATALOG["town-modernbert"].extra == "onnx"
     assert catalog.CATALOG["town-modernbert-torch"].extra == "embed"
+    assert catalog.CATALOG["town-modernbert-int8"].extra == "onnx"
 
 
 def test_url_and_base_override(monkeypatch):

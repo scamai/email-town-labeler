@@ -60,6 +60,15 @@ CATALOG: dict[str, CatalogEntry] = {
             "embed",
             "The same model as PyTorch bf16 weights (hf_sequence_classifier).",
         ),
+        CatalogEntry(
+            "town-modernbert-int8",
+            "town-labels-modernbert-large-onnx-int8",
+            "town-labels-modernbert-large-onnx-int8-v1.tar.gz",
+            "f214041eeb29e261f5d972554138256fbce314601336f8aad55c06e31a9b3759",
+            263_043_571,
+            "onnx",
+            "town-modernbert with int8 weights: about half the memory while it classifies, nearly the same labels.",
+        ),
     )
 }
 
