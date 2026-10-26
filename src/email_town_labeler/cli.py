@@ -561,6 +561,28 @@ def _fmt_ts(ts: float | None) -> str:
     return f"{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ts))} ({age}s ago)"
 
 
+def _float(v: Any) -> float | None:
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _open_error(store: Any, last_poll: float | None) -> dict | None:
+    """The last poll failure while no poll has succeeded since; None once one has (or there was none)."""
+    name, ts = store.get("last_error"), _float(store.get("last_error_ts"))
+    if not name:
+        return None
+    if ts is None:  # older versions stored "<error> at <epoch seconds>"
+        head, sep, tail = name.rpartition(" at ")
+        if sep and (ts := _float(tail)) is not None:
+            name = head
+    if last_poll is not None and (ts is None or ts <= last_poll):
+        return None
+    n = store.get("poll_failures")
+    return {"error": name, "at": ts, "failures_in_a_row": int(n) if n and n.isdigit() else None}
+
+
 def status_info(ctx: Ctx) -> dict:
     p, cfg = ctx.paths, ctx.cfg
     store = make_store(p)
@@ -591,6 +613,9 @@ def status_info(ctx: Ctx) -> dict:
         problem = f"no successful poll in the last {int(age)}s (limit {stale_after}s)"
     else:
         problem = None
+    err = _open_error(store, last_ts)
+    if problem and err and logged_in:
+        problem += f"; last error: {err['error']}"
     man = _manifest_or_none(cfg, p)
     learning = learning_info(cfg, p, store, man)
     pol = cfg.policy_sources(man, learning.pop("_policy"))
@@ -604,7 +629,7 @@ def status_info(ctx: Ctx) -> dict:
         "policy": {k: {"value": v, "source": src} for k, (v, src) in pol.items()},
         "last_poll": last_ts,
         "last_poll_age_s": None if age is None else round(age, 1),
-        "last_error": store.get("last_error"),
+        "last_error": err,  # only while polls are failing
         "decisions": st["decisions"],
         "labeled": st["applied"],
         "by_class": {c: st["by_class"].get(c, 0) for c in LABEL_CLASSES},  # final classes
@@ -634,8 +659,15 @@ def cmd_status(ctx: Ctx) -> int:
         ("mode", "dry-run (records only)" if i["dry_run"] else "live"),
         ("last poll", _fmt_ts(i["last_poll"])),
     ]
-    if i["last_error"]:
-        rows.append(("last error", i["last_error"]))
+    if err := i["last_error"]:  # cleared by the next successful poll
+        n = err["failures_in_a_row"]
+        when = _fmt_ts(err["at"]) if err["at"] is not None else "time unknown"
+        rows.append(
+            (
+                "last error",
+                f"{err['error']} {when}" + (f", {n} failed poll(s) in a row" if n else "") + "; retrying",
+            )
+        )
     rows += [("decisions", f"{i['decisions']} ({i['labeled']} labeled)")]
     rows += [(f"  {c}", str(n)) for c, n in i["by_class"].items() if n]
     rows += [

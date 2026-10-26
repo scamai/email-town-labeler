@@ -7,10 +7,18 @@ bucket (`max_gets_per_minute`) so a backfill never trips a 429 storm; `get_metad
 cheaper) has its own, faster bucket (`max_metadata_per_minute`).
 
 Logs carry ids, counts and statuses only, never message content.
+
+Connections: googleapiclient's httplib2 keeps one pooled connection per host. After the machine sleeps
+or changes networks that connection is dead, and httplib2 re-raises the BrokenPipeError /
+ConnectionResetError / TimeoutError without closing it, so every later request on it fails the same
+way. A transport error (no HTTP response) therefore drops the pool and retries on a fresh connection,
+a few times and quickly (`transport_retries`); only a network that stays down reaches the caller.
 """
 
 from __future__ import annotations
 
+import contextlib
+import http.client
 import json
 import logging
 import random
@@ -29,6 +37,7 @@ RATE_LIMIT_REASONS = {"rateLimitExceeded", "userRateLimitExceeded"}
 API_DISABLED_REASONS = {"accessNotConfigured", "SERVICE_DISABLED"}  # errors[] / details[] spelling
 MAX_BATCH = 50  # Gmail accepts 100 per batch but throttles above ~50
 MAX_BACKOFF = 64.0
+TRANSPORT_RETRIES = 3  # fresh-connection retries after a transport error: about 0.5 s, 1 s, 2 s
 
 
 class HistoryExpired(Exception):
@@ -77,6 +86,16 @@ def is_retryable(e: BaseException) -> bool:
     return s == 429 or 500 <= s < 600 or (s == 403 and bool(_reasons(e) & RATE_LIMIT_REASONS))
 
 
+def is_transport_error(e: BaseException) -> bool:
+    """No HTTP response at all: a broken, reset or timed-out connection, or a DNS or TLS failure."""
+    if _status(e) is not None:
+        return False
+    return isinstance(e, (OSError, http.client.HTTPException)) or type(e).__name__ in (
+        "ServerNotFoundError",  # httplib2: DNS lookup failed
+        "TransportError",  # google.auth: a token refresh that could not reach Google
+    )
+
+
 def _retry_after(e: BaseException) -> float:
     resp = getattr(e, "resp", None)
     try:
@@ -111,7 +130,8 @@ class _TokenBucket:
 
 
 class GmailClient:
-    """Retrying wrapper. Retries 429 / 5xx / 403 rate limits with exponential backoff + jitter.
+    """Retrying wrapper. Retries 429 / 5xx / 403 rate limits with exponential backoff + jitter, and
+    transport errors on a fresh connection (`transport_retries` times, short waits).
 
     max_gets_per_minute: pace for format=full gets (None or 0 disables pacing).
     max_metadata_per_minute: pace for format=metadata gets (None or 0 disables pacing).
@@ -123,6 +143,7 @@ class GmailClient:
         service,
         *,
         max_retries: int = 6,
+        transport_retries: int = TRANSPORT_RETRIES,
         sleep: Callable[[float], None] = time.sleep,
         max_gets_per_minute: float | None = 90,
         max_metadata_per_minute: float | None = 240,
@@ -130,7 +151,7 @@ class GmailClient:
         clock: Callable[[], float] = time.monotonic,
     ):
         self.service = service
-        self.max_retries = max_retries
+        self.max_retries, self.transport_retries = max_retries, transport_retries
         self.sleep = sleep
         self.batch_size = max(1, min(MAX_BATCH, batch_size))
 
@@ -154,16 +175,48 @@ class GmailClient:
             wait = max(wait, _retry_after(e))
         return wait
 
+    def _drop_connections(self) -> None:
+        """Close every pooled HTTP connection (AuthorizedHttp and the httplib2.Http inside it), so the
+        next request connects afresh."""
+        outer = getattr(self.service, "_http", None)
+        for h in (outer, getattr(outer, "http", None)):
+            pool = getattr(h, "connections", None)
+            if not isinstance(pool, dict):
+                continue
+            for conn in list(pool.values()):
+                with contextlib.suppress(Exception):  # it is being thrown away
+                    conn.close()
+            pool.clear()
+
+    def _reconnect(self, e: BaseException, n: int) -> None:
+        """Before transport retry n (1-based): drop the pool, then wait about 0.5 s, 1 s, 2 s..."""
+        self._drop_connections()
+        wait = 0.5 * 2.0 ** (n - 1) + random.uniform(0, 0.25)
+        log.info(
+            "gmail connection failed (%s); reconnecting, retry %d/%d in %.1fs",
+            type(e).__name__,
+            n,
+            self.transport_retries,
+            wait,
+        )
+        self.sleep(wait)
+
     def _execute(self, req):
-        for attempt in range(self.max_retries + 1):
+        attempt = reconnects = 0
+        while True:
             try:
                 return req.execute()
             except Exception as e:  # HttpError, or transport errors without a status
+                if is_transport_error(e) and reconnects < self.transport_retries:
+                    reconnects += 1
+                    self._reconnect(e, reconnects)
+                    continue
                 if not is_retryable(e) or attempt == self.max_retries:
                     raise
                 wait = self._backoff(attempt, e)
                 log.warning("gmail %s; retry %d/%d in %.1fs", _status(e), attempt + 1, self.max_retries, wait)
                 self.sleep(wait)
+                attempt += 1
 
     @property
     def _users(self):
@@ -250,7 +303,8 @@ class GmailClient:
         what: str,
     ) -> None:
         pending = chunk
-        for attempt in range(self.max_retries + 1):
+        attempt = reconnects = 0
+        while True:
             if bucket:
                 bucket.take(len(pending))
             retry: list[str] = []
@@ -274,6 +328,10 @@ class GmailClient:
             try:
                 batch.execute()
             except Exception as e:  # whole batch failed
+                if is_transport_error(e) and reconnects < self.transport_retries:
+                    reconnects += 1
+                    self._reconnect(e, reconnects)
+                    continue  # the same ids again; callbacks of a failed batch delivered nothing
                 if not is_retryable(e) or attempt == self.max_retries:
                     raise
                 retry, errors = list(pending), [e]
@@ -287,6 +345,7 @@ class GmailClient:
             log.warning("%s: %d of %d throttled; retry in %.1fs", what, len(retry), len(pending), wait)
             self.sleep(wait)
             pending = retry
+            attempt += 1
 
     def get_label_ids(self, id: str) -> list[str]:
         """Current labels of one message (format=minimal, much cheaper than full)."""

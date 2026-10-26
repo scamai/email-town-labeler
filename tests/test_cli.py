@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -276,6 +277,54 @@ def test_setup_warns_about_labels_under_the_prefix_it_did_not_make(app, capsys):
         and "were not made by email-town-labeler" in out
         and "e/orders" in _ours(app.client, "e").values()
     )
+
+
+def _poll_state(app, **kv):
+    app.paths.ensure()
+    app.paths.token.write_text("{}")
+    store = Store(app.paths.state_db)
+    for k, v in kv.items():
+        store.set(k, v)
+
+
+@pytest.mark.parametrize(
+    "last_poll_ago,error,error_ago,failures,shown",
+    [
+        (10, "BrokenPipeError", 300, "2", False),  # a poll succeeded after the error: recovered
+        (120, "BrokenPipeError", 30, "2", True),  # still failing
+        (10, "TransportError at {t}", 600, None, False),  # the old "<error> at <epoch>" format
+        (900, "TransportError at {t}", 60, None, True),
+    ],
+)
+def test_status_shows_an_error_only_while_polls_fail(app, last_poll_ago, error, error_ago, failures, shown):
+    now = time.time()
+    kv = {"last_poll": repr(now - last_poll_ago), "last_error": error.format(t=int(now - error_ago))}
+    if "{t}" not in error:
+        kv["last_error_ts"] = repr(now - error_ago)
+    if failures:
+        kv["poll_failures"] = failures
+    _poll_state(app, **kv)
+    _rc, out = app.call("status", "--json")
+    err = json.loads(out)["last_error"]
+    _rc, text = app.call("status")
+    if not shown:
+        assert err is None and "last error" not in text
+        return
+    name = error.split(" at ")[0]
+    assert err["error"] == name and abs(err["at"] - (now - error_ago)) < 2
+    assert err["failures_in_a_row"] == (int(failures) if failures else None)
+    row = next(ln for ln in text.splitlines() if ln.startswith("last error"))
+    assert name in row and "ago" in row and row.endswith("retrying") and str(int(now)) not in row
+    assert ("2 failed poll(s) in a row" in row) == bool(failures)
+
+
+def test_status_unhealthy_names_the_open_error(app):
+    now = time.time()
+    _poll_state(
+        app, last_poll=repr(now - 3600), last_error="gaierror", last_error_ts=repr(now - 5), poll_failures="9"
+    )
+    rc, out = app.call("status", "--json")
+    assert rc == 1 and json.loads(out)["problem"].endswith("; last error: gaierror")
 
 
 def test_status_unhealthy_before_login(app):

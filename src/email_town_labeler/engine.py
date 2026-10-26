@@ -571,7 +571,10 @@ class Engine:
                 except Exception as e:  # transient API/network/model errors must not kill the daemon
                     failures += 1
                     delay = min(15.0 * 2 ** (failures - 1), MAX_BACKOFF)
-                    self.store.set("last_error", f"{_err_name(e)} at {self.clock():.0f}")
+                    # status shows these only until a poll succeeds again
+                    self.store.set("last_error", _err_name(e))
+                    self.store.set("last_error_ts", repr(self.clock()))
+                    self.store.set("poll_failures", str(failures))
                     log.warning(
                         "poll failed (%s, %d in a row); retrying in %.0fs", _err_name(e), failures, delay
                     )

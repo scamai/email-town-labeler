@@ -276,7 +276,8 @@ def test_run_forever_survives_transient_errors(env, caplog):
         eng.run_forever(stop)
     assert sleeps[:3] == [15.0, 30.0, 60.0]
     assert store.stats()["applied"] == 1
-    assert "TransientError" in store.get("last_error")
+    assert store.get("last_error") == "TransientError" and store.get("poll_failures") == "2"
+    assert float(store.get("last_error_ts")) <= float(store.get("last_poll"))  # recovered
     text = caplog.text
     assert "poll failed" in text and "poll ok" in text
     assert "made-up" not in text and "example.test" not in text  # no content in logs
