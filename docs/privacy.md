@@ -122,7 +122,7 @@ What the code actually does with it:
 | Allowed by the scope | Does email-town-labeler do it? |
 |---|---|
 | Read messages and labels | Yes: new inbox messages (to classify), their label ids (to detect your corrections and, if you use Town, Town's labels on mail we decided), and the To/Cc/Bcc headers of mail you sent (to know your contacts). Town's labels are only read, never changed. |
-| Create labels | Yes, only under its own prefix (default `email-town-labeler/`). |
+| Create labels | Yes, only under its own prefix (default `e/`). `labels rename-prefix` renames those, and only those. |
 | Add / remove labels on messages | Yes, only labels under its own prefix. |
 | Touch other labels (INBOX, UNREAD, STARRED, IMPORTANT, CATEGORY_*, your labels) | No. Never added, never removed. Nothing is archived or marked read. |
 | Trash or delete messages | No. |

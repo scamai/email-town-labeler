@@ -4,7 +4,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from email_town_labeler.gmail.client import GmailClient
-from email_town_labeler.gmail.labels import LabelMap
+from email_town_labeler.gmail.labels import LabelMap, foreign_labels, prefix_renames
 from email_town_labeler.taxonomy import DISPLAY_NAMES
 from tests.fakes.fake_service import FakeGmail
 
@@ -180,3 +180,74 @@ def test_sync_colors_other_errors_propagate():
     g.fail_next(1, 404, method="labels.patch")
     with pytest.raises(HttpError):
         lm.sync_colors()
+
+
+# -- the prefix as a whole ------------------------------------------------------------------------
+
+
+def lab(i, name, type="user"):
+    return {"id": i, "name": name, "type": type}
+
+
+def test_prefix_renames_moves_everything_under_the_prefix_parent_last():
+    labels = [
+        lab("1", "email-town-labeler"),
+        lab("2", "email-town-labeler/orders"),
+        lab("3", "email-town-labeler/old-class"),  # ours, but not a configured class: moves too
+        lab("4", "Receipts"),
+        lab("INBOX", "INBOX", "system"),
+    ]
+    plan = prefix_renames(labels, "email-town-labeler", "e", DISPLAY_NAMES)
+    assert plan[-1] == ("1", "e") and sorted(plan[:-1]) == [("2", "e/orders"), ("3", "e/old-class")]
+
+
+@pytest.mark.parametrize(
+    "existing,ok",
+    [
+        ("e/orders", True),  # a class label an interrupted rename already moved
+        ("e", False),  # someone's own parent label
+        ("e/Receipts", False),  # someone's own label under the new prefix
+        ("E/Old-Class", False),  # the name a moving label needs (Gmail compares case-insensitively)
+    ],
+)
+def test_prefix_renames_refuses_what_is_in_the_way(existing, ok):
+    labels = [lab("1", "email-town-labeler"), lab("3", "email-town-labeler/old-class"), lab("9", existing)]
+    if ok:
+        assert len(prefix_renames(labels, "email-town-labeler", "e", DISPLAY_NAMES)) == 2
+    else:
+        with pytest.raises(ValueError, match="already exist"):
+            prefix_renames(labels, "email-town-labeler", "e", DISPLAY_NAMES)
+
+
+def test_prefix_renames_edge_cases():
+    labels = [lab("1", "e"), lab("2", "e/orders")]
+    assert prefix_renames(labels, "e", "e", DISPLAY_NAMES) == []
+    assert prefix_renames(labels, "gone", "x", DISPLAY_NAMES) == []  # nothing to move
+    assert prefix_renames(labels, "e", "E", DISPLAY_NAMES) == [("2", "E/orders"), ("1", "E")]
+    assert prefix_renames(labels, "e", "ex/e", DISPLAY_NAMES)[-1] == ("1", "ex/e")  # merely similar
+    with pytest.raises(ValueError, match="inside"):
+        prefix_renames(labels, "e", "e/sub", DISPLAY_NAMES)
+
+
+def test_foreign_labels():
+    labels = [
+        lab("1", "e"),
+        lab("2", "e/orders"),
+        lab("3", "e/Receipts"),
+        lab("4", "eat"),
+        lab("5", "E/Travel"),
+    ]
+    assert [lb["id"] for lb in foreign_labels(labels, "e", DISPLAY_NAMES)] == ["3"]
+
+
+def test_rename_label_keeps_the_id_and_collides_case_insensitively():
+    g, lm = make()
+    lid = lm.ensure("orders")
+    mid = g.deliver(subject="s", body="b")
+    g.user_relabel(mid, add=[lid])
+    assert lm.client.rename_label(lid, "e/orders")["name"] == "e/orders"
+    assert lid in g.labels_of(mid) and g.label_id("e/orders") == lid
+    other = g.add_label("e/travel")
+    with pytest.raises(HttpError) as ei:
+        lm.client.rename_label(other, "E/Orders")
+    assert ei.value.resp.status == 409 and g.label_id("e/travel") == other

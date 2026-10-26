@@ -108,13 +108,13 @@ Every model predicts a probability for each of seven classes (from
 
 | Class | Gmail label (default) | Meaning |
 |---|---|---|
-| `action_needed` | `email-town-labeler/action needed` | asks you to do something: reply, approve, pay, sign, review or decide |
-| `newsletters` | `email-town-labeler/newsletters` | a newsletter, digest or blog post you subscribed to |
-| `promotional` | `email-town-labeler/promotional` | unsolicited marketing, sales outreach or a promotional offer |
-| `orders` | `email-town-labeler/orders` | a receipt, invoice, order confirmation or shipping update |
-| `travel` | `email-town-labeler/travel` | flights, hotels, rentals, itineraries or check-in notices |
-| `updates` | `email-town-labeler/updates` | an automated notification from an app or service: account, security, status |
-| `unknown` | `email-town-labeler/unknown` | none of these: personal or work mail that needs no category |
+| `action_needed` | `e/action needed` | asks you to do something: reply, approve, pay, sign, review or decide |
+| `newsletters` | `e/newsletters` | a newsletter, digest or blog post you subscribed to |
+| `promotional` | `e/promotional` | unsolicited marketing, sales outreach or a promotional offer |
+| `orders` | `e/orders` | a receipt, invoice, order confirmation or shipping update |
+| `travel` | `e/travel` | flights, hotels, rentals, itineraries or check-in notices |
+| `updates` | `e/updates` | an automated notification from an app or service: account, security, status |
+| `unknown` | `e/unknown` | none of these: personal or work mail that needs no category |
 
 Models predict these seven classes and nothing else. The engine then applies the labeling
 policy (`[policy]`): `action_needed` once its probability reaches `action_threshold`, otherwise
@@ -122,7 +122,7 @@ the top class, with `promotional` held to `promotional_threshold` and never used
 contact. If the chosen class's probability is below `model.min_confidence` (default 0.55;
 `action_needed` uses `action_threshold` instead), the message is treated as `unknown`; an
 `unknown` Primary-tab message from someone you have never written to becomes `new_sender`
-(label `email-town-labeler/new sender`), a rule after the model, not a model class. Finally
+(label `e/new sender`), a rule after the model, not a model class. Finally
 `model.unknown_action` decides whether `unknown` gets a label (`"label"`) or is only recorded
 (`"skip"`, the default). The full order is in
 [configuration.md](configuration.md#how-a-message-gets-its-label). The state database keeps
@@ -405,7 +405,7 @@ Updates, Forums), calendar invite. No text. Learning later combines those number
 
 | Signal | When | Means | Weight (`[learn]`) |
 |---|---|---|---|
-| correction | you move our label to another `email-town-labeler/...` label | that class | `correction_weight` 2.0 |
+| correction | you move our label to another `e/...` label | that class | `correction_weight` 2.0 |
 | removal | you remove our label and add none of ours | "not that class" | `removal_weight` 1.0 |
 | teacher | a [Town](https://www.town.com) label (`action needed`, `newsletters`, ...) appears on a message we decided | that class (`new sender` means `unknown`; `awaiting reply` is ignored) | `teacher_weight` 1.0 |
 | teacher-unlabeled | Town was running (it labeled later mail) but left this message unlabeled for `teacher_wait_days` (3) | `unknown` | `teacher_none_weight` 0.5 |
@@ -509,7 +509,7 @@ model's own head on the corrected messages' embeddings. For every other model (i
 Every time you change a label email-town-labeler applied, it records the correction (message id,
 predicted class, corrected class) in `state.sqlite`:
 
-- remove `email-town-labeler/promotional` and add `email-town-labeler/newsletters`: recorded as
+- remove `e/promotional` and add `e/newsletters`: recorded as
   `promotional -> newsletters`;
 - only remove the email-town-labeler label: recorded as `promotional -> (none)`, which is used as a
   signal that the prediction was wrong but is not a training label.

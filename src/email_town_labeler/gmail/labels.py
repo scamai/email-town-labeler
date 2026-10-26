@@ -7,15 +7,70 @@ Colors: each class may have a Gmail-palette color ({"textColor", "backgroundColo
 are created with it, and `sync_colors()` patches existing class labels whose color is missing or
 different. Only `<prefix>/<name>` class labels are ever colored; the `<prefix>` parent and every
 label outside the prefix are never touched. A color Gmail rejects (400) is logged and skipped.
+
+Every label under the prefix counts as ours (`undo` removes them all). `foreign_labels` finds the
+ones that do not look like it (setup warns about them), and `prefix_renames` plans moving the whole
+prefix to a new name in place (`labels rename-prefix`), so messages keep their labels.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 
 from .client import GmailClient, _status
 
 log = logging.getLogger("email_town_labeler.gmail")
+
+
+def _under(name: str, prefix: str) -> bool:
+    n, p = name.casefold(), prefix.casefold()
+    return n == p or n.startswith(p + "/")
+
+
+def _class_names(prefix: str, names: dict[str, str]) -> set[str]:
+    return {f"{prefix}/{n}".casefold() for n in names.values()}
+
+
+def foreign_labels(labels: Iterable[dict], prefix: str, names: dict[str, str]) -> list[dict]:
+    """User labels under `prefix` other than the parent and the `<prefix>/<name>` class labels."""
+    ours = _class_names(prefix, names) | {prefix.casefold()}
+    return [
+        lb
+        for lb in labels
+        if lb.get("type", "user") == "user"
+        and _under(lb["name"], prefix)
+        and lb["name"].casefold() not in ours
+    ]
+
+
+def prefix_renames(
+    labels: Iterable[dict], old: str, new: str, names: dict[str, str]
+) -> list[tuple[str, str]]:
+    """(label id, new name) for every user label under `old` (the parent last), moving it under `new`.
+
+    ValueError if `new` is inside `old` (or the reverse), or if a label under `new` is in the way:
+    anything but a class label that an interrupted earlier rename already moved."""
+    labels = [lb for lb in labels if lb.get("type", "user") == "user"]
+    if old.casefold() != new.casefold() and (_under(new, old) or _under(old, new)):
+        raise ValueError(f"'{new}' and '{old}' are inside one another")
+    moving = [lb for lb in labels if _under(lb["name"], old)]
+    if old == new or not moving:
+        return []
+    plan = [(lb["id"], new + lb["name"][len(old) :]) for lb in moving]
+    targets = {name.casefold() for _, name in plan}
+    ids = {lb["id"] for lb in moving}
+    leftover = _class_names(new, names)
+    blocking = [
+        lb["name"]
+        for lb in labels
+        if lb["id"] not in ids
+        and _under(lb["name"], new)
+        and (lb["name"].casefold() in targets or lb["name"].casefold() not in leftover)
+    ]
+    if blocking:
+        raise ValueError(f"{len(blocking)} label(s) under '{new}/' already exist")
+    return sorted(plan, key=lambda m: -m[1].count("/"))  # children first: the parent goes last
 
 
 def _norm_color(color: dict | None) -> dict[str, str] | None:

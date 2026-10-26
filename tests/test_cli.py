@@ -175,12 +175,12 @@ def test_setup_noninteractive_headless(app):
     assert load_config(p.config_file).model_ref == "rules"
     names = {lb["name"] for lb in app.client.labels.values()}
     assert {
-        "email-town-labeler/orders",
-        "email-town-labeler/action needed",
-    } <= names and "email-town-labeler/unknown" not in names
+        "e/orders",
+        "e/action needed",
+    } <= names and "e/unknown" not in names
     by_name = {lb["name"]: lb for lb in app.client.labels.values()}
-    assert by_name["email-town-labeler/orders"]["color"]["backgroundColor"] == "#b99aff"
-    assert "color" not in by_name["email-town-labeler"]  # the parent stays uncolored
+    assert by_name["e/orders"]["color"]["backgroundColor"] == "#b99aff"
+    assert "color" not in by_name["e"]  # the parent stays uncolored
     preview = [ln for ln in out.splitlines() if ln.strip().startswith("m0")]
     assert len(preview) == 5 and all(len(ln.split()) >= 3 for ln in preview)
     assert not app.client.modifies  # dry run on 5 newest changed nothing
@@ -222,6 +222,62 @@ def test_once_status_and_json(app):
     assert info["account"] == "me@example.test" and info["service"]["state"] == "not installed"
 
 
+def _ours(client, prefix):
+    return {lb["id"]: lb["name"] for lb in client.labels.values() if lb["name"].split("/")[0] == prefix}
+
+
+def test_labels_rename_prefix_renames_in_place(app):
+    app.paths.ensure()
+    app.paths.token.write_text("{}")
+    assert app.call("backfill", "--days", "2")[0] == 0
+    before = _ours(app.client, "e")
+    on_msgs = {m: list(v["label_ids"]) for m, v in app.client.messages.items()}
+    assert len(before) > 2 and any(set(before) & set(ids) for ids in on_msgs.values())
+    rc, out = app.call("labels", "rename-prefix", "x", "--dry-run")
+    assert rc == 0 and f"would rename {len(before)} label(s) from e/ to x/" in out
+    assert _ours(app.client, "e") == before
+    rc, out = app.call("labels", "rename-prefix", "x")
+    assert rc == 0, out
+    assert _ours(app.client, "x") == {i: "x" + n[1:] for i, n in before.items()} and not _ours(
+        app.client, "e"
+    )
+    assert {m: list(v["label_ids"]) for m, v in app.client.messages.items()} == on_msgs  # same ids
+    assert load_config(app.paths.config_file).label_prefix == "x"
+    app.client.add_message(cls="orders", prob=0.95)
+    assert app.call("backfill", "--days", "2")[0] == 0  # labels new mail under x/, creates nothing under e/
+    assert set(_ours(app.client, "x")) == set(before) and not _ours(app.client, "e")
+
+
+def test_labels_rename_prefix_refuses(app, capsys):
+    app.paths.ensure()
+    app.paths.token.write_text("{}")
+    app.call("backfill", "--days", "2")
+    app.client.create_label("x")  # someone's own label
+    rc, _ = app.call("labels", "rename-prefix", "x")
+    assert rc == 1 and "already exist" in capsys.readouterr().err
+    rc, _ = app.call("labels", "rename-prefix", "INBOX")
+    assert rc == 1 and "system label" in capsys.readouterr().err
+    assert load_config(app.paths.config_file).label_prefix == "e" and _ours(app.client, "e")
+
+
+def test_setup_warns_about_labels_under_the_prefix_it_did_not_make(app, capsys):
+    app.client.create_label("e")
+    app.client.create_label("e/Receipts")
+    app.inputs += ["http://localhost:8765/?state=abc&code=xyz", "n"]  # redirect URL; "Use e/ anyway?"
+    rc, out = app.call("setup", "--client-secret", str(app.secret), "--headless", "--model", "rules")
+    assert rc == 1 and "1 label(s) under e/ were not made by email-town-labeler" in out
+    assert "label_prefix" in capsys.readouterr().err and set(_ours(app.client, "e").values()) == {
+        "e",
+        "e/Receipts",
+    }
+    rc, out = app.call("setup", "--yes")  # --yes: warns and goes on
+    assert (
+        rc == 0
+        and "were not made by email-town-labeler" in out
+        and "e/orders" in _ours(app.client, "e").values()
+    )
+
+
 def test_status_unhealthy_before_login(app):
     rc, out = app.call("status", "--json")
     assert rc == 1 and json.loads(out)["logged_in"] is False
@@ -237,7 +293,7 @@ def test_backfill_undo(app):
     app.inputs.append("n")
     assert app.call("undo")[0] == 1
     rc, out = app.call("undo", "--yes")
-    assert rc == 0 and "removed email-town-labeler/* labels from" in out
+    assert rc == 0 and "removed e/* labels from" in out
 
 
 def test_doctor(app):
@@ -364,20 +420,20 @@ def test_cli_against_real_gmail_layer_and_rules(tmp_path, monkeypatch):
         subject="Your flight itinerary and boarding pass", from_="Air <no-reply@air.example>"
     )
     assert call("once") == 0 and "labeled=" in out[0], out
-    orders = svc.label_id("email-town-labeler/orders")
+    orders = svc.label_id("e/orders")
     assert orders in svc.labels_of(receipt)
-    assert svc.label_id("email-town-labeler/travel") in svc.labels_of(flight)
-    svc.user_relabel(receipt, add=["email-town-labeler/updates"], remove=[orders])
+    assert svc.label_id("e/travel") in svc.labels_of(flight)
+    svc.user_relabel(receipt, add=["e/updates"], remove=[orders])
     assert call("once", "--json") == 0 and json.loads(out[0])["feedback"] == 1
     hotel = svc.deliver(subject="Your hotel reservation", from_="Hotel <no-reply@hotel.example>")
     svc.expire_history()
     assert call("once") == 0 and "(recovered)" in out[0], out
-    assert svc.label_id("email-town-labeler/travel") in svc.labels_of(hotel)
+    assert svc.label_id("e/travel") in svc.labels_of(hotel)
     assert not any(lid.startswith("Label_") for lid in svc.labels_of(before))
     assert call("doctor") == 0, out
     assert call("status") == 0 and any("rules@" in ln for ln in out)
     assert call("undo", "--yes") == 0
-    ours = {lb["id"] for lb in client.list_labels() if lb["name"].startswith("email-town-labeler")}
+    ours = {lb["id"] for lb in client.list_labels() if lb["name"] == "e" or lb["name"].startswith("e/")}
     assert not any(set(svc.labels_of(m)) & ours for m in svc.message_ids())
     assert call("once", "--json") == 0 and json.loads(out[0])["feedback"] == 0
 
@@ -406,7 +462,7 @@ def test_undo_works_when_the_model_cannot_load(app, monkeypatch):
 
     monkeypatch.setattr(cli, "make_model", broken)
     rc, out = app.call("undo", "--yes")
-    assert rc == 0 and "removed email-town-labeler/* labels from" in out
+    assert rc == 0 and "removed e/* labels from" in out
 
 
 def _logged_in(app, **kv):
@@ -525,7 +581,7 @@ def test_contacts_commands_never_print_addresses_unasked(app, capsys):
     app.inputs.append("http://localhost:8765/?state=abc&code=xyz")
     rc, out = app.call("setup", "--client-secret", str(app.secret), "--headless", "--yes")
     assert rc == 0 and "1 contacts" in out and "pal@x.test" not in out.lower()
-    assert "email-town-labeler/new sender" in {lb["name"] for lb in app.client.labels.values()}
+    assert "e/new sender" in {lb["name"] for lb in app.client.labels.values()}
     rc, out = app.call("contacts", "count", "--json")
     assert rc == 0 and json.loads(out)["contacts"] == 1 and json.loads(out)["rebuilt"]
     assert "1 contacts (last rebuilt: " in app.call("contacts", "count")[1]

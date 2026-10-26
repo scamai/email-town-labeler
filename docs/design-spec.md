@@ -4,7 +4,7 @@ The module contracts of email-town-labeler, for contributors. [architecture.md](
 how the pieces fit together.
 
 Self-hosted, private Gmail auto-labeler. Watches a Gmail inbox, classifies every new inbound
-email with a small local model, and adds a label under `email-town-labeler/…`. Nothing about the mail
+email with a small local model, and adds a label under `e/…`. Nothing about the mail
 leaves the user's machine except Gmail API calls to Google itself.
 
 Working name `email-town-labeler`, Python package `email_town_labeler`, CLI `email-town-labeler`. MIT. Python ≥3.10.
@@ -96,6 +96,7 @@ class GmailClient:
     def get_label_ids(self, id: str) -> list[str]                    # format=minimal
     def list_labels(self) -> list[dict]          # [{"id", "name", "type"}]
     def create_label(self, name: str) -> dict
+    def rename_label(self, id: str, name: str) -> dict  # same id: messages keep it; 409 if taken
     def modify(self, id: str, *, add: list[str] = (), remove: list[str] = ()) -> None
     def history(self, start_history_id: str) -> tuple[list[HistoryEvent], str]
         # all pages; historyTypes messageAdded,labelAdded,labelRemoved; returns new historyId
@@ -121,6 +122,9 @@ class LabelMap:
     def ensure(self, cls: str) -> str            # creates "<prefix>/<name>" (and parent) if missing
     def class_of(self, label_id: str) -> str | None
     def our_label_ids(self) -> set[str]
+def foreign_labels(labels, prefix, names) -> list[dict]    # under prefix, neither parent nor a class label
+def prefix_renames(labels, old, new, names) -> list[tuple[str, str]]
+    # (id, new name) for every label under old, parent last; ValueError if labels under new are in the way
 ```
 
 ### policy.py
@@ -258,7 +262,7 @@ history gap.
 TOML at `paths.config_dir/config.toml`; `EMAIL_TOWN_LABELER_HOME` overrides all paths (Docker: `/data`).
 ```toml
 [gmail]
-label_prefix = "email-town-labeler"
+label_prefix = "e"
 poll_seconds = 60
 skip_label_names = []        # e.g. labels another tool owns
 [model]
@@ -292,12 +296,12 @@ Files: `config_dir/client_secret.json`, `config_dir/token.json`, `data_dir/state
 ### cli.py (`email-town-labeler …`)
 `setup` (wizard: client secret → login → pick model → dry run on 5 newest → offer service install),
 `login [--headless]`, `run` (foreground daemon), `once`, `backfill [--days N] [--limit N] [--dry-run]`,
-`status [--json] [--redact]`, `undo`, `model list|pull <ref>|info`, `personalize [--reset]` (head backends: refit the head; else
+`status [--json] [--redact]`, `undo`, `labels rename-prefix NEW [--dry-run]`, `model list|pull <ref>|info`, `personalize [--reset]` (head backends: refit the head; else
 `learn`), `learn [--dry-run] [--reset] [--export FILE] [--json]`,
 `service install|uninstall|status`, `contacts rebuild|count [--json]|list --yes-show-addresses`,
 `doctor [--redact]` (checks: config, token, scopes, Gmail
 reachable, model loads, labels exist), `gcp-setup --print`, `--version`. `--home` / `-v` work
-before or after the command. `run`, `once`, `backfill` and `undo` hold `lock.InstanceLock(data_dir)`;
+before or after the command. `run`, `once`, `backfill`, `undo` and `labels` hold `lock.InstanceLock(data_dir)`;
 a second instance exits 1. `status` is unhealthy when: not logged in, or no successful poll and
 setup (`bootstrap_ts`, else the token's mtime) is older than 15 min, or the last successful poll is
 older than `max(10 × poll_seconds, 15 min)`.

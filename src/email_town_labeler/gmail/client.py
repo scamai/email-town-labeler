@@ -321,6 +321,11 @@ class GmailClient:
         """labels.patch the color of one user label. A 400 (color outside the palette) propagates."""
         return self._execute(self._users.labels().patch(userId=ME, id=id, body={"color": dict(color)}))
 
+    def rename_label(self, id: str, name: str) -> dict:
+        """labels.patch the name of one user label. Messages keep it (the id does not change). A 409
+        (the name is taken, compared case-insensitively) propagates."""
+        return self._execute(self._users.labels().patch(userId=ME, id=id, body={"name": name}))
+
     def modify(self, id: str, *, add: Iterable[str] = (), remove: Iterable[str] = ()) -> None:
         """Add/remove label ids on one message. No call when both are empty."""
         add, remove = list(add), list(remove)

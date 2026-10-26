@@ -33,7 +33,7 @@ def test_round_trip(tmp_path):
 def test_spec_example_parses(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text(
-        '[gmail]\nlabel_prefix = "email-town-labeler"\npoll_seconds = 60\nskip_label_names = []\n'
+        '[gmail]\nlabel_prefix = "e"\npoll_seconds = 60\nskip_label_names = []\n'
         '[model]\nref = "rules"\nmin_confidence = 0.55\nunknown_action = "skip"\ndevice = "cpu"\n'
         "[engine]\ndry_run = false\n"
     )

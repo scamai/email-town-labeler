@@ -218,6 +218,13 @@ class FakeGmailClient:
         self.labels[id]["color"] = dict(color)
         return dict(self.labels[id])
 
+    def rename_label(self, id: str, name: str) -> dict:
+        self._call("rename_label", id, name)
+        if (other := self.label_id(name)) is not None and other != id:
+            raise ValueError(f"label exists: {name}")
+        self.labels[id]["name"] = name
+        return dict(self.labels[id])
+
     def modify(self, id: str, *, add: Iterable[str] = (), remove: Iterable[str] = ()) -> None:
         self._call("modify", id, tuple(add), tuple(remove))
         self.modifies.append((id, list(add), list(remove)))

@@ -9,6 +9,14 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- `email-town-labeler labels rename-prefix NEW [--dry-run]` renames the parent label and every
+  label under `label_prefix` in place (Gmail `labels.patch`, same ids), so messages keep their
+  labels and recorded decisions and corrections stay valid, then writes the new `label_prefix`.
+  It refuses when labels under `NEW/` are in the way, and holds the instance lock, so stop the
+  service first.
+- `setup` warns, and asks before going on, when labels it did not make already exist under the
+  prefix: everything under the prefix counts as email-town-labeler's own, and `undo` removes it.
+
 - `town-modernbert-int8`, an optional catalog model: the default `town-modernbert` with int8
   weights (onnxruntime dynamic quantization). On an Apple M4 Pro it peaked at 1.52 GB while
   loaded instead of 2.96 GB, and 347 of 350 real inbound emails from one mailbox got the same
@@ -84,6 +92,11 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- **The default `label_prefix` is now `e`** (labels like `e/action needed`), not
+  `email-town-labeler`. A `config.toml` that `setup` wrote keeps its prefix; to switch an existing
+  mailbox, stop the service and run `email-town-labeler labels rename-prefix e`. A config without
+  a `label_prefix` line switches to `e` and starts a second set of labels: add
+  `label_prefix = "email-town-labeler"` under `[gmail]` to keep the old one.
 - State schema v3: a `contacts` table, and `decisions.model_cls` (the model's own class) next to
   `cls` (the final class). Decisions made before v3 have no `model_cls`.
 

@@ -622,7 +622,7 @@ def test_end_to_end_learning_changes_labels(town, tmp_path):
     eng.sync_once()
     assert store.decision(m1)["cls"] == "newsletters"
     assert store.decision(m2)["cls"] == "promotional"
-    nl = client.label_id(f"email-town-labeler/{DISPLAY_NAMES['newsletters']}")
+    nl = client.label_id(f"e/{DISPLAY_NAMES['newsletters']}")
     assert nl in client.messages[m1]["label_ids"]
     art = json.loads((tmp_path / "personal.json").read_text())
     assert art["active"] and art["base_model"] == "fake@1"

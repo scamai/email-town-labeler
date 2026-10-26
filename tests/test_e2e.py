@@ -192,10 +192,10 @@ def test_simulated_day(box, tmp_path, caplog):
 
     # -- the user moves 3 labels and removes 1: corrections become feedback ----------------------------
     lab = {m: box.our_labels_on(m)[0] for m in eligible}
-    movers = [m for m in eligible if lab[m] != "email-town-labeler/travel"][:3]
+    movers = [m for m in eligible if lab[m] != "e/travel"][:3]
     remover = next(m for m in eligible if m not in movers)
     for m in movers:
-        g.user_relabel(m, add=["email-town-labeler/travel"], remove=[lab[m]])
+        g.user_relabel(m, add=["e/travel"], remove=[lab[m]])
     g.user_relabel(remover, remove=[lab[remover]])
     assert eng.sync_once()["feedback"] == 4
     fb = {f["msg_id"]: f for f in store.feedback()}
@@ -212,9 +212,7 @@ def test_simulated_day(box, tmp_path, caplog):
     g.expire_history()
     assert eng.sync_once().get("recovered")
     assert all(box.our_labels_on(m) for m in late), "mail that arrived during the gap gets labeled"
-    assert all(box.our_labels_on(m) == ["email-town-labeler/travel"] for m in movers), (
-        "corrections survive recovery"
-    )
+    assert all(box.our_labels_on(m) == ["e/travel"] for m in movers), "corrections survive recovery"
     assert not box.our_labels_on(remover) and not any(box.our_labels_on(m) for m in old)
     box.assert_single_label("after recovery")
 
@@ -224,7 +222,7 @@ def test_simulated_day(box, tmp_path, caplog):
     after = [box.mk("travel", 300), box.mk("promo", 301)]
     c = eng.sync_once()
     assert not c.get("bootstrapped") and c["labeled"] == 2
-    g.user_relabel(after[0], add=["email-town-labeler/orders"], remove=["email-town-labeler/travel"])
+    g.user_relabel(after[0], add=["e/orders"], remove=["e/travel"])
     assert eng.sync_once()["feedback"] == 1
 
     # -- backfill labels the pre-setup mail, once ------------------------------------------------------
@@ -280,7 +278,7 @@ def test_poll_failing_mid_batch_never_double_labels(box):
     state["armed"] = False
     r = eng.sync_once()
     assert r["labeled"] == 4 and r["already_decided"] == 2  # the 2 labeled before the failure
-    assert all(box.our_labels_on(m) == ["email-town-labeler/orders"] for m in ids)
+    assert all(box.our_labels_on(m) == ["e/orders"] for m in ids)
 
     # crash between Gmail's modify and recording the decision: the label on the message is the record
     m = g.deliver(subject="Your order X shipped")
@@ -295,7 +293,7 @@ def test_poll_failing_mid_batch_never_double_labels(box):
     store.record_decision = real
     r = eng.sync_once()
     assert r["labeled"] == 0 and r["skip_reasons"] == {"ours": 1}
-    assert box.our_labels_on(m) == ["email-town-labeler/orders"]
+    assert box.our_labels_on(m) == ["e/orders"]
     box.assert_invariants()
 
 
@@ -330,17 +328,17 @@ def test_contacts_policy_and_new_sender(box, tmp_path, caplog):
     reply = box.mk("personal", 3)  # ...and their mail in the same poll is not "new sender"
     c = eng.sync_once()
     assert c["contacts_added"] == 1 and store.contacts_count() == 3
-    assert box.our_labels_on(stranger) == ["email-town-labeler/new sender"]
-    assert box.our_labels_on(friend) == box.our_labels_on(reply) == ["email-town-labeler/unknown"]
-    assert box.our_labels_on(promo) == ["email-town-labeler/promotional"]
-    assert box.our_labels_on(promo_from_pal) not in (["email-town-labeler/promotional"], [])
+    assert box.our_labels_on(stranger) == ["e/new sender"]
+    assert box.our_labels_on(friend) == box.our_labels_on(reply) == ["e/unknown"]
+    assert box.our_labels_on(promo) == ["e/promotional"]
+    assert box.our_labels_on(promo_from_pal) not in (["e/promotional"], [])
     d = store.decision(promo_from_pal)
     assert d["model_cls"] == "promotional" and d["cls"] != "promotional"
     assert store.decision(stranger)["model_cls"] == "unknown"
 
     # the user disagrees with "new sender": a correction; undo takes the label away like any other
     eng.labels.ensure("updates")
-    g.user_relabel(stranger, add=["email-town-labeler/updates"], remove=["email-town-labeler/new sender"])
+    g.user_relabel(stranger, add=["e/updates"], remove=["e/new sender"])
     assert eng.sync_once()["feedback"] == 1
     assert store.feedback()[-1]["predicted"] == "new_sender"
     assert eng.undo() == 5 and not any(box.our_labels_on(m) for m in g.message_ids())
