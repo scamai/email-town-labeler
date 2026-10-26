@@ -91,7 +91,7 @@ CPU throughput: `<messages/s>` at batch size `<n>` on `<hardware>`.
 - Languages, regions or mail styles under-represented in training data.
 - Memorization: what was done to limit it (for example, only a linear head on a frozen public
   embedder) and any privacy evaluation performed.
-- Misclassification impact in email-town-labeler is limited to a wrong label under `email-town-labeler/`; it
+- Misclassification impact in email-town-labeler is limited to a wrong label under its own prefix (`e/`); it
   never hides or deletes mail.
 
 ## Personalization

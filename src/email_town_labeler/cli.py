@@ -16,7 +16,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -423,6 +423,17 @@ def cmd_setup(ctx: Ctx) -> int:
     from .engine import Engine
 
     client = make_client(p)
+    from .gmail.labels import foreign_labels
+
+    if foreign := foreign_labels(client.list_labels(), cfg.label_prefix, cfg.display_names()):
+        ctx.out(
+            f"  ! {len(foreign)} label(s) under {cfg.label_prefix}/ were not made by email-town-labeler, which "
+            f"counts everything under {cfg.label_prefix}/ as its own (`undo` would remove them too)"
+        )
+        if not ctx.confirm(f"  Use {cfg.label_prefix}/ anyway?"):
+            raise CLIError(
+                f"set [gmail] label_prefix in {p.config_file} to a name you do not use; then run setup"
+            )
     labels = make_labels(client, cfg)
     store = make_store(p)
     eng = Engine(client, labels, model, store, cfg)
@@ -514,6 +525,32 @@ def cmd_undo(ctx: Ctx) -> int:
     ctx.out(
         f"{'would remove' if ctx.cfg.dry_run else 'removed'} {ctx.cfg.label_prefix}/* labels from {n} messages"
     )
+    return 0
+
+
+def cmd_labels(ctx: Ctx) -> int:
+    """`labels rename-prefix NEW`: rename every label under label_prefix in place, then save the config."""
+    from .gmail.labels import prefix_renames
+
+    a, p, cfg = ctx.args, ctx.paths, ctx.cfg
+    old, new = cfg.label_prefix, replace(cfg, label_prefix=a.prefix).validate().label_prefix
+    client = make_client(p)
+    try:
+        moves = prefix_renames(client.list_labels(), old, new, cfg.display_names())
+    except ValueError as e:
+        raise CLIError(f"{e}: pick another prefix, or rename or remove them in Gmail first") from None
+    if a.dry_run:
+        ctx.out(
+            f"would rename {len(moves)} label(s) from {old}/ to {new}/ and set gmail.label_prefix = {new}"
+        )
+        return 0
+    for lid, name in moves:  # same ids: messages keep their labels, and recorded decisions stay valid
+        client.rename_label(lid, name)
+    cfg.label_prefix = new
+    save_config(cfg, p.config_file)
+    ctx.out(f"{OK} renamed {len(moves)} label(s) from {old}/ to {new}/; messages keep them")
+    ctx.out(f"{OK} wrote {p.config_file} (gmail.label_prefix = {new})")
+    ctx.out("  if you stopped the background service for this: `email-town-labeler service install`")
     return 0
 
 
@@ -978,7 +1015,7 @@ def cmd_personalize(ctx: Ctx) -> int:
     if len(fb) < ctx.args.min_examples:
         raise CLIError(
             f"only {len(fb)} corrections so far (need {ctx.args.min_examples}); relabel more mail in "
-            "Gmail by moving it to the right email-town-labeler/* label"
+            f"Gmail by moving it to the right {ctx.cfg.label_prefix}/* label"
         )
     client = make_client(p)
     by_id = {r["id"]: r for r in client.get_records([f["msg_id"] for f in fb])}  # in memory only
@@ -1157,10 +1194,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.set_defaults(fn=cmd_status)
 
-    s = sub.add_parser("undo", help="remove every email-town-labeler/* label from every message")
+    s = sub.add_parser("undo", help="remove every label under label_prefix (default e/) from every message")
     s.add_argument("--yes", "-y", action="store_true")
     s.add_argument("--dry-run", action="store_true", help="only count")
     s.set_defaults(fn=cmd_undo, single_instance=True)
+
+    s = sub.add_parser("labels", help="the Gmail labels email-town-labeler creates")
+    ls = _Sub(s.add_subparsers(dest="labels_cmd", metavar="ACTION", required=True))
+    r = ls.add_parser("rename-prefix", help="rename every label under label_prefix to a new prefix, in place")
+    r.add_argument("prefix", help="the new prefix, for example e")
+    r.add_argument("--dry-run", action="store_true", help="only count")
+    s.set_defaults(fn=cmd_labels, single_instance=True)
 
     s = sub.add_parser("model", help="list, pull or inspect models")
     ms = _Sub(s.add_subparsers(dest="model_cmd", metavar="ACTION", required=True))
@@ -1257,7 +1301,7 @@ def main(
     if args.fn is not cmd_run:
         setup_logging(args.verbose)
     try:
-        if getattr(args, "single_instance", False):  # run/once/backfill/undo: one process per data dir
+        if getattr(args, "single_instance", False):  # run/once/backfill/undo/labels: one per data dir
             from .lock import InstanceLock
 
             with InstanceLock(ctx.paths.data_dir):

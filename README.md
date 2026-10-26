@@ -24,7 +24,7 @@ Free and open source. The AI model runs on your own computer.
   <img alt="A Gmail inbox where every new email has one colored label: action needed, travel, newsletters, promotional, orders, updates, new sender" src="docs/assets/inbox-light.svg" width="880">
 </picture>
 
-<p align="center"><sub>Illustration with made-up emails, shown with the label prefix set to <code>e/</code>.</sub></p>
+<p align="center"><sub>Illustration with made-up emails, shown with the default label prefix <code>e/</code>.</sub></p>
 
 <p align="center">
   <b>87%</b> agreement with Town's labels on held-out mail&nbsp;&nbsp;·&nbsp;&nbsp;<b>~0.25 s</b> per email on a normal CPU&nbsp;&nbsp;·&nbsp;&nbsp;<b>$0</b>, no subscription, no account
@@ -221,7 +221,8 @@ Everything below is the technical detail, folded so the page stays short. Open w
 | `email-town-labeler once` | Do a single poll and exit (good for cron or testing) |
 | `email-town-labeler backfill [--days N] [--limit N] [--dry-run]` | Classify mail already in your inbox (default: last 7 days) |
 | `email-town-labeler status [--json] [--redact]` | Account, model, last poll, counts per class, service state. Exits 1 when unhealthy. `--redact` masks your address and home paths |
-| `email-town-labeler undo [--dry-run]` | Remove every `email-town-labeler/...` label from every message. Touches nothing else |
+| `email-town-labeler undo [--dry-run]` | Remove every `e/...` label from every message. Touches nothing else |
+| `email-town-labeler labels rename-prefix NEW [--dry-run]` | Rename every label under `label_prefix` (default `e`) to `NEW/...` in place: messages keep their labels. Stop the service first |
 | `email-town-labeler model list` | Published models (installed or not, with sizes), installed packages, and the active one |
 | `email-town-labeler model pull <name\|ref> [--use]` | Download and verify a model package (`town-modernbert`, `hf:...`, a URL); `--use` makes it active |
 | `email-town-labeler model info [ref]` | Manifest, license and metrics of a model (default: the active one) |
@@ -244,22 +245,22 @@ Global options, before or after the command: `--home DIR` (same as `EMAIL_TOWN_L
 
 | Label in Gmail | Applied to |
 |---|---|
-| `email-town-labeler/action needed` | mail that asks you to do something: reply, approve, pay, sign, review, decide |
-| `email-town-labeler/newsletters` | newsletters, digests and blog posts you subscribed to |
-| `email-town-labeler/promotional` | marketing, sales outreach, promotional offers |
-| `email-town-labeler/orders` | receipts, invoices, order confirmations, shipping updates |
-| `email-town-labeler/travel` | flights, hotels, rentals, itineraries, check-in notices |
-| `email-town-labeler/updates` | automated notifications: account, security, status changes |
-| `email-town-labeler/new sender` | Primary-tab mail that fits none of the above, from an address you have never sent mail to (`[policy] new_sender`) |
-| `email-town-labeler/unknown` | low-confidence or "none of the above"; only if `unknown_action = "label"` |
+| `e/action needed` | mail that asks you to do something: reply, approve, pay, sign, review, decide |
+| `e/newsletters` | newsletters, digests and blog posts you subscribed to |
+| `e/promotional` | marketing, sales outreach, promotional offers |
+| `e/orders` | receipts, invoices, order confirmations, shipping updates |
+| `e/travel` | flights, hotels, rentals, itineraries, check-in notices |
+| `e/updates` | automated notifications: account, security, status changes |
+| `e/new sender` | Primary-tab mail that fits none of the above, from an address you have never sent mail to (`[policy] new_sender`) |
+| `e/unknown` | low-confidence or "none of the above"; only if `unknown_action = "label"` |
 
 At most one email-town-labeler label per message. Which one is decided by a policy you can tune in
 `[policy]` (see [configuration.md](docs/configuration.md#policy)): `action needed` as soon as
 the model gives it 20 %, `promotional` only above 60 % and never for people you have written
 to (built-in defaults; a model can recommend its own, and `town-modernbert` uses 7 % and
 80 %). Rename them under `[labels]` in the config, recolor them under `[label_colors]` (by
-default they get Town's colors), or shorten the `email-town-labeler` prefix with `label_prefix`
-(for example `label_prefix = "e"` gives `e/action needed`).
+default they get Town's colors), or change the `e` prefix: `email-town-labeler labels rename-prefix
+NEW` renames the existing labels in place (messages keep them) and updates `label_prefix`.
 
 </details>
 
@@ -270,7 +271,7 @@ default they get Town's colors), or shorten the `email-town-labeler` prefix with
 
 ```toml
 [gmail]
-label_prefix = "email-town-labeler"
+label_prefix = "e"
 poll_seconds = 60
 skip_label_names = []        # never touch mail with these labels
 
@@ -361,7 +362,7 @@ evaluated and accepted: [docs/models.md](docs/models.md).
 <summary><b>Learning from your corrections</b></summary>
 
 Fix labels in Gmail the way you normally would: remove the email-town-labeler label, or swap it for
-the right `email-town-labeler/...` one. email-town-labeler records each correction (ids and class
+the right `e/...` one. email-town-labeler records each correction (ids and class
 names only). If you still run Town, the labels Town puts on the same mail are used as ground
 truth too (turn that off with `[learn] teacher = "off"`). Reading or archiving mail is never used.
 
@@ -393,7 +394,7 @@ flowchart LR
   G[("Gmail")] -- "history.list every 60 s<br/>(only what changed)" --> E["email-town-labeler engine<br/>(your machine)"]
   E -- "new inbox messages" --> M["local model<br/>rules / embedding / ONNX / Ollama"]
   M -- "class + probability" --> E
-  E -- "add label email-town-labeler/(class)" --> G
+  E -- "add label e/(class)" --> G
   G -- "you change a label" --> E
   G -- "Town's labels (optional)" --> E
   E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
@@ -402,7 +403,7 @@ flowchart LR
 
 New inbox messages are fetched, rendered to a short text (sender, subject, list headers, start
 of the body) in memory, and classified by the local model. A labeling policy turns the model's
-probabilities into one `email-town-labeler/<class>` label: it leans towards `action needed`,
+probabilities into one `e/<class>` label: it leans towards `action needed`,
 keeps uncertain mail and people you write to out of `promotional`, and marks Primary mail from
 strangers as `new sender`. More: [docs/architecture.md](docs/architecture.md).
 
@@ -413,7 +414,7 @@ strangers as `new sender`. More: [docs/architecture.md](docs/architecture.md).
 
 ```bash
 email-town-labeler service uninstall   # stop the background labeler
-email-town-labeler undo                # remove every email-town-labeler/... label; nothing else is touched
+email-town-labeler undo                # remove every e/... label; nothing else is touched
 ```
 
 Then revoke access at <https://myaccount.google.com/permissions> and delete the config and

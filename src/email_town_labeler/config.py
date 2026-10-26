@@ -145,7 +145,7 @@ _LAYOUT: list[tuple[str, str, str]] = [
 
 @dataclass
 class Config:
-    label_prefix: str = "email-town-labeler"
+    label_prefix: str = "e"
     poll_seconds: int = 60
     skip_label_names: list[str] = field(default_factory=list)
     label_colors: bool = True  # color our class labels (DEFAULT_LABEL_COLORS + [label_colors] overrides)

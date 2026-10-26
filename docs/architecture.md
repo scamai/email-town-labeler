@@ -58,7 +58,7 @@ sequenceDiagram
   M-->>E: Prediction(cls, prob, probs)
   E->>S: known_contacts(senders)
   E->>E: policy.decide: thresholds, contact guard, confidence bar, new sender
-  E->>G: messages.modify(add=[email-town-labeler/<class>])
+  E->>G: messages.modify(add=[e/<class>])
   E->>S: record_decision(id, final cls, model cls, prob, probs, model_id, applied)
   E->>S: new history id
 ```

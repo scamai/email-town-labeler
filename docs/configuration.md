@@ -42,7 +42,7 @@ All keys with their defaults:
 
 ```toml
 [gmail]
-label_prefix = "email-town-labeler"     # labels are created as "<prefix>/<name>"
+label_prefix = "e"             # labels are created as "<prefix>/<name>"
 poll_seconds = 60              # 10 .. 86400
 skip_label_names = []          # never classify mail carrying any of these labels
 label_colors = true            # color the class labels (Town's colors unless [label_colors] says otherwise)
@@ -102,9 +102,14 @@ max_examples = 20000           # newest decisions per run (100 .. 1000000)
 
 ### `[gmail]`
 
-- **`label_prefix`**: parent label for everything email-town-labeler creates. Must not be empty or a
-  Gmail system label name. Changing it later does not rename existing labels: run
-  `email-town-labeler undo` first if you want a clean switch.
+- **`label_prefix`**: parent label for everything email-town-labeler creates; default `e` (earlier
+  versions used `email-town-labeler`; a config that `setup` wrote keeps whichever it had). Must not be
+  empty or a Gmail system label name. Every label under it counts as email-town-labeler's own
+  (`undo` removes them all), so `setup` warns when it finds labels there it did not make. To
+  change it later, run `email-town-labeler labels rename-prefix NEW` with the service stopped: it
+  renames the parent and every label under it in place, so messages keep their labels and
+  recorded decisions stay valid, then writes the new `label_prefix`. It refuses if labels under
+  `NEW/` are in the way. Editing `label_prefix` by hand instead starts a second set of labels.
 - **`poll_seconds`**: how often to ask Gmail for changes. Each idle poll costs 2 quota units
   (see [google-cloud-setup.md](google-cloud-setup.md#quota)), so 60 s is cheap; going lower
   mostly adds API calls.

@@ -45,7 +45,7 @@ def env(tmp_path, request):
 
 
 def lid(client, cls):
-    return client.label_id(f"email-town-labeler/{DISPLAY_NAMES[cls]}")
+    return client.label_id(f"e/{DISPLAY_NAMES[cls]}")
 
 
 def test_bootstrap_leaves_old_mail_alone(env):

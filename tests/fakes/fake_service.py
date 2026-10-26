@@ -677,6 +677,13 @@ class FakeGmail:
         if lb["type"] != "user":
             raise http_error(400, "Invalid update to system label", path=f"labels/{id}")
         self._check_color(body.get("color"))
+        if "name" in body:
+            name = (body.get("name") or "").strip()
+            if not name or name.upper() in SYSTEM_LABELS:
+                raise http_error(400, "Invalid label name", path=f"labels/{id}")
+            if self.label_id(name) not in (None, id):  # Gmail collides case-insensitively
+                raise http_error(409, path=f"labels/{id}")
+            lb["name"] = name
         if "color" in body:
             lb["color"] = dict(body["color"])
         return lb
