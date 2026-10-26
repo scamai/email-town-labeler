@@ -488,7 +488,9 @@ labels; [here is exactly what it does](docs/privacy.md#what-gmailmodify-allows-a
 On the next poll email-town-labeler picks up everything that changed while it was away. If it was away
 so long that Gmail no longer has that history, it scans inbox mail received since its last
 successful poll instead (at most 30 days back, configurable, and never mail from before you
-set it up).
+set it up). The connection to Gmail that went stale during the sleep is replaced on the first
+request after waking; while the network is not back yet, polls fail and are retried, and
+`status` shows the error only until a poll succeeds again.
 
 </details>
 

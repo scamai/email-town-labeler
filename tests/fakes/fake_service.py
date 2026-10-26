@@ -160,6 +160,7 @@ class _Failure:
     method: str | None
     reason: str | None
     retry_after: float | None
+    exc: BaseException | None = None
 
 
 class FakeRequest:
@@ -397,10 +398,12 @@ class FakeGmail:
         method: str | None = None,
         reason: str | None = None,
         retry_after: float | None = None,
+        exc: BaseException | None = None,
     ) -> None:
-        """The next n matching executions raise HttpError(status). method=None matches any API
-        method (each batch item counts singly); method="batch" fails a whole batch call."""
-        self._failures.append(_Failure(n, status, method, reason, retry_after))
+        """The next n matching executions raise HttpError(status), or `exc` (e.g. BrokenPipeError: a
+        transport error, no HTTP response). method=None matches any API method (each batch item counts
+        singly); method="batch" fails a whole batch call."""
+        self._failures.append(_Failure(n, status, method, reason, retry_after, exc))
 
     def add_label(self, name: str, type: str = "user") -> str:
         """Create a label directly (no API call), e.g. to simulate another client's race."""
@@ -441,6 +444,8 @@ class FakeGmail:
                 f.remaining -= 1
                 if f.remaining == 0:
                     self._failures.remove(f)
+                if f.exc is not None:
+                    raise f.exc
                 raise http_error(f.status, reason=f.reason, retry_after=f.retry_after, path=path)
 
     def _run(self, req: FakeRequest):

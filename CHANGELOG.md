@@ -102,6 +102,17 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Polls no longer fail on a dead connection after the computer sleeps or changes networks.**
+  httplib2 re-raises `BrokenPipeError` / `ConnectionResetError` / `TimeoutError` without closing
+  the pooled connection, so the next poll failed on it again (seen as `poll failed
+  (BrokenPipeError, 2 in a row)`). `GmailClient` now treats any transport error (no HTTP response)
+  by closing the pool and retrying on a fresh connection, three times within about 4 s, separately
+  from the rate-limit retries; this covers single requests and batches. Only a network that stays
+  down still fails a poll.
+- `status` showed the last poll error forever, as `<error> at <epoch seconds>`, even after the
+  service had recovered. It now shows `last error` only while polls are failing, with the time
+  and how many polls in a row failed, and an unhealthy status names it. `status --json`
+  `last_error` is now `{error, at, failures_in_a_row}` or `null`. Old stored errors are read too.
 - A Google Cloud project without the Gmail API enabled made `setup` (and any other command)
   stop with Google's raw 403 `HttpError`, and made `doctor` say "check your network". A command
   that stops on it, and `doctor`, now say in one line that the Gmail API is not enabled in

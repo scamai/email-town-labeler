@@ -73,6 +73,11 @@ Properties that matter:
   inbox mail instead and resumes from a fresh history id.
 - **Backs off.** Transient errors (429, 5xx, rate-limit 403s) are retried with exponential
   backoff and jitter in `GmailClient`; repeated poll failures back off in the loop, capped.
+- **Reconnects.** A transport error (no HTTP response: broken pipe, reset, timeout, DNS, TLS)
+  drops httplib2's connection pool and retries on a fresh connection, three times within about
+  4 s. httplib2 re-raises such errors without closing the connection, so after a sleep or a
+  network change the dead connection stayed in the pool and the next poll failed on it again.
+  `status` reports a poll error only while no poll has succeeded since.
 - **Never destructive.** The only label changes are adds/removes of labels under the
   configured prefix (see [privacy.md](privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does)).
 

@@ -75,6 +75,7 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 | Symptom | Fix |
 |---|---|
 | `another email-town-labeler is already running for ...` | `run`, `once`, `backfill` and `undo` take a lock per data directory, so only one runs at a time. Usually the background service holds it: wait for a one-shot command to finish, or `email-town-labeler service uninstall` first (reinstall afterwards). |
+| Log shows `poll failed (BrokenPipeError / ConnectionResetError / TimeoutError / gaierror ...)` around a sleep or a network change | Nothing to do. The Gmail connection is replaced automatically (`gmail connection failed (...); reconnecting` at INFO). A poll fails only while the network is really down, and the next ones retry with backoff. `status` shows `last error` only while polls are still failing; once one succeeds it disappears. |
 | `service status` says not running | `email-town-labeler service uninstall && email-town-labeler service install`, then check the log file under `<data dir>/logs/`. |
 | macOS: works in a terminal, not as a service | launchd starts with a minimal environment; reinstall the service from the same shell/venv you run `email-town-labeler` from so the absolute path is recorded. |
 | Linux: stops when you log out | systemd user services need lingering: `loginctl enable-linger $USER`. |

@@ -81,7 +81,7 @@ message_label_ids: list[str])` — `label_ids` = labels added/removed by this ev
 ```python
 class HistoryExpired(Exception): ...           # Gmail 404 on startHistoryId
 class GmailClient:
-    def __init__(self, service, *, max_retries: int = 6, sleep=time.sleep): ...
+    def __init__(self, service, *, max_retries: int = 6, transport_retries: int = 3, sleep=time.sleep): ...
     @classmethod
     def from_credentials(cls, creds) -> "GmailClient": ...
     def profile(self) -> dict                    # {"emailAddress", "historyId", "messagesTotal"}
@@ -103,6 +103,9 @@ class GmailClient:
         # raises HistoryExpired
 ```
 Retries 429 / 5xx / 403 rateLimitExceeded|userRateLimitExceeded with exponential backoff + jitter.
+A transport error (`is_transport_error`: OSError, http.client.HTTPException, httplib2's
+ServerNotFoundError, google.auth's TransportError) closes and clears the pooled connections and is
+retried `transport_retries` times after about 0.5 s, 1 s, 2 s, without using up `max_retries`.
 
 ### gmail/auth.py
 ```python
@@ -304,7 +307,10 @@ reachable, model loads, labels exist), `gcp-setup --print`, `--version`. `--home
 before or after the command. `run`, `once`, `backfill`, `undo` and `labels` hold `lock.InstanceLock(data_dir)`;
 a second instance exits 1. `status` is unhealthy when: not logged in, or no successful poll and
 setup (`bootstrap_ts`, else the token's mtime) is older than 15 min, or the last successful poll is
-older than `max(10 × poll_seconds, 15 min)`.
+older than `max(10 × poll_seconds, 15 min)` (the problem then names the open error, if any).
+`last_error` (JSON `{error, at, failures_in_a_row}`, text row `last error`) is shown only while the
+last poll failure is newer than the last successful poll; `run` stores `last_error`,
+`last_error_ts` and `poll_failures` in `kv` on each failure.
 Exit codes: 0 ok, 1 error, 2 usage.
 
 ## Test strategy

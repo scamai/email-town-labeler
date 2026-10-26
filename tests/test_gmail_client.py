@@ -1,11 +1,26 @@
-"""GmailClient against FakeGmail: retries, batching, history, pacing. No network."""
+"""GmailClient against FakeGmail: retries, batching, history, pacing. No network (one test uses a
+local socket on 127.0.0.1)."""
 
+import http.client
 import json
+import socket
+import ssl
+import struct
+import sys
+import threading
+import time
+from types import SimpleNamespace
 
 import pytest
 from googleapiclient.errors import HttpError
 
-from email_town_labeler.gmail.client import GmailClient, HistoryExpired, api_disabled_project, is_retryable
+from email_town_labeler.gmail.client import (
+    GmailClient,
+    HistoryExpired,
+    api_disabled_project,
+    is_retryable,
+    is_transport_error,
+)
 from email_town_labeler.types import HistoryEvent
 from tests.fakes.fake_service import FakeGmail, http_error
 
@@ -58,6 +73,129 @@ def test_is_retryable(status, reason, want):
 
 def test_is_retryable_ignores_non_http_errors():
     assert not is_retryable(ValueError("x"))
+
+
+# -- transport errors: a dead pooled connection after sleep or a network change ------------------
+
+
+def _named(name):
+    return type(name, (Exception,), {})("x")
+
+
+@pytest.mark.parametrize(
+    "err,want",
+    [
+        (BrokenPipeError(32, "Broken pipe"), True),
+        (ConnectionResetError(54, "Connection reset by peer"), True),
+        (TimeoutError("timed out"), True),
+        (socket.gaierror(8, "nodename nor servname provided"), True),
+        (ssl.SSLError("bad record mac"), True),
+        (OSError(65, "No route to host"), True),
+        (http.client.RemoteDisconnected("closed"), True),
+        (http.client.IncompleteRead(b""), True),
+        (_named("ServerNotFoundError"), True),  # httplib2's DNS failure
+        (_named("TransportError"), True),  # google.auth: a refresh that could not connect
+        (http_error(503), False),  # a response: is_retryable decides
+        (http_error(403, reason="insufficientPermissions"), False),
+        (ValueError("x"), False),
+    ],
+)
+def test_is_transport_error(err, want):
+    assert is_transport_error(err) is want
+
+
+class Conn:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+def with_pool(g):
+    """Give FakeGmail the AuthorizedHttp(httplib2.Http) shape: an outer and an inner connection pool."""
+    inner, outer = Conn(), Conn()
+    g._http = SimpleNamespace(
+        connections={"o": outer}, http=SimpleNamespace(connections={"https:gmail": inner})
+    )
+    return inner, outer
+
+
+def test_transport_error_drops_the_pool_and_retries_on_a_fresh_connection(caplog):
+    g = FakeGmail()
+    inner, outer = with_pool(g)
+    g.fail_next(2, method="getProfile", exc=BrokenPipeError(32, "Broken pipe"))
+    c, clock = make(g)
+    with caplog.at_level("INFO", logger="email_town_labeler.gmail"):
+        assert c.profile()["emailAddress"]
+    assert g.calls.count("getProfile") == 3 and inner.closed and outer.closed
+    assert not g._http.connections and not g._http.http.connections
+    assert len(clock.waits) == 2 and 0.5 <= clock.waits[0] < 0.8 and 1.0 <= clock.waits[1] < 1.3
+    assert "reconnecting, retry 1/3" in caplog.text and "WARNING" not in caplog.text
+
+
+def test_transport_error_gives_up_after_its_own_budget():
+    g = FakeGmail()
+    with_pool(g)
+    g.fail_next(4, method="getProfile", exc=ConnectionResetError(54, "reset"))
+    c, clock = make(g)
+    with pytest.raises(ConnectionResetError):
+        c.profile()
+    assert g.calls.count("getProfile") == 4 and len(clock.waits) == 3 and sum(clock.waits) < 5
+
+
+def test_transport_retries_do_not_use_up_rate_limit_retries():
+    g = FakeGmail()
+    g.fail_next(1, method="getProfile", exc=TimeoutError("timed out"))
+    g.fail_next(2, 429, method="getProfile")
+    c, clock = make(g)
+    assert c.profile()["emailAddress"] and g.calls.count("getProfile") == 4 and len(clock.waits) == 3
+
+
+def test_batch_transport_error_refetches_the_batch():
+    g = FakeGmail()
+    ids = fill(g, 5)
+    inner, _ = with_pool(g)
+    g.fail_next(1, method="batch", exc=ConnectionResetError(54, "reset"))
+    c, _ = make(g)
+    assert [r["id"] for r in c.get_records(ids)] == ids
+    assert g.calls.count("batch") == 2 and inner.closed
+
+
+def test_a_real_dead_pooled_connection_is_replaced():
+    """httplib2 for real: the server resets the kept-alive connection (as an idle connection is after
+    the machine sleeps). httplib2 alone fails on it and keeps it; the client drops it and succeeds."""
+    import httplib2
+
+    srv = socket.socket()
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(8)
+    linger = struct.pack("HH" if sys.platform == "win32" else "ii", 1, 0)
+
+    def serve():
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except OSError:
+                return
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: keep-alive\r\n\r\nok")
+            time.sleep(0.05)
+            conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, linger)
+            conn.close()  # RST
+
+    threading.Thread(target=serve, daemon=True).start()
+    try:
+        h = httplib2.Http(timeout=5)
+        url = f"http://127.0.0.1:{srv.getsockname()[1]}/"
+        req = SimpleNamespace(execute=lambda: h.request(url)[0].status)
+        c = GmailClient(SimpleNamespace(_http=h), sleep=lambda s: None)
+        assert c._execute(req) == 200
+        time.sleep(0.3)  # the pooled connection has been reset by now
+        assert c._execute(req) == 200
+    finally:
+        srv.close()
 
 
 DISABLED = (
