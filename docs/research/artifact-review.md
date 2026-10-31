@@ -8,6 +8,8 @@
 
 ## 范围
 
+后续补充：原报告已加入指向[客户端实测](2026-10-30-client-integration.html)的提示；下述 SHA256 和独立复核对应补充前版本。新增提示的渲染检查见[后续复核](client-integration-review.md)。
+
 - 日期：2026-10-30；代码基线：4bbfa247f6149c9274ebaae206c2fdbcfc438128。
 - Artifact：`2026-10-30-desktop-direction.html`。
 - 最终 HTML SHA256：`d2a932ef538d42ab5ab17795a9f3a70b2934465afdaa8f3c61e84b461fe82ced`。
