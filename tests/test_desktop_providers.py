@@ -52,7 +52,7 @@ def test_microsoft_next_link_rejected_before_credentials(monkeypatch, tmp_path):
         "https://login.microsoftonline.com/v1.0/me",
         "https://graph.microsoft.com.evil.test/v1.0/me",
     ]:
-        with pytest.raises(p.ProviderError, match="分页"):
+        with pytest.raises(p.ProviderError, match="pagination"):
             reader.get(url)
     with pytest.raises(p.ProviderError):
         p.request_json("http://graph.microsoft.com/v1.0/me", token="fixture")
@@ -76,7 +76,7 @@ def test_microsoft_pagination_duplicate_cursor_and_text_body(monkeypatch, tmp_pa
         return {"value": [message], "@odata.nextLink": "https://graph.microsoft.com/v1.0/repeated"}
 
     monkeypatch.setattr(reader, "get", get)
-    with pytest.raises(p.ProviderError, match="分页"):
+    with pytest.raises(p.ProviderError, match="pagination"):
         reader.list(10)
     assert len(calls) == 2
     reader.cache = {message["id"]: message}
@@ -121,7 +121,7 @@ def test_imap_uidvalidity_peek_and_received_time(monkeypatch):
     assert rows[0]["internal_date"] > 1_700_000_000_000
     assert reader.detail("7:2")["body_text"] == "hello"
     conn.validity = "8"
-    with pytest.raises(p.ProviderError, match="重建"):
+    with pytest.raises(p.ProviderError, match="rebuilt"):
         reader.detail("7:2")
     assert all(c[0] in {"search", "fetch", "logout"} for c in conn.calls)
 

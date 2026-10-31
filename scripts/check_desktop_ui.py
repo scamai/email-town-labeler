@@ -8,6 +8,7 @@ Captures go to a temporary directory, never to a mailbox or the repository.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -36,18 +37,54 @@ class FixtureReader:
             }
             for i, (title, category) in enumerate(
                 [
-                    ("确认明天的安排（示例）", "action_needed"),
-                    ("订单已送达（示例）", "orders"),
-                    ("本周简报（示例）", "newsletters"),
+                    ("Confirm tomorrow's plan (fixture)", "action_needed"),
+                    ("Order delivered (fixture)", "orders"),
+                    ("Weekly digest (fixture)", "newsletters"),
                 ]
             )
         ], False
 
     def detail(self, provider_id):
         return {
-            "body_text": "这是合成测试邮件，不包含真实邮件。\n<script>alert('fixture')</script>\n请确认安排。",
+            "body_text": "This is synthetic test mail, not a real message.\n<script>alert('fixture')</script>\nPlease confirm the plan.",
             "url": "https://mail.google.com/mail/#all/fixture",
         }
+
+
+def contrast(foreground, background):
+    def luminance(value):
+        channels = [int(n) / 255 for n in re.findall(r"\d+", value)[:3]]
+        linear = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    first, second = sorted((luminance(foreground), luminance(background)))
+    return (second + 0.05) / (first + 0.05)
+
+
+def check_palette(page, categories):
+    """Measure rendered selected filters, dots and matching real message badges."""
+    measured = []
+    for category in categories:
+        button = page.locator(f'[data-category-filter="{category}"]')
+        button.click()
+        expect(button).to_have_attribute("aria-pressed", "true")
+        colors = button.evaluate("""el => ({ink:getComputedStyle(el).color,
+            surface:getComputedStyle(el).backgroundColor,
+            dot:getComputedStyle(el,'::before').backgroundColor,
+            selected:getComputedStyle(el,'::after').content})""")
+        ratio = contrast(colors["ink"], colors["surface"])
+        assert ratio >= 4.5, (category, ratio)
+        assert colors["dot"] == colors["ink"] and "✓" in colors["selected"]
+        badges = page.locator(f'.message-row [data-category="{category}"]')
+        if badges.count():
+            badge = badges.first.evaluate(
+                "el => ({ink:getComputedStyle(el).color,surface:getComputedStyle(el).backgroundColor})"
+            )
+            assert badge == {k: colors[k] for k in ("ink", "surface")}
+        measured.append({"category": category, "contrast": round(ratio, 2)})
+    page.locator('[data-category-filter="all"]').click()
+    page.locator("#sidebar").evaluate("el => el.scrollTop = 0")
+    return measured
 
 
 def main():
@@ -55,7 +92,7 @@ def main():
     paths = Paths.default(out / "home").ensure()
     manager = Workbench(out / "workbench", paths, reader_factory=FixtureReader)
     manager.demo = True
-    for name in ("工作邮箱 · 示例", "个人邮箱 · 示例"):
+    for name in ("Work · fixture", "Personal · fixture"):
         manager.accounts.add(name, "imap", {"host": name, "username": "fixture", "port": 993})
     manager._refresh()
     server = LocalServer(manager)
@@ -77,20 +114,35 @@ def main():
                     page.goto(server.launch_url)
                     expect(page.locator(".message-row")).to_have_count(6)
                     expect(page.locator("#demoBanner")).to_be_visible()
+                    assert page.locator("html").get_attribute("lang") == "en"
+                    assert page.locator(".brand-mark").evaluate("img => img.complete && img.naturalWidth > 0")
+                    assert not re.search(r"[\u3400-\u9fff]", page.locator("body").inner_text())
+                    palette = (
+                        check_palette(page, [c["id"] for c in manager.snapshot()["categories"]])
+                        if width == 1440
+                        else []
+                    )
                     assert page.evaluate("location.hash") == ""
                     assert not context.cookies()
                     assert not page.evaluate("document.documentElement.scrollWidth > innerWidth"), (
                         theme,
                         width,
                     )
+                    if width == 390:
+                        assert page.locator(".topbar").bounding_box()["height"] == 64
                     page.screenshot(path=str(out / f"{theme}-{width}.png"))
                     page.locator(".row-open").first.focus()
                     page.keyboard.press("Enter")
-                    expect(page.locator("#previewBody")).to_contain_text("合成测试邮件")
+                    expect(page.locator("#previewBody")).to_contain_text("synthetic test mail")
                     assert page.locator("#previewBody script").count() == 0
+                    expect(page.locator("#previewCategory")).to_have_attribute(
+                        "data-category", "action_needed"
+                    )
+                    if width in (390, 1440):
+                        page.screenshot(path=str(out / f"{theme}-{width}-preview.png"))
                     if width == 390:
                         page.locator("#previewClose").click()
-                    page.locator("#searchInput").fill("订单")
+                    page.locator("#searchInput").fill("Order")
                     expect(page.locator(".message-row")).to_have_count(2)
                     page.locator("#searchInput").fill("no-match-fixture")
                     expect(page.locator(".empty-state")).to_be_visible()
@@ -103,7 +155,15 @@ def main():
                         theme,
                         width,
                     )
-                    results.append({"theme": theme, "width": width, "overflow": False, "errors": errors})
+                    results.append(
+                        {
+                            "theme": theme,
+                            "width": width,
+                            "overflow": False,
+                            "errors": errors,
+                            "palette": palette,
+                        }
+                    )
                     assert not errors
                     context.close()
             context = browser.new_context(viewport={"width": 1440, "height": 1000})
@@ -121,16 +181,17 @@ def main():
             expect(page.locator(".message-row")).to_have_count(3)
             page.locator("#selectAll").check()
             page.locator("#markDoneButton").click()
-            expect(page.locator("#toast button")).to_have_text("撤销")
+            expect(page.locator("#toast button")).to_have_text("Undo")
             assert sum(m["done"] for m in manager.snapshot()["messages"]) == 3
             page.locator("#toast button").click()
-            expect(page.locator("#toast")).to_have_text("已撤销本次更改")
+            expect(page.locator("#toast")).to_have_text("Change undone")
             assert not any(m["done"] for m in manager.snapshot()["messages"])
             page.locator(".row-open").first.click()
             page.locator("#previewCategoryButton").click()
             page.locator("#categorySelect").select_option("travel")
             page.locator("#categoryForm button[type=submit]").click()
-            expect(page.locator("#previewCategory")).to_have_text("旅行行程")
+            expect(page.locator("#previewCategory")).to_have_text("Travel")
+            expect(page.locator("#previewCategory")).to_have_attribute("data-category", "travel")
             page.reload()
             expect(page.locator(".message-row")).to_have_count(6)
             assert sum(m["category"] == "travel" for m in manager.snapshot()["messages"]) == 1
@@ -143,8 +204,9 @@ def main():
             # Account controls reach persisted backend state; reauthorization pre-fills only safe settings.
             account_id = manager.accounts.all()[0]["id"]
             page.locator(f'[data-focus-key="manage-{account_id}"]').click()
+            expect(page.locator("#pauseAccountButton")).to_have_text("Pause sync")
             page.locator("#pauseAccountButton").click()
-            expect(page.locator(f'[data-account-filter="{account_id}"]')).to_contain_text("暂停同步")
+            expect(page.locator(f'[data-account-filter="{account_id}"]')).to_contain_text("Paused")
             assert manager.accounts.get(account_id)["enabled"] is False
             page.locator(f'[data-focus-key="manage-{account_id}"]').click()
             page.locator("#reconnectAccountButton").click()
@@ -159,7 +221,7 @@ def main():
             manager.jobs = {
                 "fixture": {
                     "status": "pending",
-                    "message": "示例授权",
+                    "message": "Fixture authorization",
                     "user_code": "FIXTURE",
                     "verification_url": "https://microsoft.com/devicelogin",
                 }
@@ -171,7 +233,7 @@ def main():
             # Session expiry must stop reads and clear port-scoped storage.
             server.session = "rotated-fixture-session"
             page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
-            expect(page.locator("#syncText")).to_have_text("需要重新启动")
+            expect(page.locator("#syncText")).to_have_text("Restart required")
             assert page.evaluate("sessionStorage.getItem('email-town-session')") is None
             context.close()
             browser.close()

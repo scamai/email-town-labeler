@@ -119,13 +119,13 @@ def test_reconnect_wrong_identity_preserves_existing_settings_and_duplicate_reje
     assert workbench.accounts.get(original["id"])["settings"]["token_path"] == str(tmp_path / "old.json")
     reader.identity = "wrong-mailbox"
     original_before = workbench.accounts.get(original["id"])
-    with pytest.raises(ProviderError, match="不是原邮箱"):
+    with pytest.raises(ProviderError, match="not the original mailbox"):
         workbench._enroll_verified(
             "Changed", "microsoft", {"token_path": "new"}, original["id"], original_before
         )
     assert workbench.accounts.get(original["id"]) == original_before
     reader.identity = "original"
-    with pytest.raises(ProviderError, match="已连接"):
+    with pytest.raises(ProviderError, match="already connected"):
         workbench._enroll_verified("Duplicate", "microsoft", {"x": "y"}, "new", {"id": "new"})
     workbench.close()
 

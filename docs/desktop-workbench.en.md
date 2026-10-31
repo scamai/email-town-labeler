@@ -4,7 +4,7 @@ English · [简体中文](desktop-workbench.md)
 
 # On-device unified mail workbench
 
-[Open](#open) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
+[Open](#open) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
 
 The workbench combines explicitly authorized **inboxes** into one local list, with common categories,
 search and completion state. Gmail API, Microsoft Graph and TLS IMAP readers leave original messages
@@ -38,7 +38,7 @@ The bare URL printed in the terminal has no authority; reopen through the launch
 
 ## Connect accounts
 
-An existing default Gmail authorization is enrolled automatically. Use **添加账户** (add account) for other
+An existing default Gmail authorization is enrolled automatically. Use **Add account** for other
 mailboxes, with recognizable display names. The app does not extract Outlook or Apple Mail credentials.
 
 | Provider | Connection | Prerequisite |
@@ -74,6 +74,44 @@ batch operation. Archived mail is outside this inbox view; local workflow record
 Synchronization runs every 60 seconds, UI polling every 5 seconds. Failure in one account retains its last
 list with an error and leaves others usable. Completion survives restart; undo tokens live only in the current process.
 
+## Appearance
+
+The interface, account setup, status messages and errors default to English. Mail content,
+account names chosen by the user, category IDs and existing provider labels are not translated.
+Dates use an English format and the device's local time zone.
+
+Category colors are consistent in the sidebar, message list and preview, including after a
+manual change or undo. Their hue families follow the existing Gmail taxonomy; the desktop shades
+adapt to light/dark mode for readable text. This does not repaint provider labels.
+
+| Category | Hue |
+|---|---|
+| Action needed | Orange |
+| New sender | Blue |
+| Newsletters | Green |
+| Orders & bills | Purple |
+| Promotions | Rose |
+| Travel | Teal-blue |
+| Updates | Gold |
+| Unclassified | Slate |
+
+Labels remain visible, and selected categories have a checkmark plus an inset edge. This follows
+[W3C's guidance to supplement color with text or shape](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html).
+The browser verification script measures all eight selected-filter palettes in both themes and
+checks matching message-badge colors and preview updates. The minimum category text contrast is
+required to remain at least 4.5:1. These checks are not a complete accessibility certification.
+
+The envelope-and-house logo is authored in `desktop/web/logo.svg`; the same mark supplies the
+favicon and the macOS icon. Rebuild the PNG/ICNS resources on macOS, then refresh the launcher:
+
+```sh
+uv run --with playwright python scripts/build_desktop_brand.py
+python3 scripts/install_macos_workbench.py
+```
+
+The binary assets are included in the package; ordinary users do not need image tooling to open
+the app. This remains a local launcher, not a signed App Store application.
+
 ## Privacy
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
@@ -92,7 +130,7 @@ are not used to classify another account.
 
 ## Recovery and verification
 
-Expired authorization: **⋯ → 重新授权此邮箱**. Network failure: restore connectivity and refresh/wait.
+Expired authorization: **⋯ → Reauthorize this mailbox**. Network failure: restore connectivity and refresh/wait.
 Unavailable OS vault: IMAP enrollment stops without plaintext fallback. Model failure: preview and manual
 classification remain available.
 

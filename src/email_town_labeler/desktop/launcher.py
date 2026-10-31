@@ -84,10 +84,10 @@ def launch(ctx):
                     response = conn.getresponse()
                     response.read()
                     if response.status != 200:
-                        raise ValueError("工作台未能停止，请关闭原启动终端")
+                        raise ValueError("The workbench could not stop. Close the original terminal.")
                 finally:
                     conn.close()
-            ctx.out("本机工作台已停止。")
+            ctx.out("The local workbench has stopped.")
             return 0
         if active is None:
             log = root / "desktop.log"
@@ -112,11 +112,11 @@ def launch(ctx):
                 if active:
                     break
                 if child.poll() is not None:
-                    raise ValueError(f"工作台启动失败，请检查本机日志 {log}")
+                    raise ValueError(f"The workbench failed to start. Check the local log at {log}")
                 time.sleep(0.1)
             if not active:
-                raise ValueError(f"工作台尚未就绪，请检查本机日志 {log}")
-        ctx.out(f"Email Town 本地工作台：{active['origin']}")
+                raise ValueError(f"The workbench is not ready. Check the local log at {log}")
+        ctx.out(f"Email Town local workbench: {active['origin']}")
         if not ctx.args.no_browser:
             webbrowser.open(active["url"])
     return 0

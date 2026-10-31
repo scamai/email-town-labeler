@@ -72,14 +72,14 @@ class Handler(BaseHTTPRequestHandler):
     def _boundary(self, *, write=False):
         # Host check blocks DNS rebinding; origin + custom header block cross-site writes.
         if self.headers.get("Host") != self.server.host:
-            self._response(403, {"error": "只允许本机工作台访问"})
+            self._response(403, {"error": "Only the local workbench may access this server"})
             return False
         origin = self.headers.get("Origin")
         if origin is not None and origin != self.server.origin:
-            self._response(403, {"error": "请求来源不受信任"})
+            self._response(403, {"error": "Request origin is not trusted"})
             return False
         if write and (origin != self.server.origin or self.headers.get("X-Email-Town") != "local"):
-            self._response(403, {"error": "请从工作台界面操作"})
+            self._response(403, {"error": "Use the workbench to perform this action"})
             return False
         return True
 
@@ -87,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
         value = self.headers.get("Authorization", "")
         expected = "Bearer " + self.server.session
         if not hmac.compare_digest(value.encode(errors="replace"), expected.encode()):
-            self._response(401, {"error": "会话已失效，请从本机启动器重新打开"})
+            self._response(401, {"error": "Session expired. Reopen Email Town from the local launcher"})
             return False
         return True
 
@@ -99,6 +99,7 @@ class Handler(BaseHTTPRequestHandler):
             "/": ("index.html", "text/html; charset=utf-8"),
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
+            "/logo.svg": ("logo.svg", "image/svg+xml"),
         }
         if parsed.path in assets:
             name, kind = assets[parsed.path]
@@ -109,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/proof":
             challenge = parse_qs(parsed.query).get("challenge", [""])[0]
             if not re.fullmatch(r"[a-f0-9]{64}", challenge):
-                self._response(400, {"error": "无效请求"})
+                self._response(400, {"error": "Invalid request"})
                 return
             proof = hmac.digest(
                 self.server.secret.encode(), ("EmailTown:" + challenge).encode(), "sha256"
@@ -125,11 +126,11 @@ class Handler(BaseHTTPRequestHandler):
                 key = parse_qs(parsed.query).get("id", [""])[0]
                 self._response(200, self.server.manager.detail(key))
             else:
-                self._response(404, {"error": "页面不存在"})
+                self._response(404, {"error": "Page not found"})
         except (ValueError, ProviderError) as e:
             self._response(400, {"error": str(e)[:240]})
         except Exception:  # noqa: BLE001 - prevent provider exception details from reaching HTTP clients
-            self._response(503, {"error": "邮件暂时无法读取，请稍后重试"})
+            self._response(503, {"error": "Mail is temporarily unavailable. Try again shortly"})
 
     def do_POST(self):
         if not self._boundary(write=True):
@@ -140,28 +141,28 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Content-Type", "").split(";")[
             0
         ].strip() != "application/json" or self.headers.get("Transfer-Encoding"):
-            self._response(415, {"error": "仅接受 JSON 请求"})
+            self._response(415, {"error": "Only JSON requests are accepted"})
             return
         try:
             length = int(self.headers.get("Content-Length", "-1"))
         except ValueError:
             length = -1
         if not 0 <= length <= MAX_BODY:
-            self._response(413, {"error": "请求过大或格式无效"})
+            self._response(413, {"error": "Request is too large or invalid"})
             return
         try:
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise TypeError
         except (ValueError, TypeError, UnicodeDecodeError):
-            self._response(400, {"error": "请求格式无效"})
+            self._response(400, {"error": "Invalid request format"})
             return
         if path == "/api/session":
             token = data.get("token")
             if not isinstance(token, str) or not hmac.compare_digest(
                 token.encode(errors="replace"), self.server.secret.encode()
             ):
-                self._response(401, {"error": "启动链接已失效，请重新启动工作台"})
+                self._response(401, {"error": "Launch link expired. Restart the workbench"})
                 return
             self._response(200, {"ok": True, "session": self.server.session})
             return
@@ -183,13 +184,13 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/account-action":
                 result = manager.enable(data.get("id", ""), data.get("enabled"))
             else:
-                self._response(404, {"error": "操作不存在"})
+                self._response(404, {"error": "Action not found"})
                 return
             self._response(200, result)
         except (ValueError, ProviderError) as e:
             self._response(409 if path == "/api/undo" else 400, {"error": str(e)[:240]})
         except Exception:  # noqa: BLE001 - do not serialize remote/authentication exceptions
-            self._response(503, {"error": "操作未完成，请刷新后重试"})
+            self._response(503, {"error": "Action did not complete. Refresh and try again"})
 
 
 def run(ctx):
@@ -205,8 +206,8 @@ def run(ctx):
         manager = Workbench(root, ctx.paths)
         server = LocalServer(manager, port)
         _write_private(root / "launch.json", json.dumps({"url": server.launch_url, "pid": os.getpid()}))
-        ctx.out(f"Email Town 本地工作台：{server.origin}")
-        ctx.out(f"私密启动链接保存在 {root / 'launch.json'}；按 Ctrl+C 停止。")
+        ctx.out(f"Email Town local workbench: {server.origin}")
+        ctx.out(f"Private launch link saved at {root / 'launch.json'}. Press Ctrl+C to stop.")
         if not ctx.args.no_browser:
             webbrowser.open(server.launch_url)
         manager.start()

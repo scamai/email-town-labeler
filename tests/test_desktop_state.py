@@ -21,7 +21,7 @@ def test_state_persists_only_workflow_fields_and_undo_is_atomic(tmp_path: Path):
     assert state.read([first, second])[first]["done"] == 1
 
     state.edit([first], "category", "orders")
-    with pytest.raises(ValueError, match="无法撤销"):
+    with pytest.raises(ValueError, match="newer changes"):
         state.undo(before)
     rows = state.read([first, second])
     assert rows[first]["category"] == "orders"
@@ -44,8 +44,8 @@ def test_accounts_registry_does_not_store_password_and_rejects_duplicates(tmp_pa
     accounts = Accounts(tmp_path / "workbench", paths)
     row = accounts.add("IMAP", "imap", {"host": "imap.example.com", "username": "u", "port": 993})
     assert row["enabled"] is True
-    with pytest.raises(ValueError, match="已连接"):
-        accounts.add("另一个", "imap", {"host": "imap.example.com", "username": "u", "port": 993})
+    with pytest.raises(ValueError, match="already connected"):
+        accounts.add("Another", "imap", {"host": "imap.example.com", "username": "u", "port": 993})
     raw = (tmp_path / "workbench" / "accounts.json").read_text()
     assert "password" not in raw
     assert "secret" not in raw
@@ -57,5 +57,5 @@ def test_accounts_bind_identity_rejects_duplicate_authorization(tmp_path: Path):
     first = accounts.add("One", "gmail", {"config_dir": str(tmp_path / "one")})
     second = accounts.add("Two", "gmail", {"config_dir": str(tmp_path / "two")})
     accounts.bind_identity(first["id"], "same-mailbox")
-    with pytest.raises(ValueError, match="另一个账户"):
+    with pytest.raises(ValueError, match="another account"):
         accounts.bind_identity(second["id"], "same-mailbox")

@@ -50,9 +50,9 @@ class LocalState:
 
     def edit(self, keys: list[str], action: str, category: str | None = None) -> list[dict]:
         if action not in ("done", "reopen", "category"):
-            raise ValueError("未知操作")
+            raise ValueError("Unknown action")
         if action == "category" and category not in LABEL_CLASSES:
-            raise ValueError("未知分类")
+            raise ValueError("Unknown category")
         with self.lock, self._connect() as db:
             before = []
             for key in dict.fromkeys(keys):
@@ -77,7 +77,9 @@ class LocalState:
             for old in before:
                 row = db.execute("SELECT revision FROM workflow WHERE id=?", (old["id"],)).fetchone()
                 if row is None or row["revision"] != old["revision"] + 1:
-                    raise ValueError("这些邮件已有更新的操作，无法撤销；请重新查看")
+                    raise ValueError(
+                        "These messages have newer changes and cannot be undone. Review them again."
+                    )
             for old in before:
                 db.execute(
                     "UPDATE workflow SET done=?,category=?,revision=revision+1 WHERE id=?",

@@ -9,6 +9,12 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- English-first on-device mail workbench with consistent category colors across navigation,
+  message badges and previews, including dark and high-contrast appearances. Category IDs and
+  mailbox labels remain unchanged; existing account names and message content are preserved.
+- Email Town envelope-and-house vector mark, browser favicon and reproducible macOS launcher icon
+  (`scripts/build_desktop_brand.py`). The local launcher installs the packaged icon.
+
 - Client workflow tools: `labels check [--json]` audits Gmail visibility; explicit
   `labels show [--dry-run]` creates missing configured labels and makes them visible without
   changing messages or unrelated labels. Dry-run/check can run alongside the engine; actual

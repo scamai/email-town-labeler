@@ -23,11 +23,11 @@ class Accounts:
         if self.path.exists():
             data = json.loads(self.path.read_text())
             if data.get("version") != 1 or not isinstance(data.get("accounts"), list):
-                raise ValueError("账户配置无法读取；请保留文件后检查")
+                raise ValueError("Account configuration could not be read. Keep the file and check it.")
             self.rows = data["accounts"]
         elif default_paths.token.exists():
             self.add(
-                "当前 Gmail",
+                "Primary Gmail",
                 "gmail",
                 {
                     "config_dir": str(default_paths.config_dir.absolute()),
@@ -47,7 +47,7 @@ class Accounts:
 
     @staticmethod
     def _missing():
-        raise ValueError("账户不存在")
+        raise ValueError("Account not found")
 
     @staticmethod
     def name(value) -> str:
@@ -57,13 +57,13 @@ class Accounts:
             or len(value) > 80
             or any(ord(c) < 32 for c in value)
         ):
-            raise ValueError("请填写 1–80 字的账户名称")
+            raise ValueError("Enter an account name from 1–80 characters")
         return value.strip()
 
     def add(self, name: str, provider: str, settings: dict, *, account_id: str | None = None) -> dict:
         name = self.name(name)
         if provider not in ("gmail", "imap", "microsoft"):
-            raise ValueError("不支持的邮箱类型")
+            raise ValueError("Unsupported email provider")
         with self.lock:
             if provider == "gmail":
                 target = str(Path(settings["config_dir"]).resolve())
@@ -71,13 +71,13 @@ class Accounts:
                     r["provider"] == provider and str(Path(r["settings"]["config_dir"]).resolve()) == target
                     for r in self.rows
                 ):
-                    raise ValueError("此 Gmail 配置已连接")
+                    raise ValueError("This Gmail configuration is already connected")
             if provider == "imap" and any(
                 r["provider"] == provider
                 and all(r["settings"].get(k) == settings.get(k) for k in ("host", "username", "port"))
                 for r in self.rows
             ):
-                raise ValueError("此 IMAP 账户已连接")
+                raise ValueError("This IMAP account is already connected")
             row = {
                 "id": account_id or uuid.uuid4().hex,
                 "name": name,
@@ -103,7 +103,7 @@ class Accounts:
                 r["id"] != account_id and r["provider"] == row["provider"] and r.get("identity") == identity
                 for r in self.rows
             ):
-                raise ValueError("此邮箱已通过另一个账户连接，请使用已连接的账户")
+                raise ValueError("This mailbox is already connected through another account")
             if row.get("identity") != identity:
                 old = row.get("identity")
                 row["identity"] = identity
@@ -133,7 +133,7 @@ class Accounts:
 
     def enable(self, account_id: str, enabled: bool):
         if type(enabled) is not bool:
-            raise ValueError("enabled 必须为布尔值")
+            raise ValueError("enabled must be a boolean")
         with self.lock:
             row = next((r for r in self.rows if r["id"] == account_id), None)
             if row is None:
@@ -149,10 +149,10 @@ class Accounts:
     def enroll_home(self, name: str, home: str) -> dict:
         p = Path(home).expanduser()
         if not p.is_absolute():
-            raise ValueError("请选择已配置账户的绝对目录")
+            raise ValueError("Choose the absolute directory of a configured account")
         paths = Paths.default(p)
         if not paths.token.is_file():
-            raise ValueError("此目录中没有已登录的 Gmail 账户")
+            raise ValueError("This directory has no signed-in Gmail account")
         return self.add(
             name,
             "gmail",
@@ -163,16 +163,16 @@ class Accounts:
 def imap_settings(data: dict) -> dict:
     host = str(data.get("host", "")).strip().lower()
     if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", host):
-        raise ValueError("请填写 IMAP 服务器域名，不包含协议或路径")
+        raise ValueError("Enter an IMAP server hostname without a protocol or path")
     try:
         port = int(data.get("port", 993))
     except (ValueError, TypeError) as e:
-        raise ValueError("IMAP 端口无效") from e
+        raise ValueError("Invalid IMAP port") from e
     if not 1 <= port <= 65535:
-        raise ValueError("IMAP 端口无效")
+        raise ValueError("Invalid IMAP port")
     username = str(data.get("username", "")).strip()
     if not username or len(username) > 320 or any(ord(c) < 32 for c in username):
-        raise ValueError("请填写邮箱用户名")
+        raise ValueError("Enter the mailbox username")
     return {"host": host, "port": port, "username": username}
 
 
@@ -190,13 +190,13 @@ def password_store(account_id: str, password: str | None = None) -> str:
                 "keyring.backends.kwallet",
             )
         ):
-            raise ValueError("系统钥匙串不可用；请启用系统凭据服务后重试")
+            raise ValueError("The system credential vault is unavailable. Enable it and try again")
         if password is not None:
             keyring.set_password("email-town-workbench", account_id, password)
             return password
         value = keyring.get_password("email-town-workbench", account_id)
         if not value:
-            raise ValueError("找不到此账户的应用专用密码，请重新连接")
+            raise ValueError("No app-specific password was found. Reconnect the account")
         return value
     except ImportError as e:
-        raise ValueError("连接 IMAP 需要安装 email-town-labeler[desktop]") from e
+        raise ValueError("IMAP connections require email-town-labeler[desktop]") from e

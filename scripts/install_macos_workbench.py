@@ -30,6 +30,9 @@ def main():
         not info.is_file() or plistlib.loads(info.read_bytes()).get("CFBundleIdentifier") != identity
     ):
         parser.error("destination already exists and is not this launcher; choose a new path")
+    icon = Path(__file__).resolve().parents[1] / "src/email_town_labeler/desktop/web/app-icon.icns"
+    if not icon.is_file():
+        parser.error("launcher icon is missing; run scripts/build_desktop_brand.py first")
     executable = app / "Contents" / "MacOS" / "email-town"
     executable.parent.mkdir(parents=True, exist_ok=True)
     # Do not resolve the executable symlink: an installed CLI may depend on its managed environment.
@@ -37,6 +40,9 @@ def main():
         "#!/bin/sh\nexec " + shlex.quote(str(Path(args.cli).absolute())) + " desktop --background\n"
     )
     executable.chmod(0o755)
+    resources = app / "Contents" / "Resources"
+    resources.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(icon, resources / "EmailTown.icns")
     info.write_bytes(
         plistlib.dumps(
             {
@@ -45,7 +51,8 @@ def main():
                 "CFBundleDisplayName": "Email Town",
                 "CFBundleExecutable": "email-town",
                 "CFBundlePackageType": "APPL",
-                "CFBundleVersion": "1",
+                "CFBundleVersion": "2",
+                "CFBundleIconFile": "EmailTown.icns",
                 "LSUIElement": True,
             }
         )

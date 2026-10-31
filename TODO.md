@@ -15,6 +15,8 @@ The user requested implementation through a usable local app, not a sequence of 
 - [x] Explicit enrollment, per-account health, pause/resume and identity-checked reauthorization.
 - [x] System-vault IMAP passwords, private OAuth files, no mail-content disk cache.
 - [x] Start/reopen/stop background process and a reproducible macOS double-click launcher.
+- [x] English-first UI and recovery messages; semantic category colors in light/dark themes.
+- [x] Shared vector logo, favicon and packaged macOS icon, with a reproducible asset build.
 - [x] Synthetic two-account browser checks in four widths and both themes; real HTTP and persisted-state checks.
 - [x] Existing authorized Gmail read-only runtime: 100 inbox messages loaded, ready, no model error.
 

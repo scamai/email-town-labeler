@@ -27,14 +27,14 @@ from .providers import (
 from .state import LocalState, message_key
 
 CATEGORY_NAMES = {
-    "action_needed": "需要处理",
-    "new_sender": "新发件人",
-    "newsletters": "订阅阅读",
-    "orders": "订单账单",
-    "promotional": "推广优惠",
-    "travel": "旅行行程",
-    "updates": "通知更新",
-    "unknown": "待分类",
+    "action_needed": "Action needed",
+    "new_sender": "New sender",
+    "newsletters": "Newsletters",
+    "orders": "Orders & bills",
+    "promotional": "Promotions",
+    "travel": "Travel",
+    "updates": "Updates",
+    "unknown": "Unclassified",
 }
 
 
@@ -42,7 +42,7 @@ def safe_error(exc: Exception) -> str:
     if isinstance(exc, (ProviderError, ValueError)):
         # Our own ValueErrors contain no remote mail content. Callers never pass parse errors through.
         return str(exc)[:240]
-    return "连接暂时不可用，请检查网络或重新连接账户（" + type(exc).__name__ + "）"
+    return "Connection unavailable. Check your network or reconnect the account (" + type(exc).__name__ + ")"
 
 
 class Workbench:
@@ -194,7 +194,7 @@ class Workbench:
                     "id": key,
                     "account_id": aid,
                     "provider_id": rec["provider_id"],
-                    "subject": rec.get("headers", {}).get("subject", "")[:2000] or "（无主题）",
+                    "subject": rec.get("headers", {}).get("subject", "")[:2000] or "(No subject)",
                     "sender": rec.get("headers", {}).get("from", "")[:1000],
                     "date": rec.get("internal_date", 0),
                     "category": category,
@@ -256,7 +256,9 @@ class Workbench:
                 except Exception as e:  # noqa: BLE001 - keep other accounts usable after model/provider failures
                     with self.lock:
                         self.model_error = (
-                            "部分邮件暂未完成本机分类（" + type(e).__name__ + "）；仍可查看和手动分类"
+                            "Some messages could not be classified locally ("
+                            + type(e).__name__
+                            + "); you can still view and classify them manually"
                         )
                     break
             with self.lock:
@@ -270,14 +272,14 @@ class Workbench:
                     status="error",
                     error=safe_error(e)
                     if isinstance(e, ProviderError)
-                    else "同步失败，请检查登录和网络（" + type(e).__name__ + "）",
+                    else "Sync failed. Check your sign-in and network (" + type(e).__name__ + ")",
                 )
                 self.readers.pop(aid, None)
 
     def _cache_body(self, key, full):
         with self.lock:
             self.bodies[key] = {
-                "body": str(full.get("body_text") or full.get("snippet") or "（没有可显示的文字）")[:262144],
+                "body": str(full.get("body_text") or full.get("snippet") or "(No text available)")[:262144],
                 "url": full.get("url", ""),
             }
             self.bodies.move_to_end(key)
@@ -288,16 +290,16 @@ class Workbench:
         with self.lock:
             item = self.messages.get(key)
             if item is None:
-                raise ValueError("邮件已不在已载入列表，请刷新")
+                raise ValueError("Message is no longer in the loaded list. Refresh and try again.")
             item = dict(item)
             cached = self.bodies.get(key)
             reader = self.readers.get(item["account_id"])
             reader_lock = self.reader_locks.get(item["account_id"])
         if cached is None:
             if reader is None or reader_lock is None:
-                raise ProviderError("此账户暂时离线，请刷新后重试")
+                raise ProviderError("This account is offline. Refresh and try again.")
             if not reader_lock.acquire(timeout=1):
-                raise ProviderError("此账户正在同步，请稍后重试预览")
+                raise ProviderError("This account is syncing. Try the preview again shortly.")
             try:
                 full = reader.detail(item["provider_id"])
             finally:
@@ -308,7 +310,7 @@ class Workbench:
         with self.lock:
             if key not in self.messages:
                 self.bodies.pop(key, None)
-                raise ValueError("邮件已不在已载入列表，请刷新")
+                raise ValueError("Message is no longer in the loaded list. Refresh and try again.")
             item = dict(self.messages[key])
         item.pop("provider_id", None)
         saved = self.state.read([key]).get(key, {})
@@ -320,10 +322,10 @@ class Workbench:
     def action(self, data: dict):
         ids = data.get("ids")
         if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or any(not isinstance(k, str) for k in ids):
-            raise ValueError("请选择 1–500 封邮件")
+            raise ValueError("Select 1–500 messages")
         with self.lock:
             if any(k not in self.messages for k in ids):
-                raise ValueError("列表已更新，请重新选择邮件")
+                raise ValueError("The list changed. Select the messages again.")
             before = self.state.edit(ids, data.get("action"), data.get("category"))
             token = secrets.token_urlsafe(24)
             self.undos[token] = before
@@ -335,7 +337,7 @@ class Workbench:
         with self.lock:
             before = self.undos.get(token)
             if before is None:
-                raise ValueError("撤销已失效，请重新查看邮件")
+                raise ValueError("Undo expired. Review the messages again.")
             self.state.undo(before)
             self.undos.pop(token)
         return {"ok": True}
@@ -352,19 +354,19 @@ class Workbench:
         name = Accounts.name(data.get("name"))
         provider = data.get("provider")
         if provider not in ("gmail", "gmail-existing", "imap", "microsoft"):
-            raise ValueError("请选择邮箱类型")
+            raise ValueError("Choose an email provider")
         reconnect_id = data.get("reconnect_id")
         if reconnect_id:
             existing = self.accounts.get(reconnect_id)
             if existing["provider"] != provider:
-                raise ValueError("重新连接时请选择原邮箱类型")
+                raise ValueError("Choose the original provider when reconnecting")
         elif len(self.accounts.all()) >= 32:
-            raise ValueError("当前最多连接 32 个账户")
+            raise ValueError("You can connect up to 32 accounts")
         job = uuid.uuid4().hex
         with self.lock:
             if any(j["status"] == "pending" for j in self.jobs.values()):
-                raise ValueError("请先完成当前账户的连接")
-            self.jobs = {job: {"id": job, "status": "pending", "message": "正在连接账户"}}
+                raise ValueError("Finish connecting the current account first")
+            self.jobs = {job: {"id": job, "status": "pending", "message": "Connecting account"}}
         threading.Thread(target=self._connect, args=(job, name, provider, dict(data)), daemon=True).start()
         return {"ok": True, "job": job}
 
@@ -374,16 +376,16 @@ class Workbench:
         reader.list(1)
         identity = getattr(reader, "identity", None)
         if not identity:
-            raise ProviderError("无法确认邮箱身份，请重新连接")
+            raise ProviderError("Could not verify the mailbox identity. Reconnect the account.")
         if existing and existing.get("identity") and existing["identity"] != identity:
-            raise ProviderError("登录的不是原邮箱；其他邮箱请使用添加账户")
+            raise ProviderError("This is not the original mailbox. Use Add account for another mailbox.")
         for account in self.accounts.all():
             if (
                 account["id"] != aid
                 and account["provider"] == provider
                 and account.get("identity") == identity
             ):
-                raise ProviderError("此邮箱已连接，请使用该账户旁的重新连接")
+                raise ProviderError("This mailbox is already connected. Use Reconnect beside that account.")
         if existing:
             self.accounts.replace_settings(aid, name, settings)
         else:
@@ -399,10 +401,12 @@ class Workbench:
             elif provider == "imap":
                 settings = imap_settings(data)
                 if existing and settings != existing["settings"]:
-                    raise ValueError("重新连接须使用原 IMAP 服务器和用户名；其他邮箱请添加新账户")
+                    raise ValueError(
+                        "Reconnect requires the original IMAP server and username. Use Add account for another mailbox."
+                    )
                 password = data.pop("password", None)
                 if not isinstance(password, str) or not password or len(password) > 2048:
-                    raise ValueError("请输入应用专用密码")
+                    raise ValueError("Enter an app-specific password")
                 account = {"id": aid, "settings": settings, "provider": "imap"}
                 test = ImapReader(account, password=password)
                 try:
@@ -421,7 +425,7 @@ class Workbench:
                 secret = self.paths.client_secret
                 if not secret.is_file():
                     raise ValueError(
-                        "请先在本机配置 Google Desktop OAuth 客户端；可使用“已有 Gmail 配置”连接"
+                        "Configure a Google Desktop OAuth client on this device first, or connect an existing Gmail configuration"
                     )
                 paths = Paths.default(self.root / "accounts" / uuid.uuid4().hex).ensure()
                 flow = InstalledAppFlow.from_client_secrets_file(
@@ -432,7 +436,7 @@ class Workbench:
                     open_browser=True,
                     timeout_seconds=180,
                     authorization_prompt_message="",
-                    success_message="账户已连接，可以关闭此页并返回 Email Town。",
+                    success_message="Account connected. Close this page and return to Email Town.",
                 )
                 save_credentials(credentials, paths.token)
                 self._enroll_verified(
@@ -453,10 +457,10 @@ class Workbench:
                     "https://microsoft.com/devicelogin",
                     "https://www.microsoft.com/devicelogin",
                 ):
-                    raise ProviderError("Microsoft 返回了意外登录地址，请重试")
+                    raise ProviderError("Microsoft returned an unexpected sign-in URL. Try again.")
                 with self.lock:
                     self.jobs[job].update(
-                        message="请在 Microsoft 页面输入代码并授权只读访问",
+                        message="Enter the code on the Microsoft page and grant read-only access",
                         user_code=flow["user_code"],
                         verification_url=verification_url,
                     )
@@ -485,7 +489,11 @@ class Workbench:
                 )
             with self.lock:
                 self.readers.pop(aid, None)
-                self.jobs[job] = {"id": job, "status": "complete", "message": "账户已连接，正在载入邮件"}
+                self.jobs[job] = {
+                    "id": job,
+                    "status": "complete",
+                    "message": "Account connected. Loading mail",
+                }
             self.refresh()
         except Exception as e:  # noqa: BLE001 - async connection jobs report safe errors in the UI
             with self.lock:
@@ -495,5 +503,5 @@ class Workbench:
                     "status": "error",
                     "message": safe_error(e)
                     if isinstance(e, (ProviderError, ValueError))
-                    else "连接未完成，请重试（" + type(e).__name__ + "）",
+                    else "Connection did not complete. Try again (" + type(e).__name__ + ")",
                 }

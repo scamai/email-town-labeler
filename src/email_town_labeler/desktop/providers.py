@@ -66,14 +66,14 @@ class GmailReader:
 
         paths = Paths(Path(settings["config_dir"]), Path(settings["data_dir"]))
         if not paths.token.is_file():
-            raise ProviderError("Gmail 尚未登录，请连接账户")
+            raise ProviderError("Gmail is not signed in. Connect the account")
         credentials = Credentials.from_authorized_user_file(str(paths.token))
         if credentials.scopes and not set(credentials.scopes) & {
             "https://www.googleapis.com/auth/gmail.readonly",
             "https://www.googleapis.com/auth/gmail.modify",
             "https://mail.google.com/",
         }:
-            raise ProviderError("此账户未授予邮件读取权限，请重新连接")
+            raise ProviderError("This account has not granted mail-read access. Reconnect it")
         if not credentials.valid:
             credentials.refresh(GoogleRequest())
             save_credentials(credentials, paths.token)
@@ -129,10 +129,10 @@ class GmailReader:
     def detail(self, provider_id: str) -> dict:
         identity, mid = provider_id.split(":", 1)
         if identity != self.identity or mid not in self.cache:
-            raise ProviderError("邮件已不在当前列表，请刷新")
+            raise ProviderError("Message is no longer in the current list. Refresh")
         rows = self.client.get_records([mid])
         if not rows:
-            raise ProviderError("邮件已移动或删除，请刷新")
+            raise ProviderError("Message was moved or deleted. Refresh")
         return {
             **rows[0],
             "url": safe_link(
@@ -143,7 +143,7 @@ class GmailReader:
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise ProviderError("邮箱服务器返回了意外重定向")
+        raise ProviderError("The mail server returned an unexpected redirect")
 
 
 def request_json(
@@ -157,7 +157,7 @@ def request_json(
         or parsed.username
         or parsed.port not in (None, 443)
     ):
-        raise ProviderError("拒绝了不受信任的邮箱接口地址")
+        raise ProviderError("Untrusted mail API address was rejected")
     h = {"Accept": "application/json", **(headers or {})}
     if token:
         h["Authorization"] = "Bearer " + token
@@ -174,14 +174,16 @@ def request_json(
                 body = {}
             # OAuth protocol error codes are safe; descriptions may contain identity details.
             return {"error": str(body.get("error", "oauth_error"))[:80]}
-        raise ProviderError(f"Microsoft 邮箱读取失败（HTTP {e.code}），请重新连接或稍后重试") from e
+        raise ProviderError(
+            f"Microsoft mail read failed (HTTP {e.code}). Reconnect or try again shortly"
+        ) from e
     with response:
         raw = response.read(16_000_001)
     if len(raw) > 16_000_000:
-        raise ProviderError("邮箱响应过大，请减少载入数量")
+        raise ProviderError("Mail response is too large. Load fewer messages")
     result = json.loads(raw)
     if not isinstance(result, dict):
-        raise ProviderError("邮箱响应格式无效")
+        raise ProviderError("Invalid mail response format")
     return result
 
 
@@ -193,19 +195,21 @@ MICROSOFT_SCOPES = (
 
 def microsoft_device(client_id: str) -> dict:
     if not re.fullmatch(r"[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}", client_id):
-        raise ProviderError("请填写 Microsoft 应用注册的客户端 ID（UUID），并启用公共客户端流程")
+        raise ProviderError("Enter the Microsoft app client ID (UUID) and enable public-client flow")
     data = request_json(
         "https://login.microsoftonline.com/common/oauth2/v2.0/devicecode",
         data={"client_id": client_id, "scope": MICROSOFT_SCOPES},
     )
     if "device_code" not in data:
-        raise ProviderError("无法开始 Microsoft 登录，请检查客户端 ID 和公共客户端设置")
+        raise ProviderError(
+            "Could not start Microsoft sign-in. Check the client ID and public-client settings"
+        )
     return data
 
 
 def save_microsoft_token(path: Path, result: dict, previous: dict | None = None):
     if not result.get("access_token"):
-        raise ProviderError("Microsoft 登录失效，请重新连接")
+        raise ProviderError("Microsoft sign-in expired. Reconnect the account")
     _write_private(
         path,
         json.dumps(
@@ -229,7 +233,7 @@ class MicrosoftReader:
         saved = json.loads(self.path.read_text())
         if saved.get("expires_at", 0) < time.time() + 60:
             if not saved.get("refresh_token"):
-                raise ProviderError("Microsoft 登录已过期，请重新连接")
+                raise ProviderError("Microsoft sign-in has expired. Reconnect the account")
             fresh = request_json(
                 MICROSOFT_TOKEN,
                 data={
@@ -245,7 +249,7 @@ class MicrosoftReader:
 
     def get(self, path: str) -> dict:
         if urlsplit(path).netloc != "graph.microsoft.com" or not urlsplit(path).path.startswith("/v1.0/"):
-            raise ProviderError("Microsoft 返回了意外分页地址")
+            raise ProviderError("Microsoft returned an unexpected pagination URL")
         return request_json(
             path,
             token=self.token(),
@@ -279,7 +283,7 @@ class MicrosoftReader:
         visited = set()
         while url and len(messages) <= limit:
             if url in visited or len(visited) >= 20:
-                raise ProviderError("Microsoft 分页未完成，请稍后刷新")
+                raise ProviderError("Microsoft pagination did not complete. Refresh shortly")
             visited.add(url)
             page = self.get(url)
             messages.extend(page.get("value", []))
@@ -292,7 +296,7 @@ class MicrosoftReader:
     def detail(self, provider_id: str) -> dict:
         identity, mid = provider_id.split(":", 1)
         if identity != self.identity or mid not in self.cache:
-            raise ProviderError("邮件已不在当前列表，请刷新")
+            raise ProviderError("Message is no longer in the current list. Refresh")
         message = self.get(
             f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}?$select=id,body,webLink"
         )
@@ -326,10 +330,12 @@ class ImapReader:
             )
             status, _ = conn.select("INBOX", readonly=True)
             if status != "OK":
-                raise ProviderError("无法读取此账户的收件箱")
+                raise ProviderError("Could not read this account's inbox")
             value = conn.response("UIDVALIDITY")[1]
             if not value or not value[0] or not value[0].isdigit():
-                raise ProviderError("IMAP 未返回有效的邮箱标识，无法安全整理")
+                raise ProviderError(
+                    "IMAP did not return a valid mailbox identifier; safe organization is unavailable"
+                )
             return conn, value[0].decode()
         except BaseException:
             try:
@@ -375,7 +381,7 @@ class ImapReader:
         field = "BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)]" if headers_only else "BODY.PEEK[]<0.262144>"
         status, data = conn.uid("fetch", uid, f"(UID FLAGS INTERNALDATE {field})")
         if status != "OK":
-            raise ProviderError("IMAP 邮件读取失败，请刷新")
+            raise ProviderError("IMAP message read failed. Refresh")
         result = next((entry for entry in data if isinstance(entry, tuple)), None)
         return result
 
@@ -384,7 +390,7 @@ class ImapReader:
         try:
             status, response = conn.uid("search", None, "UNDELETED")
             if status != "OK":
-                raise ProviderError("IMAP 邮件列表读取失败")
+                raise ProviderError("IMAP message list read failed")
             ids = (response[0] or b"").split()
             chosen = list(reversed(ids[-limit:]))
             result = []
@@ -408,14 +414,14 @@ class ImapReader:
     def detail(self, provider_id: str) -> dict:
         validity, uid = provider_id.split(":", 1)
         if validity != self.validity or uid not in self.ids or not uid.isdigit():
-            raise ProviderError("邮件标识已变化，请刷新")
+            raise ProviderError("Message identity changed. Refresh")
         conn, current = self.connect()
         try:
             if current != validity:
-                raise ProviderError("邮箱已重建，请刷新后重试")
+                raise ProviderError("The mailbox was rebuilt. Refresh and try again")
             item = self.fetch(conn, uid.encode(), False)
             if not item:
-                raise ProviderError("邮件已移动或删除，请刷新")
+                raise ProviderError("Message was moved or deleted. Refresh")
             return self.parse(item[1], uid, item[0])
         finally:
             try:
@@ -431,4 +437,4 @@ def create_reader(account: dict):
         return MicrosoftReader(account["settings"])
     if account["provider"] == "imap":
         return ImapReader(account)
-    raise ProviderError("未知邮箱类型")
+    raise ProviderError("Unknown email provider")

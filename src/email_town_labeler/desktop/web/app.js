@@ -90,7 +90,7 @@
     const date = new Date(Number(epoch) || 0);
     return Number.isNaN(date.getTime())
       ? "—"
-      : new Intl.DateTimeFormat("zh-CN", {
+      : new Intl.DateTimeFormat("en-US", {
           month: "numeric",
           day: "numeric",
           hour: "2-digit",
@@ -110,11 +110,11 @@
 
   const sourceName = (source) =>
     ({
-      mailbox: "邮箱标签",
-      model: "本机自动分类",
-      manual: "本机手动分类",
-      pending: "等待分类",
-    })[source] || "本机分类";
+      mailbox: "Provider label",
+      model: "Local automatic",
+      manual: "Local manual",
+      pending: "Awaiting classification",
+    })[source] || "Local category";
   function saveFocus() {
     const el = document.activeElement;
     for (const key of ["focusKey", "accountFilter", "categoryFilter"]) {
@@ -148,18 +148,18 @@
   function showUndoToast(token) {
     els.toast.replaceChildren();
     const label = document.createElement("span");
-    label.textContent = "已保存 · ";
+    label.textContent = "Saved · ";
     const undo = document.createElement("button");
     undo.type = "button";
     undo.className = "text-button";
-    undo.textContent = "撤销";
+    undo.textContent = "Undo";
     undo.addEventListener("click", async () => {
       try {
         await api("/api/undo", {
           method: "POST",
           body: JSON.stringify({ token }),
         });
-        els.toast.textContent = "已撤销本次更改";
+        els.toast.textContent = "Change undone";
         await loadState();
       } catch (error) {
         els.toast.textContent = error.message;
@@ -193,7 +193,7 @@
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok)
-      throw new Error(data.error || `请求失败（${response.status}）`);
+      throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   }
   function handleUnauthorized() {
@@ -204,9 +204,9 @@
       clearInterval(state.poll);
       state.poll = null;
     }
-    setSync("error", "需要重新启动");
+    setSync("error", "Restart required");
     els.footerStatus.textContent =
-      "会话已过期，请从启动器重新打开 Email Town。";
+      "Session expired. Reopen Email Town from the launcher.";
     els.restart.hidden = false;
   }
 
@@ -239,79 +239,83 @@
     });
   }
   function syncFilterButtons() {
-    document
-      .querySelectorAll("[data-type-filter]")
-      .forEach((button) =>
-        button.classList.toggle(
-          "is-active",
-          button.dataset.typeFilter === state.filters.type,
-        ),
-      );
-    document
-      .querySelectorAll("[data-done-filter]")
-      .forEach((button) =>
-        button.classList.toggle(
-          "is-active",
-          button.dataset.doneFilter === state.filters.done,
-        ),
-      );
+    document.querySelectorAll("[data-type-filter]").forEach((button) => {
+      const active = button.dataset.typeFilter === state.filters.type;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll("[data-done-filter]").forEach((button) => {
+      const active = button.dataset.doneFilter === state.filters.done;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
 
   function renderFilters() {
     const focus = saveFocus();
     els.accountFilters.replaceChildren();
-    [{ id: "all", name: "全部账户" }, ...state.accounts].forEach((account) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `account-filter${state.filters.account === account.id ? " is-active" : ""}`;
-      button.dataset.accountFilter = account.id;
-      const name = document.createElement("span");
-      name.textContent = text(account.name);
-      button.append(name);
-      if (account.id !== "all") {
-        const status = document.createElement("span");
-        status.className = "count";
-        status.textContent =
-          account.enabled === false
-            ? "暂停同步"
-            : account.status === "error"
-              ? "异常"
-              : "";
-        button.append(status);
-      }
-      if (account.id === "all") els.accountFilters.append(button);
-      else {
-        const entry = document.createElement("div");
-        entry.className = "account-entry";
-        const manage = document.createElement("button");
-        manage.type = "button";
-        manage.className = "icon-button";
-        manage.textContent = "⋯";
-        manage.dataset.focusKey = `manage-${account.id}`;
-        manage.setAttribute("aria-label", `管理 ${account.name}`);
-        manage.addEventListener("click", () =>
-          showAccountManagement(account.id),
+    [{ id: "all", name: "All accounts" }, ...state.accounts].forEach(
+      (account) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `account-filter${state.filters.account === account.id ? " is-active" : ""}`;
+        button.dataset.accountFilter = account.id;
+        button.setAttribute(
+          "aria-pressed",
+          String(state.filters.account === account.id),
         );
-        entry.append(button, manage);
-        els.accountFilters.append(entry);
-      }
-    });
+        const name = document.createElement("span");
+        name.textContent = text(account.name);
+        button.append(name);
+        if (account.id !== "all") {
+          const status = document.createElement("span");
+          status.className = "count";
+          status.textContent =
+            account.enabled === false
+              ? "Paused"
+              : account.status === "error"
+                ? "Error"
+                : "";
+          button.append(status);
+        }
+        if (account.id === "all") els.accountFilters.append(button);
+        else {
+          const entry = document.createElement("div");
+          entry.className = "account-entry";
+          const manage = document.createElement("button");
+          manage.type = "button";
+          manage.className = "icon-button";
+          manage.textContent = "⋯";
+          manage.dataset.focusKey = `manage-${account.id}`;
+          manage.setAttribute("aria-label", `Manage ${account.name}`);
+          manage.addEventListener("click", () =>
+            showAccountManagement(account.id),
+          );
+          entry.append(button, manage);
+          els.accountFilters.append(entry);
+        }
+      },
+    );
     $("accountCount").textContent = state.accounts.length
-      ? `${state.accounts.length} 个`
+      ? `${state.accounts.length} accounts`
       : "—";
     els.categoryFilters.replaceChildren();
-    [{ id: "all", name: "全部分类" }, ...state.categories].forEach(
+    [{ id: "all", name: "All categories" }, ...state.categories].forEach(
       (category) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `category-filter${state.filters.category === category.id ? " is-active" : ""}`;
         button.dataset.categoryFilter = category.id;
+        button.setAttribute(
+          "aria-pressed",
+          String(state.filters.category === category.id),
+        );
         button.textContent = text(category.name);
         els.categoryFilters.append(button);
       },
     );
     $("categoryCount").textContent = state.categories.length
-      ? `${state.categories.length} 个`
+      ? `${state.categories.length} categories`
       : "—";
     syncFilterButtons();
     restoreFocus(focus);
@@ -337,7 +341,7 @@
     els.loadMoreBar.hidden = truncated.length === 0;
     els.loadMore.disabled = state.limit >= 1000;
     els.loadedSummary.textContent = truncated.length
-      ? `仅显示已载入收件箱邮件 · ${loaded} 封${state.limit >= 1000 ? " · 已达每账户 1000 封上限" : ""}`
+      ? `Loaded inbox messages: ${loaded}${state.limit >= 1000 ? " · 1,000 per-account limit reached" : ""}`
       : "";
   }
 
@@ -347,22 +351,22 @@
     const hasLoading = state.refreshing && !state.messages.length;
     els.listTitle.textContent =
       state.filters.type === "today"
-        ? "今天"
+        ? "Today"
         : state.filters.type === "backlog"
-          ? "历史积压"
-          : "全部邮件";
+          ? "Backlog"
+          : "All mail";
     els.listStatus.textContent = state.modelError
-      ? `分类模型提示：${text(state.modelError)}`
+      ? `Classifier: ${text(state.modelError)}`
       : state.stale
-        ? "同步失败，当前显示上次已载入的数据。"
+        ? "Sync failed; showing the last loaded data."
         : state.refreshing && state.messages.length
-          ? "正在同步最新变化…"
+          ? "Syncing latest changes…"
           : state.lastRefresh
-            ? `上次同步 ${formatDate(state.lastRefresh)}`
+            ? `Last sync ${formatDate(state.lastRefresh)}`
             : "";
     renderMailboxNotice();
     els.selectionToolbar.hidden = !state.messages.length;
-    els.selectionCount.textContent = `已选 ${state.selected.size} 封`;
+    els.selectionCount.textContent = `${state.selected.size} selected`;
     els.markDone.disabled = els.reopen.disabled = state.selected.size === 0;
     els.selectAll.checked =
       messages.length > 0 && messages.every((m) => state.selected.has(m.id));
@@ -371,8 +375,11 @@
       const loading = document.createElement("div");
       loading.className = "loading-state";
       const h = document.createElement("h3");
-      h.textContent = "正在读取本机账户";
-      loading.append(h, document.createTextNode("邮件列表马上显示。"));
+      h.textContent = "Reading local accounts";
+      loading.append(
+        h,
+        document.createTextNode("Your mail list will appear shortly."),
+      );
       els.messageList.append(loading);
       return;
     }
@@ -381,12 +388,12 @@
       empty.className = "empty-state";
       const h = document.createElement("h3");
       h.textContent = state.messages.length
-        ? "没有符合条件的邮件"
-        : "还没有邮件";
+        ? "No messages match these filters"
+        : "No mail yet";
       const p = document.createElement("p");
       p.textContent = state.messages.length
-        ? "试试清除筛选或搜索词。"
-        : "添加账户后，邮件会从原服务加载到本机工作台。";
+        ? "Try clearing a filter or search term."
+        : "Add an account to load mail into this workbench.";
       empty.append(h, p);
       els.messageList.append(empty);
       return;
@@ -402,7 +409,7 @@
       checkbox.checked = state.selected.has(message.id);
       checkbox.setAttribute(
         "aria-label",
-        `选择 ${text(message.subject || "无主题")}`,
+        `Select ${text(message.subject || "No subject")}`,
       );
       checkbox.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -416,18 +423,18 @@
       subject.type = "button";
       subject.dataset.focusKey = `open-${message.id}`;
       subject.className = `row-open row-subject${message.done ? " row-status" : ""}`;
-      subject.textContent = text(message.subject || "无主题");
+      subject.textContent = text(message.subject || "No subject");
       const sender = document.createElement("span");
       sender.className = "row-sender";
-      sender.textContent = text(message.sender || "未知发件人");
+      sender.textContent = text(message.sender || "Unknown sender");
       title.append(subject, sender);
       const snippet = document.createElement("div");
       snippet.className = "row-preview";
-      snippet.textContent = `分类来源：${sourceName(message.source)}`;
+      snippet.textContent = `Classification: ${sourceName(message.source)}`;
       const account = document.createElement("div");
       account.className = "row-account";
       account.textContent = text(
-        accountById(message.account_id)?.name || "未知账户",
+        accountById(message.account_id)?.name || "Unknown account",
       );
       body.append(account, title, snippet);
       const meta = document.createElement("div");
@@ -436,14 +443,17 @@
       date.textContent = formatDate(message.date);
       const category = document.createElement("span");
       category.className = "category-badge";
+      category.dataset.category = message.category || "unknown";
       category.textContent = text(
-        categoryById(message.category)?.name || message.category || "未分类",
+        categoryById(message.category)?.name ||
+          message.category ||
+          "Unclassified",
       );
       meta.append(date, category);
       if (message.unread) {
         const unread = document.createElement("span");
         unread.className = "unread-badge";
-        unread.textContent = "未读";
+        unread.textContent = "Unread";
         meta.append(unread);
       }
       row.append(checkbox, body, meta);
@@ -452,7 +462,7 @@
     });
     els.selectionToolbar.hidden =
       state.selected.size === 0 && !state.messages.length;
-    els.selectionCount.textContent = `已选 ${state.selected.size} 封`;
+    els.selectionCount.textContent = `${state.selected.size} selected`;
     els.selectAll.checked =
       messages.length > 0 &&
       messages.every((message) => state.selected.has(message.id));
@@ -492,16 +502,19 @@
   async function loadPreview(id) {
     const message = state.messages.find((item) => item.id === id);
     if (!message) return;
-    els.previewSource.textContent = `账户：${text(accountById(message.account_id)?.name || "未知账户")} · 分类来源：${sourceName(message.source)}`;
+    els.previewSource.textContent = `Account: ${text(accountById(message.account_id)?.name || "Unknown account")} · Classification: ${sourceName(message.source)}`;
     els.previewCategory.textContent = text(
-      categoryById(message.category)?.name || message.category || "未分类",
+      categoryById(message.category)?.name ||
+        message.category ||
+        "Unclassified",
     );
+    els.previewCategory.dataset.category = message.category || "unknown";
     els.previewUnread.hidden = !message.unread;
-    els.previewSubject.textContent = text(message.subject || "无主题");
-    els.previewByline.textContent = text(message.sender || "未知发件人");
+    els.previewSubject.textContent = text(message.subject || "No subject");
+    els.previewByline.textContent = text(message.sender || "Unknown sender");
     els.previewDate.textContent = formatDate(message.date);
-    els.previewBody.textContent = "正在读取正文…";
-    els.previewDone.textContent = message.done ? "重新打开" : "标记完成";
+    els.previewBody.textContent = "Reading message…";
+    els.previewDone.textContent = message.done ? "Reopen" : "Mark done";
     const setOriginalLink = (value) => {
       const knownUrl = safeOriginalUrl(value);
       els.originalLink.hidden = !knownUrl;
@@ -511,12 +524,12 @@
     try {
       const data = await api(`/api/message?id=${encodeURIComponent(id)}`);
       if (state.activeId === id) {
-        els.previewBody.textContent = text(data.body || "（没有纯文本正文）");
+        els.previewBody.textContent = text(data.body || "(No plain-text body)");
         setOriginalLink(data.url || message.url);
       }
     } catch (error) {
       if (state.activeId === id)
-        els.previewBody.textContent = `无法读取正文：${text(error.message)}`;
+        els.previewBody.textContent = `Unable to read message: ${text(error.message)}`;
     }
   }
   function toggleSelected(id, checked) {
@@ -552,22 +565,23 @@
           (message) => message.id === state.activeId,
         );
         if (current) {
-          els.previewDone.textContent = current.done ? "重新打开" : "标记完成";
+          els.previewDone.textContent = current.done ? "Reopen" : "Mark done";
           els.previewCategory.textContent = text(
             categoryById(current.category)?.name ||
               current.category ||
-              "未分类",
+              "Unclassified",
           );
+          els.previewCategory.dataset.category = current.category || "unknown";
         }
       }
       if (result.undo) showUndoToast(result.undo);
       else
         showToast(
           action === "done"
-            ? "已在本机标记完成"
+            ? "Marked done locally"
             : action === "reopen"
-              ? "已重新打开"
-              : "分类已在本机更新",
+              ? "Reopened"
+              : "Category updated locally",
         );
     } catch (error) {
       showToast(error.message);
@@ -602,15 +616,15 @@
     els.jobStatus.hidden = false;
     failed.forEach((account) => {
       const item = document.createElement("div");
-      item.textContent = `${text(account.name)}：${text(account.error)}`;
+      item.textContent = `${text(account.name)}: ${text(account.error)}`;
       els.jobStatus.append(item);
     });
     jobs.forEach((job) => {
       const item = document.createElement("div");
-      item.textContent = `${text(job.message || "账户连接任务")} ${job.status === "error" ? "（失败）" : job.status === "pending" || job.status === "waiting" ? "（等待操作）" : job.status === "complete" ? "（已连接）" : ""}`;
+      item.textContent = `${text(job.message || "Account connection")} ${job.status === "error" ? "(failed)" : job.status === "pending" || job.status === "waiting" ? "(waiting for action)" : job.status === "complete" ? "(connected)" : ""}`;
       if (job.user_code) {
         const code = document.createElement("strong");
-        code.textContent = ` 验证码：${text(job.user_code)}`;
+        code.textContent = ` Code: ${text(job.user_code)}`;
         item.append(code);
       }
       try {
@@ -625,7 +639,7 @@
           link.href = url.href;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
-          link.textContent = "打开验证页面";
+          link.textContent = "Open verification page";
           item.append(" ", link);
         }
       } catch (_) {
@@ -653,7 +667,7 @@
     state.syncing = true;
     if (!state.initialized) {
       state.refreshing = true;
-      setSync("loading", "正在读取");
+      setSync("loading", "Reading");
       renderList();
     }
     try {
@@ -675,19 +689,22 @@
       reconcileMessageState();
       if (state.activeId) {
         const active = state.messages.find((m) => m.id === state.activeId);
-        els.previewDone.textContent = active.done ? "重新打开" : "标记完成";
+        els.previewDone.textContent = active.done ? "Reopen" : "Mark done";
         els.previewCategory.textContent =
-          categoryById(active.category)?.name || active.category;
+          categoryById(active.category)?.name ||
+          active.category ||
+          "Unclassified";
+        els.previewCategory.dataset.category = active.category || "unknown";
       }
       setSync(
         state.accounts.some((account) => account.status === "error")
           ? "error"
           : "ok",
         state.accounts.some((account) => account.status === "error")
-          ? "部分账户异常"
+          ? "Some accounts have errors"
           : state.refreshing
-            ? "正在同步"
-            : "已同步",
+            ? "Syncing"
+            : "Synced",
       );
       if (changed) {
         renderFilters();
@@ -698,7 +715,7 @@
     } catch (error) {
       if (error.message !== "unauthorized") {
         state.stale = state.initialized;
-        setSync("error", "读取失败");
+        setSync("error", "Read failed");
         els.listStatus.textContent = error.message;
         els.restart.hidden = false;
         renderList();
@@ -710,11 +727,11 @@
   async function refresh() {
     if (state.syncing || state.authLost || !state.sessionToken) return;
     state.refreshing = true;
-    setSync("loading", "正在刷新");
+    setSync("loading", "Refreshing");
     renderList();
     try {
       await api("/api/refresh", { method: "POST", body: "{}" });
-      showToast("刷新已开始，邮件会在本机更新");
+      showToast("Refresh started; mail will update locally");
       await loadState();
     } catch (error) {
       showToast(error.message);
@@ -740,10 +757,10 @@
     });
     els.submitAccount.textContent =
       provider === "microsoft"
-        ? "开始设备登录"
+        ? "Start device login"
         : provider === "imap"
-          ? "保存并连接"
-          : "开始连接";
+          ? "Save and connect"
+          : "Connect";
   }
   async function submitAccount(event) {
     event.preventDefault();
@@ -754,7 +771,7 @@
     if (els.accountForm.dataset.reconnectId)
       payload.reconnect_id = els.accountForm.dataset.reconnectId;
     if (!payload.name) {
-      els.accountError.textContent = "请输入显示名称。";
+      els.accountError.textContent = "Enter a display name.";
       els.accountError.hidden = false;
       return;
     }
@@ -776,7 +793,7 @@
         body: JSON.stringify(payload),
       });
       els.accountDialog.close();
-      showToast(data.message || "账户连接已开始");
+      showToast(data.message || "Account connection started");
       await loadState();
     } catch (error) {
       els.accountError.textContent = error.message;
@@ -805,16 +822,16 @@
     }
     api("/api/session", { method: "POST", body: JSON.stringify({ token }) })
       .then((data) => {
-        if (!data.session) throw new Error("会话初始化失败");
+        if (!data.session) throw new Error("Session initialization failed");
         state.sessionToken = data.session;
         sessionStorage.setItem("email-town-session", data.session);
         loadState();
       })
       .catch((error) => {
         state.authLost = true;
-        setSync("error", "启动连接失败");
-        els.listStatus.textContent = `无法启动本机会话：${text(error.message)}`;
-        els.footerStatus.textContent = "请从启动器重新打开 Email Town。";
+        setSync("error", "Could not start local session");
+        els.listStatus.textContent = `Could not start local session: ${text(error.message)}`;
+        els.footerStatus.textContent = "Reopen Email Town from the launcher.";
         els.restart.hidden = false;
       });
   }
@@ -882,8 +899,8 @@
     els.accountForm.dataset.reconnectId = account?.id || "";
     els.provider.disabled = Boolean(account);
     $("accountDialogTitle").textContent = account
-      ? "重新授权此邮箱"
-      : "添加账户";
+      ? "Reauthorize this mailbox"
+      : "Add account";
     if (account) {
       $("accountName").value = account.name;
       els.provider.value = account.provider;
@@ -906,10 +923,11 @@
     $("manageAccountDialog").dataset.accountId = id;
     $("manageAccountTitle").textContent = account.name;
     $("manageAccountStatus").textContent =
-      account.error || (account.enabled ? "自动同步已开启" : "自动同步已暂停");
+      account.error ||
+      (account.enabled ? "Automatic sync is on" : "Automatic sync is paused");
     $("pauseAccountButton").textContent = account.enabled
-      ? "暂停同步"
-      : "恢复同步";
+      ? "Pause sync"
+      : "Resume sync";
     $("manageAccountDialog").showModal();
   }
   $("pauseAccountButton").addEventListener("click", async () => {
@@ -956,7 +974,7 @@
         .slice(0, 500)
         .forEach((message) => state.selected.add(message.id));
       if (filteredMessages().length > 500)
-        showToast("每次最多处理 500 封，已选择前 500 封");
+        showToast("Up to 500 messages per action; selected the first 500");
     } else {
       filteredMessages().forEach((message) =>
         state.selected.delete(message.id),
@@ -991,7 +1009,7 @@
     els.loadMore.disabled = true;
     try {
       await api("/api/load-more", { method: "POST", body: "{}" });
-      showToast("正在载入更多邮件");
+      showToast("Loading more mail");
       await loadState();
     } catch (error) {
       showToast(error.message);

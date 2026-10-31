@@ -70,7 +70,7 @@ def test_host_origin_and_custom_header_boundaries(server):
 
 
 def test_assets_and_request_limits(server):
-    for asset in ["/", "/app.js", "/style.css"]:
+    for asset in ["/", "/app.js", "/style.css", "/logo.svg"]:
         status, headers, body = request(server, asset)
         assert status == 200 and body
         assert server.secret.encode() not in body and server.session.encode() not in body

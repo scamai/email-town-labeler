@@ -1,4 +1,20 @@
 :root {
+  --category-action_needed-ink: #934407;
+  --category-action_needed-surface: #fff0da;
+  --category-new_sender-ink: #2553ad;
+  --category-new_sender-surface: #e9f0ff;
+  --category-newsletters-ink: #176944;
+  --category-newsletters-surface: #e6f5ed;
+  --category-orders-ink: #6842aa;
+  --category-orders-surface: #f0eaff;
+  --category-promotional-ink: #9e365c;
+  --category-promotional-surface: #fce8f0;
+  --category-travel-ink: #18657c;
+  --category-travel-surface: #e4f4fb;
+  --category-updates-ink: #735800;
+  --category-updates-surface: #fbf3cf;
+  --category-unknown-ink: #526174;
+  --category-unknown-surface: #edf0f4;
   color-scheme: light dark;
   --bg: #f6f8fc;
   --surface: #fff;
@@ -27,6 +43,22 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
+    --category-action_needed-ink: #ffc27a;
+    --category-action_needed-surface: #3c2918;
+    --category-new_sender-ink: #acc7ff;
+    --category-new_sender-surface: #1d2e50;
+    --category-newsletters-ink: #88d8b1;
+    --category-newsletters-surface: #173b2c;
+    --category-orders-ink: #cbb5ff;
+    --category-orders-surface: #302343;
+    --category-promotional-ink: #f5a9c4;
+    --category-promotional-surface: #421f31;
+    --category-travel-ink: #8bd0e9;
+    --category-travel-surface: #173541;
+    --category-updates-ink: #e9d072;
+    --category-updates-surface: #383018;
+    --category-unknown-ink: #b8c4d3;
+    --category-unknown-surface: #28313e;
     --bg: #0d1117;
     --on-accent: #0d1117;
     --surface: #161b22;
@@ -71,7 +103,7 @@ button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
 .sr-only {
@@ -120,16 +152,10 @@ select:focus-visible {
   gap: 12px;
 }
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
 }
 h1,
 h2,
@@ -920,4 +946,111 @@ button:disabled {
 }
 .account-filter span:first-child {
   overflow-wrap: anywhere;
+}
+
+/* Stable category hues follow the existing Gmail taxonomy; text remains the primary label. */
+[data-category="action_needed"],
+[data-category-filter="action_needed"] {
+  --category-ink: var(--category-action_needed-ink);
+  --category-surface: var(--category-action_needed-surface);
+}
+[data-category="new_sender"],
+[data-category-filter="new_sender"] {
+  --category-ink: var(--category-new_sender-ink);
+  --category-surface: var(--category-new_sender-surface);
+}
+[data-category="newsletters"],
+[data-category-filter="newsletters"] {
+  --category-ink: var(--category-newsletters-ink);
+  --category-surface: var(--category-newsletters-surface);
+}
+[data-category="orders"],
+[data-category-filter="orders"] {
+  --category-ink: var(--category-orders-ink);
+  --category-surface: var(--category-orders-surface);
+}
+[data-category="promotional"],
+[data-category-filter="promotional"] {
+  --category-ink: var(--category-promotional-ink);
+  --category-surface: var(--category-promotional-surface);
+}
+[data-category="travel"],
+[data-category-filter="travel"] {
+  --category-ink: var(--category-travel-ink);
+  --category-surface: var(--category-travel-surface);
+}
+[data-category="updates"],
+[data-category-filter="updates"] {
+  --category-ink: var(--category-updates-ink);
+  --category-surface: var(--category-updates-surface);
+}
+[data-category="unknown"],
+[data-category-filter="unknown"] {
+  --category-ink: var(--category-unknown-ink);
+  --category-surface: var(--category-unknown-surface);
+}
+
+.category-badge[data-category] {
+  color: var(--category-ink, var(--muted));
+  background: var(--category-surface, var(--surface-2));
+}
+.category-filter[data-category-filter]:not([data-category-filter="all"]) {
+  justify-content: flex-start;
+}
+.category-filter[data-category-filter]:not(
+    [data-category-filter="all"]
+  )::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--category-ink);
+}
+/* Same 3px inset selection rail as the message row, tinted by category.
+   Design-lint counts this hue variation as a fourth shadow; it adds no elevation. */
+.category-filter.is-active:not([data-category-filter="all"]) {
+  color: var(--category-ink);
+  background: var(--category-surface);
+  box-shadow: inset 3px 0 var(--category-ink);
+}
+.category-filter.is-active::after {
+  content: "✓";
+  margin-left: auto;
+  font-weight: 700;
+}
+.unread-badge {
+  color: var(--muted);
+  background: var(--surface-2);
+}
+@media (forced-colors: active) {
+  .category-badge {
+    border: 1px solid CanvasText;
+  }
+  .category-filter.is-active {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Keep the localized header within the fixed mobile overlay offset. */
+@media (max-width: 767px) {
+  .topbar {
+    height: 64px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .brand-lockup p {
+    display: none;
+  }
+  .topbar-actions .button {
+    white-space: nowrap;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+  .preview-header {
+    align-items: flex-start;
+  }
+  .preview-actions {
+    justify-content: flex-end;
+  }
 }

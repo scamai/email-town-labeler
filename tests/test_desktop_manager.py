@@ -78,7 +78,7 @@ def test_mailbox_category_skips_detail_and_model_and_local_actions_are_reversibl
     workbench.action({"ids": [key], "action": "category", "category": "orders"})
     row = next(item for item in workbench.snapshot()["messages"] if item["id"] == key)
     assert row["category"] == "orders" and row["source"] == "manual"
-    with pytest.raises(ValueError, match="未知分类"):
+    with pytest.raises(ValueError, match="Unknown category"):
         workbench.action({"ids": [key], "action": "category", "category": "nope"})
     workbench.close()
 
@@ -110,7 +110,7 @@ def test_identity_binding_rejects_same_authorized_mailbox(tmp_path):
     readers[second] = FakeReader([_record("b")], identity="mailbox-hash")
     workbench._refresh()
     assert workbench.account_status[second]["status"] == "error"
-    assert "已通过另一个账户" in workbench.account_status[second]["error"]
+    assert "another account" in workbench.account_status[second]["error"]
     workbench.close()
 
 
@@ -176,7 +176,7 @@ def test_action_rejects_unloaded_ids_and_oversized_batches(tmp_path):
     workbench, readers, first, _ = _workbench(tmp_path)
     readers[first] = FakeReader([_record("one")])
     workbench._refresh()
-    with pytest.raises(ValueError, match="列表已更新"):
+    with pytest.raises(ValueError, match="list changed"):
         workbench.action({"ids": ["missing"], "action": "done"})
     with pytest.raises(ValueError, match="1–500"):
         workbench.action({"ids": [message_key(first, "one")] * 501, "action": "done"})
