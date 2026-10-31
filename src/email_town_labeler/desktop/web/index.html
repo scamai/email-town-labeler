@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Email Town 本机统一邮件工作台" />
+    <title>Email Town · 本机邮件工作台</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <button
+            class="icon-button mobile-only"
+            id="sidebarToggle"
+            type="button"
+            aria-label="打开分类与账户"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+          <span class="brand-mark" aria-hidden="true">ET</span>
+          <div>
+            <h1>Email Town</h1>
+            <p>本机邮件工作台</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="sync-indicator" id="syncIndicator" role="status"
+            ><span class="status-dot" aria-hidden="true"></span
+            ><span id="syncText">正在连接</span></span
+          >
+          <button
+            class="button button-secondary"
+            id="refreshButton"
+            type="button"
+          >
+            刷新
+          </button>
+          <button
+            class="button button-primary"
+            id="addAccountButton"
+            type="button"
+          >
+            添加账户
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" id="sidebar" aria-label="分类与账户">
+          <div class="sidebar-heading">
+            <h2>邮件范围</h2>
+            <button
+              class="icon-button mobile-only"
+              id="sidebarClose"
+              type="button"
+              aria-label="关闭分类与账户"
+            >
+              ×
+            </button>
+          </div>
+          <nav class="filter-nav" aria-label="日期范围">
+            <button
+              class="nav-item is-active"
+              data-type-filter="all"
+              type="button"
+            >
+              <span>全部邮件</span><span class="count" id="countAll">—</span>
+            </button>
+            <button class="nav-item" data-type-filter="today" type="button">
+              <span>今天</span><span class="count" id="countToday">—</span>
+            </button>
+            <button class="nav-item" data-type-filter="backlog" type="button">
+              <span>待处理</span><span class="count" id="countBacklog">—</span>
+            </button>
+          </nav>
+          <div class="sidebar-section">
+            <div class="section-label"><span>完成状态</span></div>
+            <div class="segmented-control" role="group" aria-label="完成状态">
+              <button
+                class="segment is-active"
+                data-done-filter="all"
+                type="button"
+              >
+                全部
+              </button>
+              <button class="segment" data-done-filter="pending" type="button">
+                未完成
+              </button>
+              <button class="segment" data-done-filter="done" type="button">
+                已完成
+              </button>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="section-label">
+              <span>账户</span><span id="accountCount" class="muted">—</span>
+            </div>
+            <div id="accountFilters" class="filter-list"></div>
+          </div>
+          <div class="sidebar-section">
+            <div class="section-label">
+              <span>分类</span><span id="categoryCount" class="muted">—</span>
+            </div>
+            <div id="categoryFilters" class="filter-list"></div>
+          </div>
+          <p class="local-note">分类与完成状态保存在本机；原邮件保持原位。</p>
+        </aside>
+
+        <main class="message-pane" aria-label="统一邮件列表">
+          <div class="pane-header">
+            <div>
+              <p class="eyebrow">统一收件箱</p>
+              <h2 id="listTitle">全部邮件</h2>
+            </div>
+            <div class="list-tools">
+              <label class="search-field"
+                ><span class="sr-only">搜索邮件</span
+                ><span aria-hidden="true">⌕</span
+                ><input
+                  id="searchInput"
+                  type="search"
+                  placeholder="搜索主题、发件人"
+                  autocomplete="off"
+              /></label>
+              <button
+                class="icon-button"
+                id="clearFiltersButton"
+                type="button"
+                title="清除搜索与筛选"
+                aria-label="清除搜索与筛选"
+              >
+                ↺
+              </button>
+            </div>
+          </div>
+          <div class="toolbar" id="selectionToolbar" hidden>
+            <label class="check-wrap"
+              ><input id="selectAll" type="checkbox" /><span
+                >全选当前结果</span
+              ></label
+            >
+            <span class="selection-count" id="selectionCount">已选 0 封</span>
+            <button
+              class="button button-secondary button-small"
+              id="markDoneButton"
+              type="button"
+            >
+              标记完成
+            </button>
+            <button
+              class="button button-secondary button-small"
+              id="reopenButton"
+              type="button"
+            >
+              重新打开
+            </button>
+            <button
+              class="button button-quiet button-small"
+              id="clearSelectionButton"
+              type="button"
+            >
+              取消选择
+            </button>
+          </div>
+          <div
+            class="list-status"
+            id="listStatus"
+            role="status"
+            aria-live="polite"
+          ></div>
+          <div class="demo-banner" id="demoBanner" hidden>
+            演示数据：以下内容不是实时邮箱。
+          </div>
+          <div
+            class="job-status"
+            id="jobStatus"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
+          <div class="load-more-bar" id="loadMoreBar" hidden>
+            <span id="loadedSummary">仅显示已载入邮件</span
+            ><button
+              class="button button-secondary button-small"
+              id="loadMoreButton"
+              type="button"
+            >
+              载入更多邮件
+            </button>
+          </div>
+          <div
+            class="message-list"
+            id="messageList"
+            tabindex="-1"
+            aria-label="邮件"
+          ></div>
+        </main>
+
+        <section
+          class="preview-pane"
+          id="previewPane"
+          aria-label="邮件预览"
+          aria-live="polite"
+        >
+          <div class="preview-empty" id="previewEmpty">
+            <span class="empty-icon" aria-hidden="true">✉</span>
+            <h2>选择一封邮件</h2>
+            <p>在左侧列表选择邮件，正文会在本机显示。</p>
+          </div>
+          <article class="preview-content" id="previewContent" hidden>
+            <div class="preview-header">
+              <button
+                class="icon-button mobile-only"
+                id="previewClose"
+                type="button"
+                aria-label="关闭邮件预览"
+              >
+                ×
+              </button>
+              <div class="preview-actions">
+                <button
+                  class="button button-secondary button-small"
+                  id="previewDoneButton"
+                  type="button"
+                >
+                  标记完成</button
+                ><button
+                  class="button button-quiet button-small"
+                  id="previewCategoryButton"
+                  type="button"
+                >
+                  改分类</button
+                ><a
+                  class="button button-quiet button-small"
+                  id="originalLink"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  hidden
+                  >打开原邮件</a
+                >
+              </div>
+            </div>
+            <div class="preview-meta">
+              <span class="source-badge" id="previewSource"></span
+              ><span class="category-badge" id="previewCategory"></span
+              ><span class="unread-badge" id="previewUnread">未读</span>
+            </div>
+            <h2 id="previewSubject"></h2>
+            <p class="preview-byline" id="previewByline"></p>
+            <time class="preview-date" id="previewDate"></time>
+            <pre class="email-body" id="previewBody"></pre>
+          </article>
+        </section>
+      </div>
+      <footer class="app-footer">
+        <span id="footerStatus">本机数据 · 不会自动上传</span
+        ><button class="text-button" id="restartButton" type="button" hidden>
+          重新连接
+        </button>
+      </footer>
+    </div>
+
+    <dialog id="accountDialog" aria-labelledby="accountDialogTitle">
+      <form method="dialog" id="accountForm" class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">账户设置</p>
+            <h2 id="accountDialogTitle">添加账户</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-close-dialog
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <p class="dialog-intro">账户连接留在本机，邮件仍由原服务管理。</p>
+        <label class="field-label" for="accountName"
+          >显示名称 <span class="required">必填</span></label
+        ><input
+          class="text-input"
+          id="accountName"
+          name="name"
+          required
+          maxlength="80"
+          placeholder="例如：工作邮箱"
+        /><label class="field-label" for="providerSelect">连接方式</label
+        ><select class="text-input" id="providerSelect" name="provider">
+          <option value="gmail">Gmail（本机授权）</option>
+          <option value="gmail-existing">已有 Email Town 目录</option>
+          <option value="imap">IMAP（TLS）</option>
+          <option value="microsoft">Microsoft（设备登录）</option>
+        </select>
+        <div id="existingFields" hidden>
+          <label class="field-label" for="homeDirectory">Email Town 目录</label
+          ><input
+            class="text-input"
+            id="homeDirectory"
+            name="home"
+            placeholder="选择本机已存在的目录"
+          />
+          <p class="field-help">由启动器提供的目录路径；不会读取任意路径。</p>
+        </div>
+        <div id="imapFields" hidden>
+          <div class="field-grid">
+            <div>
+              <label class="field-label" for="imapHost">服务器</label
+              ><input
+                class="text-input"
+                id="imapHost"
+                name="host"
+                autocomplete="off"
+              />
+            </div>
+            <div>
+              <label class="field-label" for="imapPort">端口</label
+              ><input
+                class="text-input"
+                id="imapPort"
+                name="port"
+                type="number"
+                value="993"
+                min="1"
+                max="65535"
+              />
+            </div>
+          </div>
+          <label class="field-label" for="imapUsername">用户名</label
+          ><input
+            class="text-input"
+            id="imapUsername"
+            name="username"
+            autocomplete="username"
+          /><label class="field-label" for="imapPassword">应用专用密码</label
+          ><input
+            class="text-input"
+            id="imapPassword"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+          />
+          <p class="field-help">
+            密码只发给本机后端的 OS 密钥环，不写入浏览器存储。
+          </p>
+        </div>
+        <div id="microsoftHelp" class="info-callout" hidden>
+          Microsoft 个人账户需要先注册自己的应用并填写客户端 ID。
+        </div>
+        <div id="clientIdFields" hidden>
+          <label class="field-label" for="clientId">客户端 ID</label
+          ><input
+            class="text-input"
+            id="clientId"
+            name="client_id"
+            autocomplete="off"
+          />
+        </div>
+        <p class="form-error" id="accountFormError" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>
+            取消</button
+          ><button
+            class="button button-primary"
+            id="submitAccountButton"
+            type="submit"
+          >
+            开始连接
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="manageAccountDialog" aria-labelledby="manageAccountTitle">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <h2 id="manageAccountTitle">账户设置</h2>
+          <button
+            type="button"
+            class="icon-button"
+            data-close-dialog
+            aria-label="关闭账户设置"
+          >
+            ×
+          </button>
+        </div>
+        <p id="manageAccountStatus"></p>
+        <p class="field-help">
+          暂停仅停止自动同步；已载入邮件仍可查看。本机完成状态和手动分类会保留。
+        </p>
+        <button
+          type="button"
+          class="button button-secondary"
+          id="pauseAccountButton"
+        >
+          暂停同步
+        </button>
+        <button
+          type="button"
+          class="button button-primary"
+          id="reconnectAccountButton"
+        >
+          重新授权此邮箱
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="categoryDialog" aria-labelledby="categoryDialogTitle">
+      <form method="dialog" class="dialog-card" id="categoryForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">本机分类</p>
+            <h2 id="categoryDialogTitle">更改分类</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-close-dialog
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <label class="field-label" for="categorySelect">选择分类</label
+        ><select class="text-input" id="categorySelect"></select>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>
+            取消</button
+          ><button class="button button-primary" type="submit">保存分类</button>
+        </div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="app.js" defer></script>
+  </body>
+</html>

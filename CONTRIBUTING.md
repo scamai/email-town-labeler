@@ -7,6 +7,11 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## The privacy rule
 
+The local `desktop` UI intentionally displays private mail in authenticated local browser memory.
+Do not persist that content, include it in fixtures/screenshots, or print it in logs. Use synthetic
+accounts with `demo=True` for UI tests. This exception does not change CLI/log privacy rules.
+See [the workbench privacy boundary](docs/privacy.md#local-desktop-workbench).
+
 email-town-labeler exists to keep mail private. Contributors are held to the same standard as the
 code.
 

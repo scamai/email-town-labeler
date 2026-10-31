@@ -1244,6 +1244,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = _Sub(_sub)
 
+    s = sub.add_parser("desktop", help="open the local multi-account mail workbench")
+    s.add_argument("--port", type=int, default=0, help="loopback port (default: choose a free port)")
+    s.add_argument("--no-browser", action="store_true", help="serve locally without opening a browser")
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument("--background", action="store_true", help="start or reopen without an open terminal")
+    mode.add_argument("--stop", action="store_true", help="stop this local workbench")
+    from .desktop.server import run as run_desktop
+
+    s.set_defaults(fn=run_desktop)
+
     s = sub.add_parser("setup", help="guided first-time setup")
     s.add_argument("--client-secret", metavar="PATH", help="OAuth client JSON downloaded from Google Cloud")
     s.add_argument("--headless", action="store_true", help="sign in without a local browser (paste a URL)")

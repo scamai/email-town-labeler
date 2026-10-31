@@ -1,9 +1,36 @@
+English · [简体中文工作台说明](desktop-workbench.md)
+
+[Back to README](../README.md)
+
 # Privacy and threat model
+
+[Desktop workbench](#local-desktop-workbench) · [Data flows](#what-goes-where) · [Disk storage](#what-is-stored-on-disk) · [Logs](#logs-never-contain-content)
 
 email-town-labeler exists so that you can have your mail auto-labeled without handing it to a third
 party. This page states exactly what goes where, what the tool can and cannot do, and what is
 stored on disk. If the code ever disagrees with this page, that is a bug: please report it
 (see [SECURITY.md](../SECURITY.md)).
+
+## Local desktop workbench
+
+`desktop` is an explicit display surface for private mail, unlike CLI status/log output. It reads
+Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders and plaintext bodies only through
+an authenticated loopback HTTP server in the user's browser. Manual categories and completion are
+local; it does not send mail, archive, move, delete, mark read, or write provider labels.
+Classification is shared on-device; remote model endpoints are refused even if allowed by the CLI config.
+
+The process holds bounded previews in RAM (64 × at most 256 KiB); no application mail-content disk
+cache is created. Browser extensions, OS swap and screenshots are outside that guarantee.
+`workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
+`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions only.
+OAuth tokens are mode-0600 local files; IMAP passwords require an approved OS keyring backend.
+`launch.json` is a private capability link. Session authorization uses a custom bearer header and
+per-origin browser sessionStorage, never a cookie shared between localhost ports. HTTP request logging is disabled.
+Account pause retains mail access and only pauses synchronization; it is not credential revocation.
+
+The providers already hold these messages. Graph and IMAP connections extend the Gmail-only data-flow
+table below; there is still no telemetry or third-party classification service. See the
+[workbench guide](desktop-workbench.en.md) for grants, limits, startup and recovery.
 
 ## What goes where
 

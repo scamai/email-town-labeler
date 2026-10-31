@@ -1,43 +1,42 @@
-# Client workflow delivery queue
+# Unified on-device mail workbench queue
 
-The immediate product objective is visible automatic classification and faster daily handling
-inside existing mail clients. Keep classification feedback separate from task completion.
-No publication, account authorization or real-mail mutation is implied by a local code checkpoint.
+Product objective: explicitly authorized inboxes from many providers appear in one local place,
+with shared categories and fast daily handling. Completion and classification remain independent.
+The user requested implementation through a usable local app, not a sequence of proposal phases.
 
-## Implemented in source; validation recorded at delivery
+## Implemented and exercised locally
 
-- [x] Gmail visibility audit reads full label definitions and distinguishes missing/hidden/unknown.
-- [x] Explicit visibility repair with dry-run, preserving messages and unrelated labels.
-- [x] Daily live inbox views plus offline query generation; old backlog and unclassified mail retained.
-- [x] Calendar-day timezone boundaries, bounded counts and message-vs-thread caveats.
-- [x] Named background services with per-account homes; original service behavior preserved.
+- [x] Existing-client Gmail label visibility audit/repair and daily inbox queries.
+- [x] Independent named per-account labeling services; default service preserved.
+- [x] Authenticated loopback workbench, multi-account registry, Gmail/Graph/TLS IMAP readers.
+- [x] One local classifier shared across workbench accounts; no cross-account contact inference.
+- [x] Unified inbox, account/category/date/completion filters, subject/sender search, plaintext preview.
+- [x] Account-scoped local completion and manual categories, batch actions, atomic stale-safe undo.
+- [x] Explicit enrollment, per-account health, pause/resume and identity-checked reauthorization.
+- [x] System-vault IMAP passwords, private OAuth files, no mail-content disk cache.
+- [x] Start/reopen/stop background process and a reproducible macOS double-click launcher.
+- [x] Synthetic two-account browser checks in four widths and both themes; real HTTP and persisted-state checks.
+- [x] Existing authorized Gmail read-only runtime: 100 inbox messages loaded, ready, no model error.
 
-## Next acceptance work
+## Real-account acceptance still requires those accounts' authorization
 
-- [ ] Dedicated test-account round trip in Gmail, Outlook for Mac and Apple Mail: classify → client
-  correction → server label state → learning feedback. Do not use an arbitrary user's real message
-  as test material. Read-only visibility has been verified; writes have not.
-- [ ] Adopt a completion convention and test it independently of class labels. No `done` label or
-  completion database is designed or shipped yet; never use class removal as a completion shortcut.
-- [ ] Exercise two authorized accounts on the real OS scheduler, including stopping one while the
-  other continues, OAuth expiry and reconnect. Separate names alone are not an account manager.
-- [ ] User trial of fixed folder/search entries: record daily handling steps and missed important
-  mail before deciding whether a unified workbench is necessary.
+- [ ] Connect the user's remaining Gmail / Microsoft / IMAP accounts through the workbench.
+  No client credential extraction; each grant must be completed by the mailbox owner.
+- [ ] Verify two real accounts simultaneously, new-mail arrival, token expiry and reauthorization;
+  synthetic adapter tests do not prove real provider/tenant behavior.
+- [ ] Verify IMAP OS vault enrollment on the user's chosen provider and Microsoft tenant device flow.
+- [ ] Dedicated test-mailbox round trip: classify → correction in Gmail / Outlook / Apple Mail →
+  server label state → existing CLI learning. Read-only native visibility was checked; mutation was not.
 
-## Follow-on implementation units
+## Remaining product work
 
-- [ ] Account management: inventory of explicitly enrolled homes, private credentials, per-account
-  health, validated service identity; first-run and account removal must not touch other accounts.
-- [ ] Shared model resources: measure simultaneous workers and design safe sharing before promising
-  one model in memory across accounts. Avoid weakening account/data separation.
-- [ ] Microsoft Graph: independently authorized test mailbox; account-bound message identity,
-  category mapping, incremental sync, retry/re-auth and correction feedback; validate Outlook and
-  Apple Mail separately. Existing Gmail-in-Outlook support does not satisfy this item.
-- [ ] Lightweight management UI: account setup, status, pause/recovery and client entry guidance;
-  no email body cache or send/archive operations without an explicit product decision.
-- [ ] Quality: consented per-account and Chinese-language evaluation; report recall/false positives
-  separately from label parity. Historical one-mailbox model results are not a new-user benchmark.
-- [ ] Distribution: release version, OAuth verification strategy, signing/notarization, updates,
-  rollback and uninstall. Current changes are not a signed/publicly released desktop application.
+- [ ] Unified local corrections → optional provider write-back and consented learning; separate from completion.
+- [ ] Archive/sent/custom-folder scope, incremental Graph/IMAP sync, and broader history beyond the bounded inbox window.
+- [ ] Account disconnect/revocation/removal policy, without erasing other accounts or silently discarding workflow state.
+- [ ] Multi-account resource measurements and consented Chinese-language quality evaluation; historical one-mailbox
+  model results do not prove new-user recall or false-positive rates.
+- [ ] Public distribution: OAuth verification/public client strategy, signed/notarized package, update/rollback/uninstall.
+  The local launcher is not a public release or a complete replacement for an email client.
 
-Usage and acceptance protocol: [docs/client-workflow.md](docs/client-workflow.md).
+Usage: [本机工作台](docs/desktop-workbench.md) · [English guide](docs/desktop-workbench.en.md).
+Existing-client acceptance protocol: [client workflow](docs/client-workflow.md).
