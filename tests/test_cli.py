@@ -398,6 +398,23 @@ def test_service_commands(app):
     assert rc == 0
 
 
+def test_named_service_cli_targets_the_same_instance_for_status_and_doctor(app, capsys):
+    assert app.call("service", "install", "--name", "work")[0] == 0
+    assert app.run.calls[-1][-1] == "email-town-labeler-work.service"
+    assert app.call("service", "status", "--name", "work")[0] == 0
+    assert app.run.calls[-1][-1] == "email-town-labeler-work.service"
+    app.call("status", "--service-name", "work")
+    assert app.run.calls[-1][-1] == "email-town-labeler-work.service"
+    app.call("doctor", "--service-name", "work")
+    assert app.run.calls[-1][-1] == "email-town-labeler-work.service"
+    assert app.call("service", "uninstall", "--name", "work")[0] == 0
+    assert any("email-town-labeler-work.service" in cmd and "disable" in cmd for cmd in app.run.calls)
+    before = len(app.run.calls)
+    assert app.call("service", "install", "--name", "../bad")[0] == 1
+    assert len(app.run.calls) == before
+    assert "service instance" in capsys.readouterr().err
+
+
 def test_errors_exit_1(app, capsys):
     rc, _ = app.call("once")
     assert rc == 1 and "not logged in" in capsys.readouterr().err
@@ -837,3 +854,19 @@ def test_status_policy_shows_learned_thresholds(app, monkeypatch):
     assert json.loads(out)["policy"]["promotional_threshold"] == {"value": 0.9, "source": "learned"}
     _rc, out = app.call("status")
     assert "promotional_threshold 0.9 (learned)" in out
+
+
+def test_invalid_service_name_does_not_start_setup_or_touch_default(app, capsys):
+    assert app.call("setup", "--yes", "--install-service", "--service-name", "bad/name")[0] == 1
+    assert not app.paths.config_file.exists() and app.run.calls == []
+    assert app.call("service", "install", "--name", "")[0] == 1
+    assert app.run.calls == []
+    assert "service instance" in capsys.readouterr().err
+
+
+def test_relative_account_home_is_absolute_in_service_argv(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    paths = Paths.default("accounts/work")
+    target = cli.service_target(paths)
+    assert target.inbox_home == str(tmp_path / "accounts/work")
+    assert target.logs_dir.is_absolute()

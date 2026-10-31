@@ -347,3 +347,32 @@ def test_contacts_policy_and_new_sender(box, tmp_path, caplog):
     logs = caplog.text.lower()
     leaks = sorted({s for s in box.secrets if s.lower() in logs})
     assert not leaks, f"mail content or addresses in logs: {leaks[:5]}"
+
+
+def test_client_workflow_reads_server_state_without_teaching_completion(box, tmp_path):
+    """Synthetic client actions cross Gmail history -> learning and daily-search boundaries."""
+    from email_town_labeler.workflow import daily_plan, inspect_inbox, show_labels
+
+    eng, store = box.engine(tmp_path / "workflow.sqlite")
+    eng.sync_once()
+    first = box.mk("action", 901)
+    assert eng.sync_once()["labeled"] == 1
+    plan = daily_plan(box.cfg)
+    count = lambda: inspect_inbox(eng.client, plan, view="action", limit=10)["views"][0]["count"]
+    assert count() == 1
+    # Visibility repair is label metadata, not a user correction to any message.
+    assert show_labels(eng.client, box.cfg, dry_run=False)["ok"]
+    assert eng.sync_once()["feedback"] == 0
+    # A client's classification change reaches Gmail history and one learning correction.
+    box.g.user_relabel(first, add=["e/orders"], remove=["e/action needed"])
+    assert count() == 0  # live Gmail state, even before the engine ingests the correction
+    assert eng.sync_once()["feedback"] == 1
+    assert store.decision(first)["current"] == "orders"
+    second = box.mk("action", 902)
+    eng.sync_once()
+    assert count() == 1
+    # A synthetic user (not the tool) archives it; completion does not remove the class label.
+    box.g.user_relabel(second, remove=["INBOX"])
+    assert count() == 0
+    assert eng.sync_once()["feedback"] == 0
+    assert box.our_labels_on(second) == ["e/action needed"]

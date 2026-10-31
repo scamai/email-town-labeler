@@ -691,6 +691,9 @@ class FakeGmail:
             lb["name"] = name
         if "color" in body:
             lb["color"] = dict(body["color"])
+        for key in ("labelListVisibility", "messageListVisibility"):
+            if key in body:
+                lb[key] = body[key]
         return lb
 
     def _list_history(

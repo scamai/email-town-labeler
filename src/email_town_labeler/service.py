@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -16,6 +17,7 @@ LAUNCHD_LABEL = "io.github.email-town-labeler"
 SYSTEMD_UNIT = "email-town-labeler.service"
 WINDOWS_TASK = "email-town-labeler"
 PLATFORMS = ("macos", "linux", "windows")
+_INSTANCE_RE = re.compile(r"[a-z][a-z0-9-]{0,39}\Z")
 
 Runner = Callable[..., Any]  # subprocess.run-compatible
 
@@ -47,6 +49,15 @@ class Target:
     uid: int = 0
     xdg_config_home: Path | None = None
     inbox_home: str | None = None  # EMAIL_TOWN_LABELER_HOME to bake into the service
+    instance: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.instance is not None and (
+            not isinstance(self.instance, str) or not _INSTANCE_RE.fullmatch(self.instance)
+        ):
+            raise ValueError(
+                "service instance must be 1-40 ASCII lowercase letters, digits, or hyphens, starting with a letter"
+            )
 
     @property
     def argv(self) -> list[str]:
@@ -78,7 +89,13 @@ def resolve_program(
     return [str(script)] if exists(script) else [str(exe), "-m", "email_town_labeler"]
 
 
-def default_target(logs_dir: Path, *, platform: str | None = None, inbox_home: str | None = None) -> Target:
+def default_target(
+    logs_dir: Path,
+    *,
+    platform: str | None = None,
+    inbox_home: str | None = None,
+    instance: str | None = None,
+) -> Target:
     plat = platform or detect_platform()
     xdg = os.environ.get("XDG_CONFIG_HOME")
     return Target(
@@ -89,22 +106,41 @@ def default_target(logs_dir: Path, *, platform: str | None = None, inbox_home: s
         uid=os.getuid() if hasattr(os, "getuid") else 0,
         xdg_config_home=Path(xdg) if xdg else None,
         inbox_home=inbox_home,
+        instance=instance,
     )
 
 
 # -- file locations -------------------------------------------------------------------------------
+def _identity(base: str, t: Target, *, service_suffix: bool = False) -> str:
+    stem = base.removesuffix(".service") if service_suffix else base
+    value = f"{stem}-{t.instance}" if t.instance else stem
+    return f"{value}.service" if service_suffix else value
+
+
+def _launchd_label(t: Target) -> str:
+    return _identity(LAUNCHD_LABEL, t)
+
+
+def _systemd_unit(t: Target) -> str:
+    return _identity(SYSTEMD_UNIT, t, service_suffix=True)
+
+
+def _windows_task(t: Target) -> str:
+    return _identity(WINDOWS_TASK, t)
+
+
 def service_file(t: Target) -> Path | None:
     if t.platform == "macos":
-        return t.user_home / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+        return t.user_home / "Library" / "LaunchAgents" / f"{_launchd_label(t)}.plist"
     if t.platform == "linux":
-        return (t.xdg_config_home or t.user_home / ".config") / "systemd" / "user" / SYSTEMD_UNIT
+        return (t.xdg_config_home or t.user_home / ".config") / "systemd" / "user" / _systemd_unit(t)
     return None  # Task Scheduler keeps its own store
 
 
 # -- generators (pure) ----------------------------------------------------------------------------
 def launchd_plist(t: Target) -> str:
     d = {
-        "Label": LAUNCHD_LABEL,
+        "Label": _launchd_label(t),
         "ProgramArguments": t.argv,
         "RunAtLoad": True,
         "KeepAlive": {"SuccessfulExit": False},  # restart on crash, not after a clean stop
@@ -152,6 +188,7 @@ def windows_command_line(t: Target) -> str:
 
 def plan_install(t: Target) -> Plan:
     f = service_file(t)
+    label, unit, task = _launchd_label(t), _systemd_unit(t), _windows_task(t)
     if t.platform == "macos":
         assert f is not None
         dom = f"gui/{t.uid}"
@@ -160,10 +197,10 @@ def plan_install(t: Target) -> Plan:
             "install",
             files={f: launchd_plist(t)},
             commands=[
-                Cmd(["launchctl", "bootout", f"{dom}/{LAUNCHD_LABEL}"], may_fail=True),
+                Cmd(["launchctl", "bootout", f"{dom}/{label}"], may_fail=True),
                 Cmd(["launchctl", "bootstrap", dom, str(f)]),
             ],
-            notes=[f"LaunchAgent {LAUNCHD_LABEL} starts at login; logs in {t.logs_dir}"],
+            notes=[f"LaunchAgent {label} starts at login; logs in {t.logs_dir}"],
         )
     if t.platform == "linux":
         assert f is not None
@@ -173,11 +210,11 @@ def plan_install(t: Target) -> Plan:
             files={f: systemd_unit(t)},
             commands=[
                 Cmd(["systemctl", "--user", "daemon-reload"]),
-                Cmd(["systemctl", "--user", "enable", "--now", SYSTEMD_UNIT]),
+                Cmd(["systemctl", "--user", "enable", "--now", unit]),
             ],
             notes=[
                 "to keep it running while logged out: loginctl enable-linger $USER",
-                f"logs: journalctl --user -u {SYSTEMD_UNIT} (and {t.logs_dir})",
+                f"logs: journalctl --user -u {unit} (and {t.logs_dir})",
             ],
         )
     if t.platform == "windows":
@@ -193,14 +230,14 @@ def plan_install(t: Target) -> Plan:
                         "/SC",
                         "ONLOGON",
                         "/TN",
-                        WINDOWS_TASK,
+                        task,
                         "/TR",
                         windows_command_line(t),
                         "/RL",
                         "LIMITED",
                     ]
                 ),
-                Cmd(["schtasks", "/Run", "/TN", WINDOWS_TASK], may_fail=True),
+                Cmd(["schtasks", "/Run", "/TN", task], may_fail=True),
             ],
             notes=[
                 (
@@ -215,13 +252,14 @@ def plan_install(t: Target) -> Plan:
 
 def plan_uninstall(t: Target) -> Plan:
     f = service_file(t)
+    label, unit, task = _launchd_label(t), _systemd_unit(t), _windows_task(t)
     if t.platform == "macos":
         assert f is not None
         return Plan(
             "macos",
             "uninstall",
             remove=[f],
-            commands=[Cmd(["launchctl", "bootout", f"gui/{t.uid}/{LAUNCHD_LABEL}"], may_fail=True)],
+            commands=[Cmd(["launchctl", "bootout", f"gui/{t.uid}/{label}"], may_fail=True)],
         )
     if t.platform == "linux":
         assert f is not None
@@ -230,7 +268,7 @@ def plan_uninstall(t: Target) -> Plan:
             "uninstall",
             remove=[f],
             commands=[
-                Cmd(["systemctl", "--user", "disable", "--now", SYSTEMD_UNIT], may_fail=True),
+                Cmd(["systemctl", "--user", "disable", "--now", unit], may_fail=True),
                 Cmd(["systemctl", "--user", "daemon-reload"], may_fail=True),
             ],
         )
@@ -239,18 +277,19 @@ def plan_uninstall(t: Target) -> Plan:
             "windows",
             "uninstall",
             commands=[
-                Cmd(["schtasks", "/End", "/TN", WINDOWS_TASK], may_fail=True),
-                Cmd(["schtasks", "/Delete", "/TN", WINDOWS_TASK, "/F"]),
+                Cmd(["schtasks", "/End", "/TN", task], may_fail=True),
+                Cmd(["schtasks", "/Delete", "/TN", task, "/F"]),
             ],
         )
     raise ValueError(f"unknown platform {t.platform!r}")
 
 
 def status_command(t: Target) -> list[str]:
+    label, unit, task = _launchd_label(t), _systemd_unit(t), _windows_task(t)
     return {
-        "macos": ["launchctl", "print", f"gui/{t.uid}/{LAUNCHD_LABEL}"],
-        "linux": ["systemctl", "--user", "is-active", SYSTEMD_UNIT],
-        "windows": ["schtasks", "/Query", "/TN", WINDOWS_TASK, "/FO", "LIST", "/V"],
+        "macos": ["launchctl", "print", f"gui/{t.uid}/{label}"],
+        "linux": ["systemctl", "--user", "is-active", unit],
+        "windows": ["schtasks", "/Query", "/TN", task, "/FO", "LIST", "/V"],
     }[t.platform]
 
 

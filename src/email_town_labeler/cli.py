@@ -23,7 +23,7 @@ from typing import Any
 
 from . import __version__
 from .config import Config, ConfigError, Paths, load_config, save_config
-from .taxonomy import CONTENT_LABELS, LABEL_CLASSES, NEW_SENDER, UNKNOWN
+from .taxonomy import LABEL_CLASSES, NEW_SENDER, UNKNOWN
 
 DOCS_GCP = "docs/google-cloud-setup.md"
 DOCS_URL = f"https://github.com/scamai/email-town-labeler/blob/main/{DOCS_GCP}"
@@ -97,7 +97,9 @@ def service_target(paths: Paths) -> Any:
     single = (
         paths.config_dir == home / "config" and paths.data_dir == home / "data"
     )  # --home / EMAIL_TOWN_LABELER_HOME
-    return service.default_target(paths.logs_dir, inbox_home=str(home) if single else None)
+    return service.default_target(
+        paths.logs_dir.absolute(), inbox_home=str(home.absolute()) if single else None
+    )
 
 
 def service_runner() -> Callable[..., Any]:
@@ -138,6 +140,16 @@ class Ctx:
             return True
         ans = self.ask(f"{prompt} ({'Y/n' if default else 'y/N'})").lower()
         return default if not ans else ans in ("y", "yes")
+
+    def service(self) -> Any:
+        target = service_target(self.paths)
+        name = getattr(self.args, "name", None)
+        if name is None:
+            name = getattr(self.args, "service_name", None)
+        try:
+            return replace(target, instance=name) if name is not None else target
+        except ValueError as e:
+            raise CLIError(str(e)) from e
 
     def engine(self, *, dry_run: bool | None = None, with_model: bool = True, service: bool = False) -> Any:
         from .engine import Engine
@@ -205,11 +217,9 @@ def _counts_line(c: dict) -> str:
 
 def wanted_labels(cfg: Config) -> list[str]:
     """The classes whose Gmail labels setup creates and doctor expects."""
-    return (
-        CONTENT_LABELS
-        + ([UNKNOWN] if cfg.unknown_action == "label" else [])
-        + ([NEW_SENDER] if cfg.new_sender else [])
-    )
+    from .workflow import expected_classes
+
+    return expected_classes(cfg)
 
 
 def _default_model(ctx: Ctx) -> str:
@@ -470,7 +480,7 @@ def cmd_setup(ctx: Ctx) -> int:
     ):
         from . import service
 
-        ok = service.install(service_target(p), run=service_runner(), echo=lambda s: ctx.out("  " + s))
+        ok = service.install(ctx.service(), run=service_runner(), echo=lambda s: ctx.out("  " + s))
         ctx.out(f"  {OK if ok else BAD} service {'installed' if ok else 'not installed'}")
     else:
         ctx.out(
@@ -592,7 +602,7 @@ def status_info(ctx: Ctx) -> dict:
     try:
         from . import service
 
-        svc = service.status(service_target(p), run=service_runner())
+        svc = service.status(ctx.service(), run=service_runner())
     except Exception as e:  # noqa: BLE001 - status must never crash on the service probe
         svc = {"state": f"unknown ({type(e).__name__})", "installed": False, "running": False}
     now = time.time()
@@ -798,7 +808,7 @@ def cmd_doctor(ctx: Ctx) -> int:
     try:
         from . import service
 
-        ctx.out(f"  {'service':<16} {service.status(service_target(p), run=service_runner())['state']}")
+        ctx.out(f"  {'service':<16} {service.status(ctx.service(), run=service_runner())['state']}")
     except Exception as e:  # noqa: BLE001 - informational only
         log.debug("service status failed: %s", type(e).__name__)
     bad = [n for n, ok, _ in results if ok is False]
@@ -1102,7 +1112,7 @@ def cmd_contacts(ctx: Ctx) -> int:
 def cmd_service(ctx: Ctx) -> int:
     from . import service
 
-    t = service_target(ctx.paths)
+    t = ctx.service()
     run, echo = service_runner(), ctx.out
     if ctx.args.service_cmd == "install":
         ctx.paths.ensure()
@@ -1119,6 +1129,53 @@ def cmd_service(ctx: Ctx) -> int:
         return 0 if ok else 1
     st = service.status(t, run=run)
     ctx.out(json.dumps(st, sort_keys=True) if ctx.args.json else f"{st['platform']}: {st['state']}")
+    return 0
+
+
+def cmd_label_visibility(ctx: Ctx) -> int:
+    from .workflow import audit_labels, show_labels
+
+    client = make_client(ctx.paths)
+    if ctx.args.labels_cmd == "show":
+        report = show_labels(client, ctx.cfg, dry_run=ctx.args.dry_run or ctx.cfg.dry_run)
+    else:
+        report = audit_labels(client, ctx.cfg)
+    if ctx.args.json:
+        ctx.out(json.dumps(report, sort_keys=True))
+    else:
+        ctx.out(report["scope"])
+        for row in report["labels"]:
+            ctx.out(f"  {row['state']:<14} {row['name']}")
+        if "planned" in report:
+            ctx.out(f"  {'would change' if report['dry_run'] else 'changed'}: {report['planned']}")
+        if not report["ok"]:
+            ctx.out(
+                "Review `labels show --dry-run`; `labels show` creates missing labels and makes them visible."
+            )
+    return 0 if report["ok"] or report.get("dry_run") else 1
+
+
+def cmd_triage(ctx: Ctx) -> int:
+    from .workflow import daily_plan, inspect_inbox
+
+    if not 1 <= ctx.args.limit <= 1000:
+        raise CLIError("triage --limit must be between 1 and 1000")
+    plan = daily_plan(ctx.cfg, day=ctx.args.date, timezone=ctx.args.timezone)
+    if ctx.args.plan:
+        report = plan
+        if ctx.args.view:
+            report = {**plan, "views": [v for v in plan["views"] if v["key"] == ctx.args.view]}
+    else:
+        report = inspect_inbox(make_client(ctx.paths), plan, view=ctx.args.view, limit=ctx.args.limit)
+    if ctx.args.json:
+        ctx.out(json.dumps(report, sort_keys=True))
+    else:
+        ctx.out(f"Inbox views for {report['date']} ({report['timezone']})")
+        for row in report["views"]:
+            count = f" — {row['count']}{'+' if row['truncated'] else ''} messages" if "count" in row else ""
+            ctx.out(f"  {row['key']}: {row['title']}{count}\n    {row['query']}")
+        for note in report["notes"]:
+            ctx.out(f"  Note: {note}")
     return 0
 
 
@@ -1197,6 +1254,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     s.add_argument("--yes", "-y", action="store_true", help="accept defaults, ask nothing")
     s.add_argument("--install-service", action="store_true", help="also install the background service")
+    s.add_argument("--service-name", help="independent service name when installing during setup")
     s.set_defaults(fn=cmd_setup)
 
     s = sub.add_parser("login", help="sign in to Gmail (stores a token)")
@@ -1221,6 +1279,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("status", help="account, model, last poll, counts, service state")
     s.add_argument("--json", action="store_true", help="machine-readable; exit 1 when unhealthy")
+    s.add_argument("--service-name", help="probe this named service instead of the default service")
     s.add_argument(
         "--redact", action="store_true", help="mask your email address and home paths (for issues)"
     )
@@ -1237,6 +1296,24 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("prefix", help="the new prefix, for example e")
     r.add_argument("--dry-run", action="store_true", help="only count")
     s.set_defaults(fn=cmd_labels, single_instance=True)
+    r = ls.add_parser("check", help="read Gmail label visibility without changing mail or loading a model")
+    r.add_argument("--json", action="store_true")
+    r.set_defaults(fn=cmd_label_visibility, single_instance=False)
+    r = ls.add_parser("show", help="create missing class labels and show them in Gmail (explicit repair)")
+    r.add_argument("--dry-run", action="store_true", help="only report the planned visibility changes")
+    r.add_argument("--json", action="store_true")
+    r.set_defaults(fn=cmd_label_visibility)
+
+    s = sub.add_parser(
+        "triage", help="daily Gmail inbox searches and bounded live counts, without reading mail"
+    )
+    s.add_argument("--plan", action="store_true", help="print searches offline without contacting Gmail")
+    s.add_argument("--view", choices=("action", "today", "backlog", "new-sender", "unclassified"))
+    s.add_argument("--date", metavar="YYYY-MM-DD", help="calendar date (default: today in selected timezone)")
+    s.add_argument("--timezone", metavar="IANA", help="e.g. America/Los_Angeles (default: system local time)")
+    s.add_argument("--limit", type=int, default=100, help="maximum count per view, 1–1000 (default: 100)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_triage)
 
     s = sub.add_parser("model", help="list, pull or inspect models")
     ms = _Sub(s.add_subparsers(dest="model_cmd", metavar="ACTION", required=True))
@@ -1283,12 +1360,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("service", help="background service at login (launchd/systemd/Task Scheduler)")
     ss = _Sub(s.add_subparsers(dest="service_cmd", metavar="ACTION", required=True))
-    ss.add_parser("install")
-    ss.add_parser("uninstall")
-    ss.add_parser("status").add_argument("--json", action="store_true")
+    for action in ("install", "uninstall", "status"):
+        r = ss.add_parser(action)
+        r.add_argument(
+            "--name", help="independent service instance; use the same name for its whole lifecycle"
+        )
+        if action == "status":
+            r.add_argument("--json", action="store_true")
     s.set_defaults(fn=cmd_service)
 
     s = sub.add_parser("doctor", help="check config, token, Gmail, model and labels")
+    s.add_argument("--service-name", help="probe this named service instead of the default service")
     s.add_argument(
         "--redact", action="store_true", help="mask your email address and home paths (for issues)"
     )
@@ -1333,7 +1415,10 @@ def main(
     if args.fn is not cmd_run:
         setup_logging(args.verbose)
     try:
-        if getattr(args, "single_instance", False):  # run/once/backfill/undo/labels: one per data dir
+        if getattr(args, "name", None) is not None or getattr(args, "service_name", None) is not None:
+            ctx.service()  # reject invalid names before setup/install can write anything
+        readonly_labels = getattr(args, "labels_cmd", None) == "show" and (args.dry_run or ctx.cfg.dry_run)
+        if getattr(args, "single_instance", False) and not readonly_labels:
             from .lock import InstanceLock
 
             with InstanceLock(ctx.paths.data_dir):

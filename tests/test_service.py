@@ -160,6 +160,54 @@ def test_linux_without_systemd_prints_instructions(tmp_path):
     assert not service.service_file(t).exists()
 
 
+def test_named_targets_are_independent_across_lifecycle(tmp_path):
+    work = target("linux", tmp_path, instance="work", inbox_home="/accounts/work")
+    personal = target("linux", tmp_path, instance="personal", inbox_home="/accounts/personal")
+
+    work_install = service.plan_install(work)
+    personal_install = service.plan_install(personal)
+    assert list(work_install.files) == [
+        tmp_path / "home/.config/systemd/user/email-town-labeler-work.service"
+    ]
+    assert list(personal_install.files) == [
+        tmp_path / "home/.config/systemd/user/email-town-labeler-personal.service"
+    ]
+    assert work_install.files != personal_install.files
+    assert "--home /accounts/work" in next(iter(work_install.files.values()))
+    assert "--home /accounts/personal" in next(iter(personal_install.files.values()))
+    assert work_install.commands[-1].args[-1] == "email-town-labeler-work.service"
+    assert personal_install.commands[-1].args[-1] == "email-town-labeler-personal.service"
+    assert service.status_command(work)[-1] == "email-town-labeler-work.service"
+    assert service.status_command(personal)[-1] == "email-town-labeler-personal.service"
+
+    work_run, personal_run = FakeRun(), FakeRun()
+    assert service.install(work, run=work_run, echo=lambda _: None)
+    assert service.install(personal, run=personal_run, echo=lambda _: None)
+    assert service.uninstall(work, run=FakeRun(), echo=lambda _: None)
+    assert service.service_file(work) is not None and not service.service_file(work).exists()
+    assert service.service_file(personal) is not None and service.service_file(personal).exists()
+    assert service.uninstall(personal, run=FakeRun(), echo=lambda _: None)
+
+
+@pytest.mark.parametrize("platform", ["macos", "linux", "windows"])
+def test_named_identity_is_used_by_all_platform_commands(tmp_path, platform):
+    t = target(platform, tmp_path, instance="work")
+    install = service.plan_install(t)
+    uninstall = service.plan_uninstall(t)
+    status = service.status_command(t)
+    commands = [c.args for c in install.commands + uninstall.commands] + [status]
+    targeted = [command for command in commands if "daemon-reload" not in command]
+    assert all(any("-work" in arg for arg in command) for command in targeted)
+    if platform == "macos":
+        assert plistlib.loads(next(iter(install.files.values())).encode())["Label"].endswith("-work")
+
+
+@pytest.mark.parametrize("instance", ["", "Work", "1work", "work_1", "a" * 41, "é"])
+def test_invalid_instance_is_rejected_before_planning(instance, tmp_path):
+    with pytest.raises(ValueError):
+        target("linux", tmp_path, instance=instance)
+
+
 def test_apply_stops_on_required_failure(tmp_path):
     t = target("macos", tmp_path)
     lines: list[str] = []

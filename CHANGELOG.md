@@ -9,6 +9,20 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- Client workflow tools: `labels check [--json]` audits Gmail visibility; explicit
+  `labels show [--dry-run]` creates missing configured labels and makes them visible without
+  changing messages or unrelated labels. Dry-run/check can run alongside the engine; actual
+  repair takes the account lock. No automatic visibility override at startup.
+- `triage [--plan] [--view action|today|backlog|new-sender|unclassified] [--date YYYY-MM-DD]
+  [--timezone IANA] [--limit N] [--json]`: offline Gmail queries or bounded live message counts,
+  retaining old backlog and unclassified mail. Uses local calendar boundaries, including DST;
+  no message content, state database or model needed. Counts are not task-completion state.
+- Optional independent background service names: `service install|status|uninstall --name NAME`,
+  `setup --install-service --service-name NAME`, and `status|doctor --service-name NAME`.
+  Pair each name with its own `--home`; unnamed service identities remain unchanged. Relative
+  account homes/log paths are made absolute when generating services. See
+  [daily client workflows](docs/client-workflow.md) for migration and validation boundaries.
+
 - `email-town-labeler labels rename-prefix NEW [--dry-run]` renames the parent label and every
   label under `label_prefix` in place (Gmail `labels.patch`, same ids), so messages keep their
   labels and recorded decisions and corrections stay valid, then writes the new `label_prefix`.

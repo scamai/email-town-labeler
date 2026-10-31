@@ -321,3 +321,32 @@ Exit codes: 0 ok, 1 error, 2 usage.
   nothing outside the prefix touched, and no mail content in logs.
 - ML backends: tests skip cleanly when extras are missing; a tiny randomly-initialised head tests
   the numpy path.
+
+
+## Client workflow contracts
+
+`workflow.py` is independent of the classifier and local state store:
+
+- `audit_labels(client, cfg)` lists labels, then gets full resources for the parent and expected
+  class labels; missing, hidden, conditional, unknown and concurrently renamed labels are not
+  visibility passes. `labels check` exits 1 on an incomplete audit or API error.
+- `show_labels(client, cfg, dry_run=...)` is explicit opt-in. It creates only missing configured
+  class labels/parent and patches only their two visibility fields. It does not change existing
+  colors, message labels, read state or learning. Actual CLI repair holds the account lock;
+  read-only check/dry-run can run concurrently. Interrupted repairs can be rerun.
+- `daily_plan(cfg, day=..., timezone=...)` generates calendar-day search windows using epoch
+  seconds. Both midnights are resolved separately across DST; default timezone is system local.
+  Ambiguous quote/backslash/control characters in search label names cause a clear error.
+- `inspect_inbox` queries Gmail IDs only with `limit + 1`, returns capped counts plus `truncated`,
+  and emits no mail content or IDs. Views overlap, are inbox-only and are not a transactional
+  snapshot or authoritative unfinished-task counts. No completion state is added.
+- `GmailClient.get_label` reads full label definitions; `show_label` patches only Gmail web
+  visibility. Neither establishes IMAP subscription or client-side display behavior.
+- `Target.instance` is optional and validated before any service mutation. A name consistently
+  selects the launchd label/plist, systemd unit/file or Windows task across all lifecycle methods.
+  `None` preserves the original identities. Names must be unique per OS user and separate account
+  homes are still required. Setup/status/doctor accept the same target through `--service-name`;
+  no automatic account registry or model sharing is implied.
+
+CLI examples, actual-client boundaries and the synthetic-account acceptance protocol are in
+[client-workflow.md](client-workflow.md). Real-mail content must not be added to those records.
