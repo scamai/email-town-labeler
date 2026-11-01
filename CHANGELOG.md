@@ -7,6 +7,18 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop mail operations
+
+- Compose, reply, reply all and forward from a selected account, attach/download files,
+  and save private on-device drafts. Gmail and Graph use their APIs; IMAP accounts can configure TLS SMTP.
+- Explicit read/unread, star/unstar, archive, Trash and restore actions sync to the original mailboxes,
+  with bounded multi-account selections and Inbox/Sent/Archive/Trash views.
+- Durable operation receipts block duplicate requests; interrupted sends remain unconfirmed,
+  partial SMTP delivery retains the draft, and IMAP moves never use global EXPUNGE.
+- Expanded OAuth permissions require explicit reconnection for previously read-only grants.
+  Live provider send/delete acceptance requires dedicated authorized test mailboxes.
+
+
 ### Added
 
 - English-first on-device mail workbench with consistent category colors across navigation,

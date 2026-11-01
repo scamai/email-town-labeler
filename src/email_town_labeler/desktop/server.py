@@ -11,10 +11,11 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 from ..gmail.auth import _write_private
 from ..lock import InstanceLock
+from .mail import filename
 from .manager import Workbench
 from .providers import ProviderError
 
@@ -49,12 +50,16 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass  # Never put message IDs, credentials or request bodies in HTTP logs.
 
-    def _response(self, status, body, *, content_type="application/json; charset=utf-8"):
+    def _response(self, status, body, *, content_type="application/json; charset=utf-8", download=None):
         if isinstance(body, dict):
             body = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if download:
+            self.send_header(
+                "Content-Disposition", "attachment; filename*=UTF-8''" + quote(download, safe="")
+            )
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
@@ -98,6 +103,7 @@ class Handler(BaseHTTPRequestHandler):
         assets = {
             "/": ("index.html", "text/html; charset=utf-8"),
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+            "/mail.js": ("mail.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
             "/logo.svg": ("logo.svg", "image/svg+xml"),
         }
@@ -122,6 +128,26 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if parsed.path == "/api/state":
                 self._response(200, self.server.manager.snapshot())
+            elif parsed.path == "/api/mail-job":
+                self._response(
+                    200, self.server.manager.mail_store.receipt(parse_qs(parsed.query).get("id", [""])[0])
+                )
+            elif parsed.path == "/api/drafts":
+                self._response(200, self.server.manager.mail_store.drafts())
+            elif parsed.path == "/api/draft":
+                self._response(
+                    200, self.server.manager.mail_store.draft(parse_qs(parsed.query).get("id", [""])[0])
+                )
+            elif parsed.path == "/api/attachment":
+                params = parse_qs(parsed.query)
+                meta, raw = self.server.manager.attachment(
+                    params.get("id", [""])[0], params.get("attachment_id", [""])[0]
+                )
+                try:
+                    name = filename(meta.get("name", "attachment"))
+                except ValueError:
+                    name = "attachment"
+                self._response(200, raw, content_type="application/octet-stream", download=name)
             elif parsed.path == "/api/message":
                 key = parse_qs(parsed.query).get("id", [""])[0]
                 self._response(200, self.server.manager.detail(key))
@@ -147,7 +173,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "-1"))
         except ValueError:
             length = -1
-        if not 0 <= length <= MAX_BODY:
+        max_body = 29 * 1024 * 1024 if path in ("/api/send", "/api/draft") else MAX_BODY
+        if not 0 <= length <= max_body:
             self._response(413, {"error": "Request is too large or invalid"})
             return
         try:
@@ -175,6 +202,17 @@ class Handler(BaseHTTPRequestHandler):
             if path in ("/api/refresh", "/api/load-more"):
                 manager.refresh(more=path == "/api/load-more")
                 result = {"ok": True}
+            elif path == "/api/folder":
+                result = manager.change_folder(data.get("folder"))
+            elif path == "/api/mail-action":
+                result = manager.mail_action(data)
+            elif path == "/api/send":
+                result = manager.send_mail(data)
+            elif path == "/api/draft":
+                manager.accounts.get(data.get("account_id", ""))
+                result = manager.mail_store.save_draft(data)
+            elif path == "/api/draft-delete":
+                result = manager.mail_store.delete_draft(data.get("id", ""))
             elif path == "/api/action":
                 result = manager.action(data)
             elif path == "/api/undo":

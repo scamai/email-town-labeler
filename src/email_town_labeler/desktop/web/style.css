@@ -337,6 +337,62 @@ h1 {
   flex-direction: column;
   background: var(--bg);
 }
+.mail-operations {
+  min-height: 52px;
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.folder-tabs,
+.mail-operation-actions,
+.mail-selection-toolbar,
+.attachment-row,
+.preview-attachments {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.folder-tab {
+  min-height: 34px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+.folder-tab:hover,
+.folder-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.mail-selection-toolbar {
+  min-height: 48px;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-soft);
+}
+.mail-selection-toolbar .selection-count { margin-right: auto; }
+.button-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); background: var(--surface); }
+.button-danger:hover { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.danger-text { color: var(--danger); }
+#composeDialog { width: min(680px, calc(100vw - 32px)); }
+.compose-card { width: 100%; }
+.compose-grid { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 12px; }
+.compose-grid .field-label { margin: 0; }
+.compose-body { resize: vertical; min-height: 180px; }
+.attachment-row { margin-top: 16px; }
+.draft-list { display: grid; gap: 4px; margin-top: 16px; max-height: 45vh; overflow: auto; }
+.draft-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.draft-item time { color: var(--muted); font-size: 12px; }
+.preview-attachments { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.preview-attachments strong { width: 100%; font-size: 13px; }
+.preview-headers { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 4px 12px; margin: 16px 0 0; color: var(--muted); font-size: 12px; }
+.preview-headers dt { font-weight: 700; }
+.preview-headers dd { margin: 0; overflow-wrap: anywhere; }
 .pane-header {
   min-height: 86px;
   padding: 20px 24px 12px;
@@ -1053,4 +1109,22 @@ button:disabled {
   .preview-actions {
     justify-content: flex-end;
   }
+}
+
+/* Mail controls use the established surfaces and spacing. */
+.mail-operations, .preview-actions { flex-wrap: wrap; }
+.preview-header { align-items: flex-start; gap: 8px; }
+.preview-actions { min-width: 0; }
+.mail-pending-notice { padding: 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; }
+.mail-pending-notice p { margin-bottom: 8px; }
+.attachment-item { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+#attachmentSummary { min-width: 0; }
+#composeError { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .mail-operations, .mail-selection-toolbar { padding: 8px 12px; }
+  .compose-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .compose-grid .field-label { margin-top: 4px; }
+  .compose-card { padding: 16px; }
+  .draft-item { grid-template-columns: minmax(0, 1fr) auto; }
+  .draft-item time { grid-column: 1; }
 }

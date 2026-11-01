@@ -350,3 +350,32 @@ Exit codes: 0 ok, 1 error, 2 usage.
 
 CLI examples, actual-client boundaries and the synthetic-account acceptance protocol are in
 [client-workflow.md](client-workflow.md). Real-mail content must not be added to those records.
+
+
+## Explicit desktop mail operations
+
+The automatic classifier remains label-only. The desktop workbench has separate authenticated
+`/api/mail-action` and `/api/send` endpoints: selected message IDs are resolved against the
+current account-scoped list before provider access. Per-account locks serialize readers and
+writers; epochs discard a refresh started before a write or folder switch. Folder state is
+shared by tabs connected to the same local workbench.
+
+`desktop/mail.py` validates recipients, MIME headers and bounded attachments. Private
+`workbench/mail/mail.sqlite` holds explicitly saved draft content and durable request-ID
+receipts. Reserve a content digest before remote I/O; duplicate IDs with changed content are
+rejected. A restart makes unfinished receipts unknown rather than replaying them. Send accepts
+an explicit account ID; replies must use the originating account. SMTP recipient-level partial
+results preserve drafts; successful cleanup atomically compares the latest saved draft.
+
+Mailbox actions are explicit read/unread, star/unstar, archive, trash and restore. No permanent
+delete endpoint exists. IMAP uses server-advertised special-use folders and UID MOVE with
+UIDVALIDITY checks; servers without safe MOVE are rejected rather than using global EXPUNGE.
+Gmail writes use a one-shot fixed-origin HTTPS transport because httplib2 can replay POSTs
+underneath googleapiclient's outer retry limit. See the linked upstream implementation comment
+and `test_gmail_write_transport_does_not_retry_an_accepted_post_with_lost_response`.
+
+Attachment downloads are authenticated, bounded and forced as downloads; no email HTML or
+attachment bytes are executed in the workbench. Session tokens never enter browser cookies or
+attachment URLs. Drafts are local, not provider draft synchronization. Provider write capability
+is derived from granted scopes or explicit SMTP configuration; broad grants are not silently
+requested during refresh. See the desktop guide for limits and unverified provider acceptance.

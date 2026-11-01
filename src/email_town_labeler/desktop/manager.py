@@ -15,6 +15,7 @@ from ..models.worker import load_service_model
 from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
 from .accounts import Accounts, imap_settings, password_store
+from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
     MICROSOFT_TOKEN,
     ImapReader,
@@ -50,6 +51,11 @@ class Workbench:
         self.root, self.paths = root, default_paths
         self.accounts = Accounts(root, default_paths)
         self.state = LocalState(root / "workflow.sqlite")
+        self.mail_store = MailStore(root / "mail")
+        self.mail_slots = threading.BoundedSemaphore(3)
+        self.folder = "inbox"
+        self.epochs = {}
+        self.refresh_again = False
         self.reader_factory, self.model = reader_factory, classifier
         self.cfg = load_config(default_paths.config_file)
         self.lock, self.model_lock = threading.RLock(), threading.RLock()
@@ -111,13 +117,25 @@ class Workbench:
                 )
                 connection = {
                     k: a["settings"][k]
-                    for k in ("host", "port", "username", "client_id")
+                    for k in (
+                        "host",
+                        "port",
+                        "username",
+                        "client_id",
+                        "smtp_host",
+                        "smtp_port",
+                        "smtp_security",
+                    )
                     if k in a["settings"]
                 }
                 accounts.append(
                     {k: a[k] for k in ("id", "name", "provider", "enabled")}
                     | status
-                    | {"connection": connection}
+                    | {
+                        "connection": connection,
+                        "capabilities": self.account_capabilities(a["id"]),
+                        "address": getattr(self.readers.get(a["id"]), "address", ""),
+                    }
                 )
             return {
                 "accounts": accounts,
@@ -129,13 +147,17 @@ class Workbench:
                 "demo": self.demo,
                 "model_error": self.model_error,
                 "limit": self.limit,
+                "folder": self.folder,
             }
 
     def refresh(self, *, more=False):
         with self.lock:
             if more:
                 self.limit = min(1000, self.limit + 100)
-            if self.refreshing or self.stop.is_set():
+            if self.stop.is_set():
+                return
+            if self.refreshing:
+                self.refresh_again = True
                 return
             self.refreshing = True
             self.model_error = None
@@ -163,10 +185,14 @@ class Workbench:
         finally:
             with self.lock:
                 self.refreshing, self.last_refresh = False, int(time.time() * 1000)
+                again, self.refresh_again = self.refresh_again, False
+            if again and not self.stop.is_set():
+                self.refresh()
 
     def _account(self, account):
         aid = account["id"]
         with self.lock:
+            folder, epoch = self.folder, self.epochs.get(aid, 0)
             self.account_status.setdefault(aid, {"loaded": 0, "last_sync": None, "truncated": False})
             self.account_status[aid].update(status="syncing", error=None)
             reader_lock = self.reader_locks.setdefault(aid, threading.RLock())
@@ -176,7 +202,9 @@ class Workbench:
                 if reader is None:
                     reader = self.reader_factory(account)
                     self.readers[aid] = reader
-                records, truncated = reader.list(self.limit)
+                records, truncated = (
+                    reader.list(self.limit) if folder == "inbox" else reader.list(self.limit, folder=folder)
+                )
                 if getattr(reader, "identity", None):
                     try:
                         self.accounts.bind_identity(aid, reader.identity)
@@ -200,11 +228,17 @@ class Workbench:
                     "category": category,
                     "done": False,
                     "unread": "UNREAD" in rec.get("label_ids", []),
+                    "starred": "STARRED" in rec.get("label_ids", []),
                     "source": source,
                     "confidence": prediction[1] if prediction else None,
                 }
             with self.lock:
-                if not self.accounts.get(aid)["enabled"]:
+                if (
+                    not self.accounts.get(aid)["enabled"]
+                    or folder != self.folder
+                    or epoch != self.epochs.get(aid, 0)
+                ):
+                    self.refresh_again = True
                     return
                 removed = {k for k, v in self.messages.items() if v["account_id"] == aid} - incoming.keys()
                 for key in removed:
@@ -220,7 +254,12 @@ class Workbench:
                 )
             saved = self.state.read(list(incoming))
             for rec in records:
-                if self.stop.is_set() or not self.accounts.get(aid)["enabled"]:
+                if (
+                    self.stop.is_set()
+                    or not self.accounts.get(aid)["enabled"]
+                    or folder != self.folder
+                    or epoch != self.epochs.get(aid, 0)
+                ):
                     break
                 key = message_key(aid, rec["provider_id"])
                 if rec.get("category") or key in self.predictions or saved.get(key, {}).get("category"):
@@ -281,6 +320,10 @@ class Workbench:
             self.bodies[key] = {
                 "body": str(full.get("body_text") or full.get("snippet") or "(No text available)")[:262144],
                 "url": full.get("url", ""),
+                "headers": full.get("headers", {}),
+                "recipients": recipient_headers(full.get("headers", {})),
+                "attachments": full.get("attachments", []),
+                "thread_id": full.get("thread_id", ""),
             }
             self.bodies.move_to_end(key)
             while len(self.bodies) > 64:
@@ -318,6 +361,227 @@ class Workbench:
         if saved.get("category"):
             item.update(category=saved["category"], source="manual")
         return {**item, **cached}
+
+    def account_capabilities(self, aid):
+        reader = self.readers.get(aid)
+        if reader is None or not hasattr(reader, "capabilities"):
+            return {
+                "send": False,
+                "write": False,
+                "attachments": False,
+                "max_attachment_bytes": 0,
+                "reason": "Wait for the account to connect",
+            }
+        try:
+            return reader.capabilities()
+        except Exception:  # noqa: BLE001 - never expose credential data
+            return {
+                "send": False,
+                "write": False,
+                "attachments": False,
+                "max_attachment_bytes": 0,
+                "reason": "Reconnect this account",
+            }
+
+    def change_folder(self, folder):
+        if folder not in FOLDERS:
+            raise ValueError("Unknown mail folder")
+        with self.lock:
+            if folder != self.folder:
+                self.folder = folder
+                self.messages.clear()
+                self.bodies.clear()
+                for aid in self.readers:
+                    self.epochs[aid] = self.epochs.get(aid, 0) + 1
+        self.refresh()
+        return {"ok": True}
+
+    def attachment(self, key, attachment_id):
+        with self.lock:
+            item = dict(self.messages.get(key) or {})
+            if not item:
+                raise ValueError("Message is no longer in the loaded list")
+            aid = item["account_id"]
+            lock = self.reader_locks.get(aid)
+        if not lock or not lock.acquire(timeout=1):
+            raise ProviderError("Account is busy. Try again shortly")
+        try:
+            reader = self.readers.get(aid)
+            if not reader or not self.accounts.get(aid)["enabled"]:
+                raise ProviderError("Account is offline or paused")
+            return reader.attachment(item["provider_id"], attachment_id)
+        finally:
+            lock.release()
+
+    def mail_action(self, data):
+        action, ids = data.get("action"), data.get("ids")
+        if action not in MAIL_ACTIONS:
+            raise ValueError("Unknown mailbox action")
+        if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or any(not isinstance(k, str) for k in ids):
+            raise ValueError("Select 1–500 loaded messages")
+        ids = list(dict.fromkeys(ids))
+        request_id = data.get("request_id")
+        payload = {"action": action, "ids": ids}
+        # Return the durable receipt before rechecking a list which a completed action changed.
+        try:
+            self.mail_store.receipt(request_id)
+        except ValueError:
+            pass
+        else:
+            self.mail_store.reserve(request_id, payload)
+            return {"job_id": request_id}
+        with self.lock:
+            if any(k not in self.messages for k in ids):
+                raise ValueError("The list changed. Select messages again")
+            selected = [dict(self.messages[k]) for k in ids]
+            for item in selected:
+                aid = item["account_id"]
+                if not self.accounts.get(aid)["enabled"] or not self.account_capabilities(aid)["write"]:
+                    raise ValueError("A selected account is paused or needs mail-management permission")
+        return self._mail_job(
+            request_id, payload, lambda: self._mutate_messages(selected, action, request_id)
+        )
+
+    def _mail_job(self, request_id, payload, work):
+        if not self.mail_slots.acquire(blocking=False):
+            raise ValueError("Three mail operations are already running. Wait for one to finish")
+        try:
+            if not self.mail_store.reserve(request_id, payload):
+                self.mail_slots.release()
+                return {"job_id": request_id}
+        except BaseException:
+            self.mail_slots.release()
+            raise
+
+        def run():
+            try:
+                result = work()
+                self.mail_store.finish(request_id, result)
+            except Exception:  # noqa: BLE001 - a network failure may follow remote acceptance
+                self.mail_store.finish(
+                    request_id,
+                    {
+                        "status": "unknown",
+                        "succeeded": [],
+                        "failed": [],
+                        "message": "Could not confirm the result. Check Sent or the original mailbox before trying a new request.",
+                    },
+                )
+            finally:
+                self.mail_slots.release()
+                self.refresh()
+
+        threading.Thread(target=run, name="workbench-mail-operation", daemon=True).start()
+        return {"job_id": request_id}
+
+    def _mutate_messages(self, selected, action, request_id):
+        result = {"status": "pending", "succeeded": [], "failed": [], "message": "Working…"}
+        for item in selected:
+            aid, key = item["account_id"], item["id"]
+            try:
+                with self.reader_locks[aid]:
+                    reader = self.readers.get(aid)
+                    if not reader or not self.accounts.get(aid)["enabled"]:
+                        raise ProviderError("Account is offline or paused")
+                    reader.mutate(item["provider_id"], action)
+                    with self.lock:
+                        self.epochs[aid] = self.epochs.get(aid, 0) + 1
+                        self.bodies.pop(key, None)
+                        if action in ("trash", "archive", "restore"):
+                            self.messages.pop(key, None)
+                        elif key in self.messages:
+                            field = "unread" if action in ("read", "unread") else "starred"
+                            self.messages[key][field] = action in ("unread", "star")
+                result["succeeded"].append(key)
+            except Exception as exc:  # noqa: BLE001 - preserve successes across independent accounts
+                result["failed"].append(
+                    {
+                        "id": key,
+                        "error": safe_error(exc)
+                        if isinstance(exc, ProviderError)
+                        else "Result not confirmed. Refresh the original mailbox before retrying.",
+                    }
+                )
+            self.mail_store.finish(request_id, result)
+        result["status"] = (
+            "partial"
+            if result["failed"] and result["succeeded"]
+            else "failed"
+            if result["failed"]
+            else "complete"
+        )
+        result["message"] = (
+            f"{len(result['succeeded'])} updated in the original mailboxes; {len(result['failed'])} failed or unconfirmed."
+        )
+        return result
+
+    def send_mail(self, data):
+        clean = compose_data(data)
+        aid, request_id = clean["account_id"], data.get("request_id")
+        self.accounts.get(aid)
+        payload = {"send": clean, "draft_id": data.get("draft_id")}
+        try:
+            self.mail_store.receipt(request_id)
+        except ValueError:
+            pass
+        else:
+            self.mail_store.reserve(request_id, payload)
+            return {"job_id": request_id}
+        with self.lock:
+            caps = self.account_capabilities(aid)
+            if not self.accounts.get(aid)["enabled"] or not caps["send"]:
+                raise ValueError(caps["reason"] or "Account is paused")
+            compose_data(clean, max_bytes=caps["max_attachment_bytes"])
+            if clean["reply_to_id"]:
+                item = self.messages.get(clean["reply_to_id"])
+                if not item or item["account_id"] != aid:
+                    raise ValueError("Reply must use the account that received this message")
+                reply = dict(item)
+            else:
+                reply = None
+        draft_id = data.get("draft_id")
+        if draft_id:
+            draft = self.mail_store.draft(draft_id)
+            if draft["account_id"] != aid:
+                raise ValueError("Draft belongs to another account")
+
+        def work():
+            with self.reader_locks[aid]:
+                reader = self.readers.get(aid)
+                if not reader or not self.accounts.get(aid)["enabled"]:
+                    return {
+                        "status": "failed",
+                        "succeeded": [],
+                        "failed": [],
+                        "message": "Account is offline or paused. Draft retained.",
+                    }
+                original = reader.detail(reply["provider_id"]) if reply else None
+                if original is not None:
+                    original["provider_id"] = reply["provider_id"]
+                result = reader.send(clean, original)
+            # Draft removal failure must never turn a successful send into an invitation to retry.
+            status = result.get("status", "complete")
+            if draft_id and status == "complete":
+                try:
+                    self.mail_store.delete_matching_draft(draft_id, clean)
+                except Exception:  # noqa: BLE001 - accepted delivery must not invite a resend
+                    result["message"] = (
+                        result.get("message", "Accepted for delivery") + " Local draft was retained."
+                    )
+            return {
+                "status": status,
+                "succeeded": result.get("accepted", [request_id]),
+                "failed": [
+                    {
+                        "id": address,
+                        "error": "SMTP rejected this recipient. Other recipients may have received the message; resend only to rejected recipients.",
+                    }
+                    for address in result.get("refused", [])
+                ],
+                "message": result.get("message", "Accepted for delivery"),
+            }
+
+        return self._mail_job(request_id, payload, work)
 
     def action(self, data: dict):
         ids = data.get("ids")
@@ -400,7 +664,9 @@ class Workbench:
                 self.accounts.enroll_home(name, str(data.get("home", "")))
             elif provider == "imap":
                 settings = imap_settings(data)
-                if existing and settings != existing["settings"]:
+                if existing and any(
+                    settings[k] != existing["settings"][k] for k in ("host", "port", "username")
+                ):
                     raise ValueError(
                         "Reconnect requires the original IMAP server and username. Use Add account for another mailbox."
                     )
@@ -429,7 +695,7 @@ class Workbench:
                     )
                 paths = Paths.default(self.root / "accounts" / uuid.uuid4().hex).ensure()
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    str(secret), ["https://www.googleapis.com/auth/gmail.readonly"]
+                    str(secret), ["https://www.googleapis.com/auth/gmail.modify"]
                 )
                 credentials = flow.run_local_server(
                     port=0,
@@ -460,7 +726,7 @@ class Workbench:
                     raise ProviderError("Microsoft returned an unexpected sign-in URL. Try again.")
                 with self.lock:
                     self.jobs[job].update(
-                        message="Enter the code on the Microsoft page and grant read-only access",
+                        message="Enter the code on the Microsoft page and grant permission to read, send and manage mail",
                         user_code=flow["user_code"],
                         verification_url=verification_url,
                     )

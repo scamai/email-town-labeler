@@ -6,9 +6,9 @@
 
 [打开工作台](#打开工作台) · [连接邮箱](#连接邮箱) · [统一处理](#统一处理) · [语言与颜色](#语言与颜色) · [数据与隐私](#数据与隐私) · [恢复与验证](#恢复与验证)
 
-工作台把已授权账户的**收件箱**放进同一列表，使用同一套分类、搜索和完成状态。
-它通过 Gmail API、Microsoft Graph 或 IMAP 读取邮件，在本机分类；原邮箱仍能在
-Outlook、Apple Mail 或 Gmail 中照常使用。工作台的手动分类与完成状态目前只保存在本机。
+工作台把已授权账户的邮件放进同一列表，支持收件箱、已发送、归档和垃圾箱视图、分类、搜索和完成状态。
+它也支持明确操作的读/未读、星标、归档、垃圾箱、恢复以及纯文本收发、回复、转发和附件。
+手动分类与完成状态保存在本机；外部邮箱变更只在用户明确操作时发生。
 
 这是本地运行的软件源码和浏览器界面，尚不是已签名、公证或在应用商店发布的产品。
 
@@ -22,7 +22,8 @@ email-town-labeler desktop --background
 
 首次安装可使用 `uv tool install 'email-town-labeler[onnx,desktop]'`；使用本分支源码时运行
 `uv tool install --editable '.[onnx,desktop]'`。`desktop` extra 为 IMAP 提供系统钥匙串支持。
-本地模型使用现有默认配置；未安装的模型仍需下载模型文件，分类内容不上传。
+本地模型使用现有默认配置；未安装的模型仍需下载模型文件，分类内容不上传。桌面工作台的收发功能
+与只负责标签的 CLI 服务分开。
 
 命令会打开浏览器里的本机界面。重复执行会打开同一个运行实例；关闭浏览器不会停止后台进程。
 
@@ -51,13 +52,13 @@ email-town-labeler desktop --no-browser
 
 | 邮箱 | 连接方式 | 前提 |
 |---|---|---|
-| Gmail / Google Workspace | Google 浏览器授权，只读 Gmail 权限 | 默认配置目录中已有 Google Desktop OAuth 客户端文件；首次配置见 [Google 设置](google-cloud-setup.md) |
+| Gmail / Google Workspace | Google 浏览器授权，Gmail modify 读信、发信和管理权限 | 默认配置目录中已有 Google Desktop OAuth 客户端文件；首次配置见 [Google 设置](google-cloud-setup.md) |
 | 已用 CLI 配置的其他 Gmail | 填写该账户的 `--home` 绝对目录 | 该目录包含自己的有效 Gmail 授权 |
-| Microsoft 365 / Outlook.com | Microsoft 设备代码登录，读取邮件和用户身份 | 自己注册的公共客户端应用 ID，启用 device flow；租户可能要求管理员同意 |
+| Microsoft 365 / Outlook.com | Microsoft 设备代码登录，读取、发送和管理邮件 | 自己注册的公共客户端应用 ID，启用 device flow；租户可能要求管理员同意 |
 | iCloud / 其他 IMAP | TLS IMAP 服务器、用户名、应用专用密码 | 服务商支持 IMAP；系统钥匙串可用 |
 
-Microsoft 应用需支持你的账户类型，使用 delegated `Mail.Read` / `User.Read` 与
-`offline_access`；参考 [Microsoft 设备授权文档](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)。
+新建 Microsoft 账户需支持你的账户类型，使用 delegated `Mail.ReadWrite` / `Mail.Send` / `User.Read` 与
+`offline_access`；已有只读授权需重新授权，绝不静默扩大权限。参考 [Microsoft 设备授权文档](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)。
 不能把 Gmail 授权拿来读取 Microsoft 账户。每个邮箱都需要它自己的登录授权。
 Exchange 本地部署不等于 Microsoft Graph 邮箱；需管理员允许的 IMAP 或其他适配。
 
@@ -72,11 +73,20 @@ Exchange 本地部署不等于 Microsoft Graph 邮箱；需管理员允许的 IM
 - 完成不会删除、移动、归档或标记原邮件已读，也不会移除原来的分类标签。
 - Gmail 已有项目分类标签会直接显示；未分类邮件、Microsoft 和 IMAP 邮件使用共享的本机模型。
 - 本机手动分类优先于自动分类，并与完成状态独立。它目前不写回服务端，也不加入旧 CLI 的学习反馈。
-- 正文中的图片、附件和 HTML 不执行；Gmail/Outlook 支持跳回原邮件页面。回复和附件操作仍在原邮件客户端完成。
+- 正文中的图片、附件和 HTML 不执行；Gmail/Outlook 支持跳回原邮件页面。也可直接在工作台回复、转发、添加及下载附件。
 
 默认每账户载入最近 100 封收件箱邮件；“载入更多”每次增加 100，最高每账户 1000。
 列表会明确提示截断，计数只代表已载入邮件。最多 32 个账户；每次最多处理 500 封。
-已归档/移出收件箱的邮件不在这个列表中，本机整理状态仍保留。
+Inbox、Sent、Archive、Trash 是独立视图；归档后本机整理状态仍保留。
+批量选择只包括当前已载入且符合筛选的邮件，不代表邮箱里的全部邮件。
+
+写信、回复、回复全部和转发支持 To/Cc/Bcc、纯文本正文及附件。草稿保存在本机；
+发送失败、结果不确定或部分收件人失败时保留草稿，不会自动重发。转发不自动复制附件，需自行重新添加。
+Gmail/SMTP 附件合计上限为 20 MiB，Graph 为 2 MiB；下载上限分别为 20 MiB 和 8 MiB。
+IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全移动的服务器会禁用移动操作。
+
+已读、星标、归档、删除和恢复会修改所选账户的原邮件，其他客户端同步后也能看到。
+删除是移入服务商垃圾箱；恢复返回收件箱。手动分类和完成状态仍只在本机生效。
 
 自动同步间隔 60 秒，界面每 5 秒读取本机状态。一个账户断线不会清空其他账户；断线账户保留
 最后一次列表并显示错误。完成记录重启后仍存在；撤销令牌仅在当前进程中保存。
@@ -103,12 +113,13 @@ python3 scripts/install_macos_workbench.py
 
 这是对旧 CLI“只输出 ID 和计数”的明确扩展：工作台会在**本机浏览器内存**中显示主题、
 发件人和正文。正文在进程中最多缓存 64 封，每封最多 256 KiB；退出后不保留正文缓存。
-没有应用层的邮件内容磁盘缓存、遥测或远程分类。操作系统交换区、浏览器扩展及截屏仍属于本机环境。
+不建立完整邮件内容磁盘缓存；主动保存或发送前保存的草稿及附件会留在本机。没有遥测或远程分类。操作系统交换区、浏览器扩展及截屏仍属于本机环境。
 
 `data_dir/workbench/` 中保存：
 
 - `accounts.json`：账户名称、服务商、连接设置和邮箱身份哈希；IMAP 用户名属于个人数据。
 - `workflow.sqlite`：账户隔离的消息哈希、手动分类、完成状态、操作版本；没有邮件内容。
+- `mail/mail.sqlite`：草稿正文、附件和操作回执，仅当前用户可访问，未额外加密；部分 SMTP 发送回执可能保留收件人地址。
 - `accounts/`：OAuth 令牌，文件权限为仅当前用户读写；IMAP 密码存于系统凭据服务。
 - `launch.json`：私密启动能力链接；`desktop.log`：不包含邮件内容的运行信息。
 
@@ -127,10 +138,12 @@ python3 scripts/install_macos_workbench.py
 uv run pytest tests/test_desktop_*.py
 uv run --with playwright playwright install chromium
 uv run --with playwright python scripts/check_desktop_ui.py
+uv run --with playwright python scripts/check_mail_ui.py
 ```
 
 浏览器测试使用明确标注的合成双账户数据，检查真实本地 HTTP 操作、筛选、预览、完成/撤销、
 分类持久化、键盘和 390/768/1280/1440 四种宽度的明暗主题。它不能证明未授权邮箱的真实连接。
 
 真实多服务商验收还需各自授权的账户，测试新增邮件、授权过期、重新授权和客户端标签反馈。
-不要用任意一封真实业务邮件测试服务端修改；工作台当前的整理操作只写本机状态。
+邮件操作测试使用模拟服务商，覆盖写信、附件、草稿、回复、批量删除与恢复，以及发送结果不确定等情况。
+真实发送和移动需使用获准的测试邮件另行验证，模拟测试不能证明服务商的真实往返结果。

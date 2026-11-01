@@ -8,7 +8,7 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 ## The privacy rule
 
 The local `desktop` UI intentionally displays private mail in authenticated local browser memory.
-Do not persist that content, include it in fixtures/screenshots, or print it in logs. Use synthetic
+Only explicitly saved desktop drafts may persist message bodies and attachments in the private local draft store. Do not include real content in fixtures/screenshots or print it in logs. Use synthetic
 accounts with `demo=True` for UI tests. This exception does not change CLI/log privacy rules.
 See [the workbench privacy boundary](docs/privacy.md#local-desktop-workbench).
 
@@ -27,7 +27,7 @@ derived from real mail. It applies to:
   with a `List-Id` header and an HTML-only body") or write a synthetic reproduction;
 - **logs and debug output you paste**: `doctor` and `status` are designed to be safe, but
   read what you paste first;
-- **code**: never log, print, raise, or persist subject, sender, addresses, snippet or body.
+- **code**: never log, print, or raise subject, sender, addresses, snippet or body. Persist content only in the explicitly saved private desktop draft store; SMTP partial-delivery receipts may retain recipient addresses for recovery.
   Log message ids, class names, probabilities, counts and error types only. Exception
   messages must not embed content either. Reviewers will block PRs that break this.
 
@@ -83,8 +83,7 @@ Tests that need an optional extra must skip cleanly when it is missing
 - Cross-platform: `pathlib`, `platformdirs`, no shell-isms; OS-specific code only in
   `service.py` (and the per-platform lock in `lock.py`).
 - Core dependencies stay small. ML libraries go into extras and are imported lazily.
-- email-town-labeler never touches labels outside its own prefix, and never archives, deletes or
-  marks mail read. Changes that would need a broader action will not be accepted.
+- The automatic classifier never touches labels outside its prefix and never sends, archives, deletes or marks mail read. Explicit desktop mail operations may do these actions on selected messages and authorized accounts. Do not add automatic send/delete rules, permanent deletion, broad IMAP expunge, or automatic retries of uncertain sends.
 - `features.email_text` is the model input contract. Changing it changes every model's input:
   it needs a strong reason and a note in CHANGELOG.md.
 - Add a CHANGELOG.md entry under "Unreleased" for user-visible changes.

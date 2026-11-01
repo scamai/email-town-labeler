@@ -120,15 +120,26 @@
             <div id="categoryFilters" class="filter-list"></div>
           </div>
           <p class="local-note">
-            Categories and completion stay on this device; original mail stays
-            put.
+            Categories and completion stay on this device. Mail actions sync to your original mailboxes.
           </p>
         </aside>
 
         <main class="message-pane" aria-label="Unified mail list">
+          <section class="mail-operations" aria-label="Mailbox operations">
+            <div class="folder-tabs" role="group" aria-label="Mailbox folder">
+              <button class="folder-tab is-active" data-mail-folder="inbox" type="button">Inbox</button>
+              <button class="folder-tab" data-mail-folder="sent" type="button">Sent</button>
+              <button class="folder-tab" data-mail-folder="archive" type="button">Archive</button>
+              <button class="folder-tab" data-mail-folder="trash" type="button">Trash</button>
+            </div>
+            <div class="mail-operation-actions">
+              <button class="button button-secondary button-small" id="draftsButton" type="button">Drafts</button>
+              <button class="button button-primary button-small" id="composeButton" type="button">Compose</button>
+            </div>
+          </section>
           <div class="pane-header">
             <div>
-              <p class="eyebrow">Unified inbox</p>
+              <p class="eyebrow">All connected accounts</p>
               <h2 id="listTitle">All mail</h2>
             </div>
             <div class="list-tools">
@@ -180,6 +191,16 @@
             >
               Clear selection
             </button>
+          </div>
+          <div class="mail-selection-toolbar" id="mailSelectionToolbar" hidden aria-label="Mail actions">
+            <span class="selection-count" id="mailSelectionCount">0 selected</span>
+            <button class="button button-secondary button-small" data-mail-action="read" type="button">Mark read</button>
+            <button class="button button-secondary button-small" data-mail-action="unread" type="button">Mark unread</button>
+            <button class="button button-secondary button-small" data-mail-action="star" type="button">Star</button>
+            <button class="button button-secondary button-small" data-mail-action="unstar" type="button">Unstar</button>
+            <button class="button button-secondary button-small" data-mail-action="archive" type="button">Archive</button>
+            <button class="button button-secondary button-small" data-mail-action="restore" type="button">Restore</button>
+            <button class="button button-danger button-small" data-mail-action="trash" type="button">Trash</button>
           </div>
           <div
             class="list-status"
@@ -237,6 +258,11 @@
                 ×
               </button>
               <div class="preview-actions">
+                <button class="button button-secondary button-small" data-single-action="read" type="button">Mark read</button>
+                <button class="button button-secondary button-small" data-single-action="star" type="button">Star</button>
+                <button class="button button-secondary button-small" data-single-action="archive" type="button">Archive</button>
+                <button class="button button-danger button-small" data-single-action="trash" type="button">Trash</button>
+                <button class="button button-secondary button-small" data-single-action="restore" type="button">Restore</button>
                 <button
                   class="button button-secondary button-small"
                   id="previewDoneButton"
@@ -368,9 +394,15 @@
             autocomplete="new-password"
           />
           <p class="field-help">
-            Used to sign in to your IMAP provider and saved in your system
-            credential vault.
+            Used to sign in to your IMAP and SMTP provider and saved in your system
+            credential vault. SMTP is never guessed.
           </p>
+          <div class="field-grid smtp-fields">
+            <div><label class="field-label" for="smtpHost">SMTP server</label><input class="text-input" id="smtpHost" name="smtp_host" autocomplete="off" placeholder="smtp.example.com" /></div>
+            <div><label class="field-label" for="smtpPort">SMTP port</label><input class="text-input" id="smtpPort" name="smtp_port" type="number" value="587" min="1" max="65535" /></div>
+          </div>
+          <label class="field-label" for="smtpSecurity">SMTP security</label><select class="text-input" id="smtpSecurity" name="smtp_security"><option value="starttls">STARTTLS</option><option value="ssl">SSL</option></select>
+          <p class="field-help">OAuth connections can read, send, and manage mail when the provider grants those permissions.</p>
         </div>
         <div id="microsoftHelp" class="info-callout" hidden>
           Microsoft accounts require a registered public-client app with device
@@ -461,7 +493,25 @@
         </div>
       </form>
     </dialog>
+    <dialog id="composeDialog" aria-labelledby="composeTitle">
+      <form class="dialog-card compose-card" id="composeForm">
+        <div class="dialog-heading"><div><p class="eyebrow">Mail</p><h2 id="composeTitle">Compose message</h2></div><button class="icon-button" type="button" data-compose-close aria-label="Close">×</button></div>
+        <div class="compose-grid">
+          <label class="field-label" for="composeAccount">From</label><select class="text-input" id="composeAccount" required></select>
+          <label class="field-label" for="composeTo">To</label><input class="text-input" id="composeTo" type="text" autocomplete="email" placeholder="name@example.com" />
+          <label class="field-label" for="composeCc">Cc</label><input class="text-input" id="composeCc" type="text" placeholder="Optional" />
+          <label class="field-label" for="composeBcc">Bcc</label><input class="text-input" id="composeBcc" type="text" placeholder="Optional" />
+          <label class="field-label" for="composeSubject">Subject</label><input class="text-input" id="composeSubject" type="text" maxlength="240" />
+          <label class="field-label" for="composeBody">Message</label><textarea class="text-input compose-body" id="composeBody" rows="10"></textarea>
+        </div>
+        <div class="attachment-row"><button class="button button-secondary button-small" id="addAttachmentButton" type="button">Add attachments</button><input id="composeAttachments" type="file" multiple hidden /><span id="attachmentSummary" class="field-help">No attachments</span></div>
+        <p class="field-help" id="composeCapabilityNote"></p><p class="field-help">Forwarded attachments are not copied automatically; download them from the original and add them here.</p><p class="form-error" id="composeError" role="alert" hidden></p>
+        <div class="dialog-actions"><button class="button button-quiet" type="button" data-compose-close>Cancel</button><button class="button button-secondary" id="saveDraftButton" type="button">Save draft</button><button class="button button-primary" id="sendButton" type="submit">Send</button></div>
+      </form>
+    </dialog>
+    <dialog id="draftsDialog" aria-labelledby="draftsTitle"><div class="dialog-card"><div class="dialog-heading"><div><p class="eyebrow">Stored on this device</p><h2 id="draftsTitle">Drafts</h2></div><button class="icon-button" type="button" data-drafts-close aria-label="Close">×</button></div><p class="field-help">Drafts do not sync automatically. Attachments stay with each saved draft.</p><div id="draftList" class="draft-list"></div></div></dialog>
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="app.js" defer></script>
+    <script src="mail.js" defer></script>
   </body>
 </html>

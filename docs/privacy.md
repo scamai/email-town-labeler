@@ -15,14 +15,19 @@ stored on disk. If the code ever disagrees with this page, that is a bug: please
 
 `desktop` is an explicit display surface for private mail, unlike CLI status/log output. It reads
 Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders and plaintext bodies only through
-an authenticated loopback HTTP server in the user's browser. Manual categories and completion are
-local; it does not send mail, archive, move, delete, mark read, or write provider labels.
+an authenticated loopback HTTP server in the user's browser. Manual categories and completion are local.
+The desktop workbench can explicitly send/reply/forward, change read/unread and starred state, archive,
+trash and restore messages, and upload/download attachments; these operations require the relevant account
+grant and are separate from the label-only CLI service.
 Classification is shared on-device; remote model endpoints are refused even if allowed by the CLI config.
 
-The process holds bounded previews in RAM (64 × at most 256 KiB); no application mail-content disk
-cache is created. Browser extensions, OS swap and screenshots are outside that guarantee.
+The process holds bounded previews in RAM (64 × at most 256 KiB); it does not create a general mail-content
+cache, while explicitly saved drafts and their attachments are stored under `workbench/mail` as described below.
+Browser extensions, OS swap and screenshots are outside that guarantee.
 `workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
-`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions only.
+`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions. Private
+drafts, attachments and operation receipts are stored under `workbench/mail`; receipts retain IDs, digests
+and status, not sent bodies; partial SMTP delivery receipts also retain accepted/rejected recipient addresses so recovery can avoid duplicate delivery. Failed, unknown or partial sends retain the draft and are not automatically retried.
 OAuth tokens are mode-0600 local files; IMAP passwords require an approved OS keyring backend.
 `launch.json` is a private capability link. Session authorization uses a custom bearer header and
 per-origin browser sessionStorage, never a cookie shared between localhost ports. HTTP request logging is disabled.
@@ -58,7 +63,8 @@ flowchart LR
 | email-town-labeler to Google (Gmail API, OAuth endpoints) | always | Google already has your mail; email-town-labeler reads it from Google and sends back label changes. |
 | email-town-labeler to GitHub releases, Hugging Face or a model URL | only when you run `model pull` or `setup` downloads a model, or the configured model is not on disk yet | No. A plain download of a model package, verified against sha256 hashes (for published models, the archive's hash is pinned in the code too). |
 | email-town-labeler to Ollama | only if you choose the `ollama_choice` backend | Yes: the rendered message text is sent to the Ollama URL in the model package. Only loopback hosts are allowed unless you opt in (see [Model endpoints](#model-endpoints)). |
-| email-town-labeler to anyone else | never | There is no telemetry, analytics, crash reporting, update check or "phone home". |
+| Explicit desktop mail actions | only when requested in the app | Send content/attachments or mail-management requests to the selected account’s Gmail, Microsoft or configured IMAP/SMTP provider. |
+| Telemetry / analytics services | never | There is no telemetry, analytics, crash reporting, update check or "phone home". |
 
 ### Model endpoints
 
@@ -151,18 +157,18 @@ What the code actually does with it:
 | Read messages and labels | Yes: new inbox messages (to classify), their label ids (to detect your corrections and, if you use Town, Town's labels on mail we decided), and the To/Cc/Bcc headers of mail you sent (to know your contacts). Town's labels are only read, never changed. |
 | Create labels | Yes, only under its own prefix (default `e/`). `labels rename-prefix` renames those, and only those. |
 | Add / remove labels on messages | Yes, only labels under its own prefix. |
-| Touch other labels (INBOX, UNREAD, STARRED, IMPORTANT, CATEGORY_*, your labels) | No. Never added, never removed. Nothing is archived or marked read. |
-| Trash or delete messages | No. |
-| Send, draft or forward mail | No. |
+| Touch other labels (INBOX, UNREAD, STARRED, IMPORTANT, CATEGORY_*, your labels) | The desktop workbench can perform explicit mailbox actions; the classifier CLI remains label-only. |
+| Trash or delete messages | Desktop workbench supports explicit trash/restore; classifier CLI does not. |
+| Send, draft or forward mail | Desktop workbench supports explicit plaintext send/draft/reply/forward; classifier CLI does not. |
 | Change settings or filters | No (and the scope does not allow it). |
 
 `email-town-labeler undo` removes only email-town-labeler's own labels from every message that has one. The
 API calls are listed in [google-cloud-setup.md](google-cloud-setup.md#quota).
 
-You do not have to take this on trust: every Gmail call goes through one small wrapper
-(`src/email_town_labeler/gmail/client.py`), and there are exactly two places that change labels, both in
-`src/email_town_labeler/engine.py`: labeling adds the one class label resolved by `LabelMap`, and `undo`
-removes only label ids under the configured prefix.
+The automatic classifier uses `src/email_town_labeler/gmail/client.py`: `engine.py` adds the class label
+resolved by `LabelMap`, and `undo` removes only label IDs under the configured prefix. Explicit desktop
+actions use `desktop/providers.py`, including a separate one-shot Gmail write transport to avoid
+automatic retries of a potentially accepted send.
 
 ## Who else could see your mail
 
@@ -236,5 +242,5 @@ weights at all, or a model you train yourself.
 
 ## Reporting a privacy issue
 
-If you find a code path that logs, prints, stores or transmits mail content, treat it as a
-security issue and report it privately: see [SECURITY.md](../SECURITY.md).
+If you find a code path that exposes mail content outside the documented local preview, draft,
+classification and explicitly requested provider operations, treat it as a security issue and report it privately: see [SECURITY.md](../SECURITY.md).

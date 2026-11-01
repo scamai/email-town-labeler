@@ -5,7 +5,7 @@
   <img alt="email-town-labeler: your Gmail, sorted by an AI that runs on your own computer" src="docs/assets/banner-light.svg" width="880">
 </picture>
 
-**Colored, sorted Gmail — like Town's Auto Inbox — without sending a single email to anyone's servers.**<br>
+**Colored, sorted Gmail — like Town's Auto Inbox — with a separate local workbench for explicit mail actions.**<br>
 Free and open source. The AI model runs on your own computer.
 
 [![CI](https://github.com/scamai/email-town-labeler/actions/workflows/ci.yml/badge.svg)](https://github.com/scamai/email-town-labeler/actions/workflows/ci.yml)
@@ -40,7 +40,7 @@ Free and open source. The AI model runs on your own computer.
   files mail from people you've written to under *promotional*.
 - 📈 **It gets better the more you use it.** Move a label in Gmail and it learns from that, on
   your computer, once a day.
-- ↩️ **Nothing to lose.** It only adds labels. One command takes every one of them off again.
+- ↩️ **Reversible classification.** The classifier only adds labels. One command takes every one of them off again.
 
 ## Hosted labelers vs. email-town-labeler
 
@@ -83,18 +83,21 @@ Everything else (most personal mail) is left alone. [All labels and how to renam
 
 **What it can see.** Your Gmail, through Google's `gmail.modify` permission. That's the
 narrowest permission that lets an app both read a message and change its labels. Google's
-consent screen describes it as "read, compose, and send"; email-town-labeler uses only the
+consent screen describes it as "read, compose, and send"; the automatic classifier uses only the
 reading and labeling parts ([exactly what it does](docs/privacy.md#what-gmailmodify-allows-and-what-email-town-labeler-does)).
 
-**It will never:**
+**The automatic classifier will never:**
 
-- ❌ send, delete, archive, move or mark any email as read
-- ❌ upload your email anywhere (the only network traffic is the Gmail API, plus a model download you ask for)
+- ❌ The label-only classifier service does not send, delete, archive, move or mark mail as read; the separate desktop workbench supports explicit mailbox actions.
+- ❌ The label-only classifier uploads no email content (its network traffic is the Gmail API, plus model downloads you ask for)
 - ❌ phone home: no analytics, no crash reports, no update checks
 - ❌ store your email: its local database holds message ids, label names and numbers, never subjects, senders or bodies
 - ❌ touch any label except its own
 
-**How to take it all back:** `email-town-labeler undo` removes every label it ever added, and
+The [desktop workbench](docs/desktop-workbench.en.md) additionally sends and manages mail when you request it.
+Its local drafts store message bodies and attachments; trash and send actions affect the original mailbox.
+
+**How to undo classification:** `email-town-labeler undo` removes every label it ever added, and
 <https://myaccount.google.com/permissions> revokes its access. Full threat model: [docs/privacy.md](docs/privacy.md).
 
 ## Get started in 5 minutes
@@ -202,7 +205,7 @@ have logged in.
 | 🟡 | Install from PyPI | not yet: install from GitHub |
 | 🔴 | Outlook, IMAP, Fastmail | not planned yet |
 | 🔴 | Instant push instead of 60-second polling | not built |
-| ⛔ | Archiving, deleting, sending or auto-replying | never, by design |
+| 🟡 | Desktop workbench: explicit mail actions, drafts, folders and attachments | [workbench guide](docs/desktop-workbench.en.md) |
 
 ---
 

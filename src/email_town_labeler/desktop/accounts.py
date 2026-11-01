@@ -173,7 +173,22 @@ def imap_settings(data: dict) -> dict:
     username = str(data.get("username", "")).strip()
     if not username or len(username) > 320 or any(ord(c) < 32 for c in username):
         raise ValueError("Enter the mailbox username")
-    return {"host": host, "port": port, "username": username}
+    result = {"host": host, "port": port, "username": username}
+    smtp_host = str(data.get("smtp_host", "")).strip().lower()
+    if smtp_host:
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", smtp_host):
+            raise ValueError("Enter an SMTP hostname without a protocol or path")
+        security = data.get("smtp_security", "starttls")
+        if security not in ("starttls", "ssl"):
+            raise ValueError("SMTP requires STARTTLS or TLS")
+        try:
+            smtp_port = int(data.get("smtp_port", 587 if security == "starttls" else 465))
+        except (ValueError, TypeError) as e:
+            raise ValueError("Invalid SMTP port") from e
+        if not 1 <= smtp_port <= 65535:
+            raise ValueError("Invalid SMTP port")
+        result.update(smtp_host=smtp_host, smtp_port=smtp_port, smtp_security=security)
+    return result
 
 
 def password_store(account_id: str, password: str | None = None) -> str:

@@ -6,9 +6,9 @@ English · [简体中文](desktop-workbench.md)
 
 [Open](#open) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
 
-The workbench combines explicitly authorized **inboxes** into one local list, with common categories,
-search and completion state. Gmail API, Microsoft Graph and TLS IMAP readers leave original messages
-in their mailboxes. Manual categories and completion currently remain local.
+The workbench combines explicitly authorized mailboxes into one local list, with Inbox, Sent, Archive and
+Trash views, common categories, search and completion state. It supports explicit send/reply/forward,
+read/unread, starred, archive, trash/restore and attachment actions. Manual categories and completion remain local.
 This is locally runnable source and a browser UI, not a signed/notarized or app-store release.
 
 ## Open
@@ -20,7 +20,8 @@ email-town-labeler desktop --background
 For a fresh install use `uv tool install 'email-town-labeler[onnx,desktop]'`; to use this source checkout,
 use `uv tool install --editable '.[onnx,desktop]'`. The desktop extra provides OS credential-vault support
 for IMAP. Classification uses the existing default model configuration. Missing weights may need a
-model download; mail content is not sent to a remote classifier.
+model download; mail content is not sent to a remote classifier. The desktop workbench is separate from
+the label-only CLI service.
 
 Repeated launches reopen the same process. Closing the browser does not stop it.
 A macOS source checkout can create a local double-click launcher:
@@ -43,13 +44,14 @@ mailboxes, with recognizable display names. The app does not extract Outlook or 
 
 | Provider | Connection | Prerequisite |
 |---|---|---|
-| Gmail / Workspace | Browser OAuth, Gmail read-only | Google Desktop OAuth client file in default configuration; [setup guide](google-cloud-setup.md) |
+| Gmail / Workspace | Browser OAuth, Gmail modify (read/send/manage) | Google Desktop OAuth client file in default configuration; [setup guide](google-cloud-setup.md) |
 | Another existing Gmail CLI home | Explicit absolute `--home` directory | Its own valid Gmail token |
 | Microsoft 365 / Outlook.com | Device code OAuth | Your public-client application ID with device flow enabled; tenant approval may be required |
 | iCloud / other IMAP | Verified TLS, username, app-specific password | IMAP enabled and OS credential vault available |
 
-Microsoft requires appropriate supported account types and delegated `Mail.Read`, `User.Read`, and
-`offline_access`; see the [official device authorization protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code).
+Microsoft new accounts require delegated `Mail.ReadWrite`, `Mail.Send`, `User.Read`, and `offline_access`;
+existing read-only grants require reauthorization and are never silently expanded. See the [official device
+authorization protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code).
 Gmail grants cannot authorize Microsoft mailboxes. On-premises Exchange is not automatically a Graph
 mailbox; it needs administrator-supported IMAP or a different adapter.
 
@@ -61,16 +63,26 @@ a different mailbox. Each additional mailbox needs its own user authorization.
 
 Filter across all or individual accounts by today, old unfinished mail, category, completion, or subject/sender
 search. Open a plaintext preview, change its local category, mark complete, or batch-edit and undo.
-Completion never moves, archives, deletes, marks the original read, or removes server category labels.
+Completion survives restart; undo tokens live only in the current process. Selection is limited to loaded,
+currently filtered results and 500 messages per action across accounts. The initial window is 100 inbox
+messages per account; Load more adds 100 up to 1,000 per account.
+
+Send/reply/reply-all/forward support To/Cc/Bcc, plaintext bodies and explicit attachment selection. Drafts
+and attachments are stored privately under `workbench/mail`; failed, unknown or partial sends retain the
+draft and are never retried automatically. Gmail/SMTP sends are limited to 20 MiB total and Graph to 2 MiB;
+downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding includes body only; attachments
+must be re-added explicitly.
 
 Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model.
 Local overrides take precedence and are independent of completion. They currently neither write back to the
 provider nor train the existing CLI feedback model. Images/HTML/attachments do not execute; Gmail and Outlook
-links can open the original message for replying or attachments.
+links can also open the original message in the provider web client.
 
-The initial window is 100 inbox messages per account. Load more adds 100, up to 1000 per account;
-truncation is explicit and counts cover loaded messages only. At most 32 accounts and 500 messages per
-batch operation. Archived mail is outside this inbox view; local workflow records remain saved.
+Inbox, Sent, Archive and Trash are separate views. Counts cover loaded messages only; truncation is
+explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox while preserving local
+workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox.
+These changes synchronize to other clients using the same mailbox. Local category/completion changes
+stay on this device. Selecting all results selects only loaded, filtered messages, not the whole mailbox.
 Synchronization runs every 60 seconds, UI polling every 5 seconds. Failure in one account retains its last
 list with an error and leaves others usable. Completion survives restart; undo tokens live only in the current process.
 
@@ -116,11 +128,12 @@ the app. This remains a local launcher, not a signed App Store application.
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
 the **local browser's memory**. The process retains at most 64 previews, capped at 256 KiB each. There is no
-application-level mail-content disk cache, telemetry or remote classification. OS swap, browser extensions
+general mail-content disk cache, telemetry or remote classification. Drafts saved explicitly or before
+sending persist locally, including attachment bytes, without additional application-level encryption. OS swap, browser extensions
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, completion and revisions. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, completion and revisions. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 
@@ -138,6 +151,7 @@ classification remain available.
 uv run pytest tests/test_desktop_*.py
 uv run --with playwright playwright install chromium
 uv run --with playwright python scripts/check_desktop_ui.py
+uv run --with playwright python scripts/check_mail_ui.py
 ```
 
 Browser tests use clearly labeled synthetic mail from two accounts and exercise actual loopback HTTP actions,

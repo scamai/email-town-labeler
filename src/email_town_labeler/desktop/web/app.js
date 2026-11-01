@@ -319,6 +319,7 @@
       : "—";
     syncFilterButtons();
     restoreFocus(focus);
+    if (window.EmailTownMailHost?.render) window.EmailTownMailHost.render();
   }
   function renderCounts() {
     const today = localMidnight();
@@ -341,11 +342,12 @@
     els.loadMoreBar.hidden = truncated.length === 0;
     els.loadMore.disabled = state.limit >= 1000;
     els.loadedSummary.textContent = truncated.length
-      ? `Loaded inbox messages: ${loaded}${state.limit >= 1000 ? " · 1,000 per-account limit reached" : ""}`
+      ? `Loaded ${state.folder || "inbox"} messages: ${loaded}${state.limit >= 1000 ? " · 1,000 per-account limit reached" : ""}`
       : "";
   }
 
   function renderList() {
+    window.EmailTownMailHost?.render?.();
     const focus = saveFocus();
     const messages = filteredMessages();
     const hasLoading = state.refreshing && !state.messages.length;
@@ -354,7 +356,7 @@
         ? "Today"
         : state.filters.type === "backlog"
           ? "Backlog"
-          : "All mail";
+          : ({inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash"}[state.folder] || "Inbox");
     els.listStatus.textContent = state.modelError
       ? `Classifier: ${text(state.modelError)}`
       : state.stale
@@ -450,6 +452,10 @@
           "Unclassified",
       );
       meta.append(date, category);
+      if (message.starred) {
+        const star = document.createElement("span"); star.className = "unread-badge";
+        star.textContent = "★ Starred"; meta.append(star);
+      }
       if (message.unread) {
         const unread = document.createElement("span");
         unread.className = "unread-badge";
@@ -673,6 +679,7 @@
     try {
       const data = await api("/api/state");
       const next = {
+        folder: data.folder || state.folder || "inbox",
         accounts: Array.isArray(data.accounts) ? data.accounts : [],
         messages: Array.isArray(data.messages) ? data.messages : [],
         categories: Array.isArray(data.categories) ? data.categories : [],
@@ -783,6 +790,9 @@
         port: Number(form.get("port") || 993),
         username: text(form.get("username")).trim(),
         password: text(form.get("password")),
+        smtp_host: text(form.get("smtp_host")).trim(),
+        smtp_port: Number(form.get("smtp_port") || 587),
+        smtp_security: text(form.get("smtp_security") || "starttls"),
       });
     if (provider === "microsoft")
       payload.client_id = text(form.get("client_id")).trim();
@@ -909,6 +919,9 @@
         ["imapHost", "host"],
         ["imapPort", "port"],
         ["imapUsername", "username"],
+        ["smtpHost", "smtp_host"],
+        ["smtpPort", "smtp_port"],
+        ["smtpSecurity", "smtp_security"],
         ["clientId", "client_id"],
       ]) {
         if (connection[key] !== undefined) $(field).value = connection[key];
@@ -1017,6 +1030,25 @@
       els.loadMore.disabled = false;
     }
   });
+  // The mail operations module is intentionally a thin client-side extension;
+  // it receives the authenticated API and live workbench state without
+  // exposing the session token or other credentials globally.
+  window.EmailTownMailHost = {
+    api,
+    fetchBinary: async (path) => {
+      const headers = { "X-Email-Town": "local" };
+      if (state.sessionToken) headers.Authorization = `Bearer ${state.sessionToken}`;
+      const response = await fetch(path, { credentials: "omit", headers });
+      if (!response.ok) throw new Error(`Download failed (${response.status})`);
+      return response.blob();
+    },
+    state,
+    loadState,
+    showToast,
+    openMessage,
+    accountById,
+    render: null,
+  };
   setProviderFields();
   state.poll = window.setInterval(() => {
     if (!document.hidden) loadState();

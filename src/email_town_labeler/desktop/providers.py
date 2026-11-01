@@ -1,17 +1,19 @@
-"""Provider readers for the local workbench. No adapter archives, sends, marks read or moves mail."""
+"""Account-bound mail adapters. Reads never mark mail read; writes require explicit app actions."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import imaplib
 import json
 import re
+import smtplib
 import ssl
 import time
 from datetime import datetime
 from email import policy
 from email.parser import BytesParser
-from email.utils import parsedate_to_datetime
+from email.utils import formataddr, parsedate_to_datetime
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit
@@ -23,6 +25,7 @@ from ..gmail.client import GmailClient
 from ..gmail.parse import html_to_text
 from ..taxonomy import LABEL_CLASSES
 from .accounts import password_store
+from .mail import FOLDERS, MAX_ATTACHMENTS, addresses, mime_details, mime_message
 
 
 class ProviderError(Exception):
@@ -83,6 +86,8 @@ class GmailReader:
             http=AuthorizedHttp(credentials, http=httplib2.Http(timeout=20)),
             cache_discovery=False,
         )
+        self.credentials, self.token_path = credentials, paths.token
+        self.scopes = set(credentials.granted_scopes or credentials.scopes or [])
         self.client = GmailClient(service, max_retries=2, transport_retries=1)
         self.cfg = load_config(paths.config_file)
         self.address = self.client.profile()["emailAddress"]
@@ -90,8 +95,30 @@ class GmailReader:
         self.cache: dict[str, dict] = {}
         self.history_id = None
 
-    def list(self, limit: int) -> tuple[list[dict], bool]:
-        ids = self.client.list_message_ids(label_ids=["INBOX"], max_results=limit + 1)
+    def capabilities(self):
+        write = bool(
+            self.scopes & {"https://www.googleapis.com/auth/gmail.modify", "https://mail.google.com/"}
+        )
+        send = write or "https://www.googleapis.com/auth/gmail.send" in self.scopes
+        return {
+            "write": write,
+            "send": send,
+            "attachments": True,
+            "max_attachment_bytes": MAX_ATTACHMENTS,
+            "reason": "" if write and send else "Reconnect and grant permission to send and manage mail",
+        }
+
+    def list(self, limit: int, folder="inbox") -> tuple[list[dict], bool]:
+        if folder not in FOLDERS:
+            raise ProviderError("Unsupported folder")
+        args = (
+            {"label_ids": [{"inbox": "INBOX", "sent": "SENT", "trash": "TRASH"}[folder]]}
+            if folder != "archive"
+            else {"query": "-in:inbox -in:sent -in:trash -in:spam -in:drafts"}
+        )
+        if folder == "trash":
+            args["include_spam_trash"] = True
+        ids = self.client.list_message_ids(**args, max_results=limit + 1)
         chosen = ids[:limit]
         dirty = set(chosen) - self.cache.keys()
         cursor = self.client.profile()["historyId"]
@@ -135,10 +162,110 @@ class GmailReader:
             raise ProviderError("Message was moved or deleted. Refresh")
         return {
             **rows[0],
+            "attachments": [
+                {
+                    "id": a.get("id", ""),
+                    "name": a.get("filename", "attachment"),
+                    "type": a.get("mime", "application/octet-stream"),
+                    "size": a.get("size", 0),
+                }
+                for a in rows[0].get("attachments", [])
+                if a.get("id")
+            ],
             "url": safe_link(
                 f"https://mail.google.com/mail/?authuser={quote(self.address, safe='')}#all/{quote(mid, safe='')}"
             ),
         }
+
+    def _mid(self, provider_id):
+        identity, mid = provider_id.split(":", 1)
+        if identity != self.identity or mid not in self.cache:
+            raise ProviderError("Message is no longer in this account's current list. Refresh")
+        return mid
+
+    def write(self, path, payload):
+        from google.auth.transport.requests import Request as GoogleRequest
+
+        if not self.credentials.valid:
+            self.credentials.refresh(GoogleRequest())
+            save_credentials(self.credentials, self.token_path)
+        # httplib2 retries a disconnected POST inside _conn_request even when
+        # googleapiclient execute(num_retries=0). Use one-shot urllib for writes:
+        # https://github.com/httplib2/httplib2/blob/master/python3/httplib2/__init__.py
+        # A lost response is an UNKNOWN receipt, never an automatic resend.
+        request = Request(
+            "https://gmail.googleapis.com/gmail/v1/users/me/" + path,
+            data=json.dumps(payload).encode(),
+            method="POST",
+            headers={"Authorization": "Bearer " + self.credentials.token, "Content-Type": "application/json"},
+        )
+        with build_opener(NoRedirect()).open(request, timeout=25) as response:
+            raw = response.read(1_000_001)
+        if len(raw) > 1_000_000:
+            raise ProviderError("Mail operation returned an unexpected response. Check the mailbox")
+        return json.loads(raw) if raw else {}
+
+    def mutate(self, provider_id, action):
+        if not self.capabilities()["write"]:
+            raise ProviderError(self.capabilities()["reason"])
+        mid = quote(self._mid(provider_id), safe="")
+        if action in ("trash", "restore"):
+            self.write("messages/" + mid + ("/trash" if action == "trash" else "/untrash"), {})
+            if action == "restore":
+                self.write("messages/" + mid + "/modify", {"addLabelIds": ["INBOX"]})
+        else:
+            labels = {
+                "archive": ([], ["INBOX"]),
+                "read": ([], ["UNREAD"]),
+                "unread": (["UNREAD"], []),
+                "star": (["STARRED"], []),
+                "unstar": ([], ["STARRED"]),
+            }
+            if action not in labels:
+                raise ProviderError("Unsupported mail action")
+            add, remove = labels[action]
+            self.write("messages/" + mid + "/modify", {"addLabelIds": add, "removeLabelIds": remove})
+        self.cache.pop(self._mid(provider_id), None)
+
+    def send(self, data, original=None):
+        if not self.capabilities()["send"]:
+            raise ProviderError(self.capabilities()["reason"])
+        msg = mime_message(data, self.address, original)
+        if data["bcc"]:
+            msg["Bcc"] = data["bcc"]
+        payload = {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
+        if original and original.get("thread_id"):
+            payload["threadId"] = original["thread_id"]
+        self.write("messages/send", payload)
+        return {"message": "Sent. Gmail saved a copy in Sent."}
+
+    def attachment(self, provider_id, attachment_id):
+        mid = self._mid(provider_id)
+        details = self.detail(provider_id)
+        meta = next((a for a in details["attachments"] if a["id"] == attachment_id), None)
+        if not meta or meta["size"] > MAX_ATTACHMENTS:
+            raise ProviderError("Attachment is unavailable or exceeds the 20 MB download limit")
+        api = self.client.service.users().messages()
+        if attachment_id.startswith("part:"):
+            raw = api.get(userId="me", id=mid, format="full").execute(num_retries=0)
+
+            def find(part):
+                if "part:" + part.get("partId", "") == attachment_id:
+                    return part.get("body", {}).get("data", "")
+                return next((value for child in part.get("parts", []) if (value := find(child))), "")
+
+            encoded = find(raw.get("payload", {}))
+        else:
+            encoded = (
+                api.attachments()
+                .get(userId="me", messageId=mid, id=attachment_id)
+                .execute(num_retries=0)
+                .get("data", "")
+            )
+        raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        if len(raw) > MAX_ATTACHMENTS:
+            raise ProviderError("Attachment exceeds the download limit")
+        return meta, raw
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -147,7 +274,13 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def request_json(
-    url: str, *, data: dict | None = None, token: str | None = None, headers: dict | None = None
+    url: str,
+    *,
+    data: dict | None = None,
+    token: str | None = None,
+    headers: dict | None = None,
+    method: str | None = None,
+    json_body: dict | None = None,
 ) -> dict:
     """Only fixed Microsoft origins are permitted; never forward a token through redirects."""
     parsed = urlsplit(url)
@@ -164,8 +297,13 @@ def request_json(
     payload = urlencode(data).encode() if data is not None else None
     if payload is not None:
         h["Content-Type"] = "application/x-www-form-urlencoded"
+    if json_body is not None:
+        payload = json.dumps(json_body).encode()
+        h["Content-Type"] = "application/json"
     try:
-        response = build_opener(NoRedirect()).open(Request(url, data=payload, headers=h), timeout=25)
+        response = build_opener(NoRedirect()).open(
+            Request(url, data=payload, headers=h, method=method), timeout=25
+        )
     except HTTPError as e:
         if parsed.hostname == "login.microsoftonline.com":
             try:
@@ -175,22 +313,20 @@ def request_json(
             # OAuth protocol error codes are safe; descriptions may contain identity details.
             return {"error": str(body.get("error", "oauth_error"))[:80]}
         raise ProviderError(
-            f"Microsoft mail read failed (HTTP {e.code}). Reconnect or try again shortly"
+            f"Microsoft mail request failed (HTTP {e.code}). Reconnect or try again shortly"
         ) from e
     with response:
         raw = response.read(16_000_001)
     if len(raw) > 16_000_000:
         raise ProviderError("Mail response is too large. Load fewer messages")
-    result = json.loads(raw)
+    result = json.loads(raw) if raw else {}
     if not isinstance(result, dict):
         raise ProviderError("Invalid mail response format")
     return result
 
 
 MICROSOFT_TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-MICROSOFT_SCOPES = (
-    "openid offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read"
-)
+MICROSOFT_SCOPES = "openid offline_access https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read"
 
 
 def microsoft_device(client_id: str) -> dict:
@@ -217,6 +353,7 @@ def save_microsoft_token(path: Path, result: dict, previous: dict | None = None)
                 "access_token": result["access_token"],
                 "refresh_token": result.get("refresh_token") or (previous or {}).get("refresh_token"),
                 "expires_at": time.time() + int(result.get("expires_in", 3600)),
+                "scope": result.get("scope", (previous or {}).get("scope", "")),
             }
         ),
     )
@@ -228,6 +365,7 @@ class MicrosoftReader:
         self.path = Path(settings["token_path"])
         self.cache = {}
         self.identity = None
+        self.address = ""
 
     def token(self) -> str:
         saved = json.loads(self.path.read_text())
@@ -240,7 +378,8 @@ class MicrosoftReader:
                     "client_id": self.settings["client_id"],
                     "grant_type": "refresh_token",
                     "refresh_token": saved["refresh_token"],
-                    "scope": MICROSOFT_SCOPES,
+                    "scope": saved.get("scope")
+                    or "openid offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read",
                 },
             )
             save_microsoft_token(self.path, fresh, saved)
@@ -256,6 +395,28 @@ class MicrosoftReader:
             headers={"Prefer": 'IdType="ImmutableId", outlook.body-content-type="text"'},
         )
 
+    def capabilities(self):
+        saved = json.loads(self.path.read_text())
+        scopes = {s.rsplit("/", 1)[-1].lower() for s in saved.get("scope", "").split()}
+        return {
+            "write": "mail.readwrite" in scopes,
+            "send": "mail.send" in scopes,
+            "attachments": True,
+            "max_attachment_bytes": 2 * 1024 * 1024,
+            "reason": "Reconnect to grant Mail.ReadWrite and Mail.Send"
+            if not {"mail.readwrite", "mail.send"} <= scopes
+            else "",
+        }
+
+    def write(self, path, payload, method="POST"):
+        return request_json(
+            "https://graph.microsoft.com/v1.0/me/" + path,
+            token=self.token(),
+            method=method,
+            json_body=payload,
+            headers={"Prefer": 'IdType="ImmutableId"'},
+        )
+
     @staticmethod
     def record(m: dict) -> dict:
         when = datetime.fromisoformat(m["receivedDateTime"].replace("Z", "+00:00")).timestamp()
@@ -265,18 +426,26 @@ class MicrosoftReader:
             "internal_date": int(when * 1000),
             "headers": {
                 "subject": m.get("subject", ""),
-                "from": sender.get("name") or sender.get("address", ""),
+                "from": formataddr((sender.get("name", ""), sender.get("address", ""))),
             },
-            "label_ids": [] if m.get("isRead") else ["UNREAD"],
+            "label_ids": ([] if m.get("isRead") else ["UNREAD"])
+            + (["STARRED"] if (m.get("flag") or {}).get("flagStatus") == "flagged" else []),
             "snippet": m.get("bodyPreview", ""),
             "category": None,
         }
 
-    def list(self, limit: int) -> tuple[list[dict], bool]:
+    def list(self, limit: int, folder="inbox") -> tuple[list[dict], bool]:
+        if folder not in FOLDERS:
+            raise ProviderError("Unsupported folder")
         if self.identity is None:
-            self.identity = fingerprint(self.get("https://graph.microsoft.com/v1.0/me?$select=id")["id"])
-        fields = "id,subject,from,receivedDateTime,isRead,bodyPreview"
-        url = "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?" + urlencode(
+            profile = self.get("https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName")
+            self.identity = fingerprint(profile["id"])
+            self.address = profile.get("mail") or profile.get("userPrincipalName", "")
+        folder_name = {"inbox": "inbox", "sent": "sentitems", "archive": "archive", "trash": "deleteditems"}[
+            folder
+        ]
+        fields = "id,subject,from,receivedDateTime,isRead,bodyPreview,flag"
+        url = f"https://graph.microsoft.com/v1.0/me/mailFolders/{folder_name}/messages?" + urlencode(
             {"$top": min(100, limit + 1), "$select": fields, "$orderby": "receivedDateTime desc"}
         )
         messages = []
@@ -298,7 +467,7 @@ class MicrosoftReader:
         if identity != self.identity or mid not in self.cache:
             raise ProviderError("Message is no longer in the current list. Refresh")
         message = self.get(
-            f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}?$select=id,body,webLink"
+            f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}?$select=id,body,webLink,from,toRecipients,ccRecipients,replyTo,internetMessageId,internetMessageHeaders,hasAttachments"
         )
         body = message.get("body") or {}
         text = body.get("content") or ""
@@ -307,8 +476,130 @@ class MicrosoftReader:
         return {
             **self.record(self.cache[mid]),
             "body_text": text,
+            "headers": {
+                **self.record(self.cache[mid])["headers"],
+                **{
+                    k: ", ".join(
+                        formataddr(
+                            (
+                                r.get("emailAddress", {}).get("name", ""),
+                                r.get("emailAddress", {}).get("address", ""),
+                            )
+                        )
+                        for r in message.get(field, [])
+                    )
+                    for k, field in (("to", "toRecipients"), ("cc", "ccRecipients"), ("reply-to", "replyTo"))
+                },
+                "message-id": message.get("internetMessageId", ""),
+                "references": next(
+                    (
+                        h.get("value", "")
+                        for h in message.get("internetMessageHeaders", [])
+                        if h.get("name", "").lower() == "references"
+                    ),
+                    "",
+                ),
+            },
+            "attachments": self._attachments(mid) if message.get("hasAttachments") else [],
             "url": safe_link(message.get("webLink", "")),
         }
+
+    def _mid(self, provider_id):
+        identity, mid = provider_id.split(":", 1)
+        if identity != self.identity or mid not in self.cache:
+            raise ProviderError("Message is no longer in this account's current list. Refresh")
+        return mid
+
+    def _attachments(self, mid):
+        result, seen = [], set()
+        url = f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}/attachments?$select=id,name,size,contentType"
+        while url:
+            if url in seen or len(seen) > 20:
+                raise ProviderError("Attachment list is too large")
+            seen.add(url)
+            page = self.get(url)
+            result.extend(
+                {
+                    "id": a["id"],
+                    "name": a.get("name", "attachment"),
+                    "size": a.get("size", 0),
+                    "type": a.get("contentType", "application/octet-stream"),
+                }
+                for a in page.get("value", [])
+                if a.get("@odata.type", "#microsoft.graph.fileAttachment")
+                == "#microsoft.graph.fileAttachment"
+            )
+            url = page.get("@odata.nextLink")
+        return result
+
+    def attachment(self, provider_id, attachment_id):
+        mid = self._mid(provider_id)
+        meta = next((a for a in self._attachments(mid) if a["id"] == attachment_id), None)
+        if not meta or meta["size"] > 8 * 1024 * 1024:
+            raise ProviderError("Attachment unavailable or larger than the 8 MB download limit")
+        result = self.get(
+            f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}/attachments/{quote(attachment_id, safe='')}"
+        )
+        return meta, base64.b64decode(result.get("contentBytes", ""), validate=True)
+
+    def mutate(self, provider_id, action):
+        if not self.capabilities()["write"]:
+            raise ProviderError(self.capabilities()["reason"])
+        mid = self._mid(provider_id)
+        path = "messages/" + quote(mid, safe="")
+        if action in ("trash", "archive", "restore"):
+            self.write(
+                path + "/move",
+                {
+                    "destinationId": {"trash": "deleteditems", "archive": "archive", "restore": "inbox"}[
+                        action
+                    ]
+                },
+            )
+        elif action in ("read", "unread"):
+            self.write(path, {"isRead": action == "read"}, "PATCH")
+        elif action in ("star", "unstar"):
+            self.write(
+                path, {"flag": {"flagStatus": "flagged" if action == "star" else "notFlagged"}}, "PATCH"
+            )
+        else:
+            raise ProviderError("Unsupported mail action")
+
+    def send(self, data, original=None):
+        if not self.capabilities()["send"]:
+            raise ProviderError(self.capabilities()["reason"])
+        msg = {
+            "subject": data["subject"],
+            "body": {"contentType": "Text", "content": data["body"]},
+            **{
+                field: [{"emailAddress": {"address": a}} for a in addresses(data[key])]
+                for key, field in (("to", "toRecipients"), ("cc", "ccRecipients"), ("bcc", "bccRecipients"))
+            },
+            "attachments": [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": a["name"],
+                    "contentType": a["type"],
+                    "contentBytes": a["data"],
+                }
+                for a in data["attachments"]
+            ],
+        }
+        if original:
+            if not self.capabilities()["write"]:
+                raise ProviderError("Reply with attachments requires Mail.ReadWrite. Reconnect this account")
+            # Native reply draft preserves the conversation. Never retry this sequence automatically.
+            mid = self._mid(original["provider_id"])
+            draft = self.write("messages/" + quote(mid, safe="") + "/createReply", {})
+            path = "messages/" + quote(draft["id"], safe="")
+            attachments = msg.pop("attachments")
+            self.write(path, msg, "PATCH")
+            for item in attachments:
+                self.write(path + "/attachments", item)
+            self.write(path + "/send", {})
+        else:
+            self.write("sendMail", {"message": msg, "saveToSentItems": True})
+        return {"message": "Accepted by Microsoft for delivery. Check Sent for the saved copy."}
 
 
 class ImapReader:
@@ -317,8 +608,45 @@ class ImapReader:
         self.password = password
         self.validity = None
         self.ids: set[str] = set()
+        self.folder = "inbox"
+        self.address = self.settings.get("username", "")
 
-    def connect(self):
+    def capabilities(self):
+        return {
+            "write": True,
+            "send": bool(self.settings.get("smtp_host") and "@" in self.address),
+            "attachments": True,
+            "max_attachment_bytes": MAX_ATTACHMENTS,
+            "reason": "" if self.settings.get("smtp_host") else "Reconnect with SMTP settings to send mail",
+        }
+
+    @staticmethod
+    def mailbox(conn, folder):
+        if folder == "inbox":
+            return b'"INBOX"'
+        status, rows = conn.list()
+        if status != "OK":
+            raise ProviderError("Could not discover mailbox folders")
+        wanted = {"sent": b"\\Sent", "trash": b"\\Trash", "archive": b"\\Archive"}[folder]
+        for row in rows or []:
+            if not isinstance(row, bytes):
+                continue
+            match = re.match(rb'\(([^)]*)\)\s+(?:"[^"\r\n]*"|NIL)\s+(.+)$', row)
+            if match and wanted.lower() in {f.lower() for f in match[1].split()}:
+                name = match[2]
+                if b"\r" in name or b"\n" in name or name.startswith(b"{"):
+                    continue
+                # LIST returns a quoted string or atom; quote atom explicitly before commands.
+                return (
+                    name
+                    if name.startswith(b'"') and name.endswith(b'"')
+                    else b'"' + name.replace(b"\\", b"\\\\").replace(b'"', b'\\"') + b'"'
+                )
+        raise ProviderError(
+            "This server does not advertise a " + folder + " folder. Configure its special-use folders first"
+        )
+
+    def connect(self, *, write=False):
         s = self.settings
         conn = imaplib.IMAP4_SSL(
             s["host"], int(s["port"]), ssl_context=ssl.create_default_context(), timeout=25
@@ -328,7 +656,9 @@ class ImapReader:
                 s["username"],
                 self.password if self.password is not None else password_store(self.account["id"]),
             )
-            status, _ = conn.select("INBOX", readonly=True)
+            status, _ = conn.select(
+                "INBOX" if self.folder == "inbox" else self.mailbox(conn, self.folder), readonly=not write
+            )
             if status != "OK":
                 raise ProviderError("Could not read this account's inbox")
             value = conn.response("UIDVALIDITY")[1]
@@ -336,7 +666,9 @@ class ImapReader:
                 raise ProviderError(
                     "IMAP did not return a valid mailbox identifier; safe organization is unavailable"
                 )
-            return conn, value[0].decode()
+            return conn, ("" if self.folder == "inbox" else fingerprint(self.folder) + "/") + value[
+                0
+            ].decode()
         except BaseException:
             try:
                 conn.logout()
@@ -370,22 +702,28 @@ class ImapReader:
         return {
             "id": uid,
             "internal_date": int(stamp * 1000),
-            "headers": {"subject": str(message.get("Subject", "")), "from": str(message.get("From", ""))},
+            **mime_details(message),
             "body_text": str(text)[:262144],
-            "label_ids": [] if b"\\Seen" in flags else ["UNREAD"],
+            "label_ids": ([] if b"\\Seen" in flags else ["UNREAD"])
+            + (["STARRED"] if b"\\Flagged" in flags else []),
             "category": None,
         }
 
     @staticmethod
     def fetch(conn, uid: bytes, headers_only: bool):
-        field = "BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)]" if headers_only else "BODY.PEEK[]<0.262144>"
+        field = "BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)]" if headers_only else "BODY.PEEK[]<0.28311553>"
         status, data = conn.uid("fetch", uid, f"(UID FLAGS INTERNALDATE {field})")
         if status != "OK":
             raise ProviderError("IMAP message read failed. Refresh")
         result = next((entry for entry in data if isinstance(entry, tuple)), None)
+        if result and len(result[1]) > 28 * 1024 * 1024:
+            raise ProviderError("Message exceeds the 28 MB preview/download limit")
         return result
 
-    def list(self, limit: int) -> tuple[list[dict], bool]:
+    def list(self, limit: int, folder="inbox") -> tuple[list[dict], bool]:
+        if folder not in FOLDERS:
+            raise ProviderError("Unsupported folder")
+        self.folder = folder
         conn, validity = self.connect()
         try:
             status, response = conn.uid("search", None, "UNDELETED")
@@ -428,6 +766,118 @@ class ImapReader:
                 conn.logout()
             except (OSError, imaplib.IMAP4.error):
                 pass  # Retrieval has finished; a disconnected logout must not discard its result.
+
+    def _uid(self, provider_id):
+        validity, uid = provider_id.split(":", 1)
+        if validity != self.validity or uid not in self.ids or not uid.isdigit():
+            raise ProviderError("Message identity changed. Refresh")
+        return validity, uid
+
+    def mutate(self, provider_id, action):
+        validity, uid = self._uid(provider_id)
+        conn, current = self.connect(write=True)
+        try:
+            if current != validity:
+                raise ProviderError("The mailbox was rebuilt. Refresh before changing messages")
+            if action in ("trash", "archive", "restore"):
+                destination = self.mailbox(
+                    conn, {"trash": "trash", "archive": "archive", "restore": "inbox"}[action]
+                )
+                # RFC 6851: MOVE is scoped to the chosen UID. Never use global EXPUNGE,
+                # which could permanently remove unrelated messages marked deleted by another client.
+                capabilities = {
+                    c.upper() if isinstance(c, bytes) else c.upper().encode() for c in conn.capabilities
+                }
+                if b"MOVE" not in capabilities:
+                    raise ProviderError("This IMAP server lacks safe UID MOVE. No messages were deleted")
+                status, _ = conn.uid("MOVE", uid, destination)
+            else:
+                flags = {
+                    "read": ("+FLAGS.SILENT", r"(\Seen)"),
+                    "unread": ("-FLAGS.SILENT", r"(\Seen)"),
+                    "star": ("+FLAGS.SILENT", r"(\Flagged)"),
+                    "unstar": ("-FLAGS.SILENT", r"(\Flagged)"),
+                }
+                if action not in flags:
+                    raise ProviderError("Unsupported mail action")
+                verb, flag = flags[action]
+                status, _ = conn.uid("STORE", uid, verb, flag)
+            if status != "OK":
+                raise ProviderError("IMAP rejected this action. Refresh before retrying")
+        finally:
+            try:
+                conn.logout()
+            except (OSError, imaplib.IMAP4.error):
+                pass
+
+    def attachment(self, provider_id, attachment_id):
+        validity, uid = self._uid(provider_id)
+        conn, current = self.connect()
+        try:
+            if current != validity:
+                raise ProviderError("The mailbox was rebuilt. Refresh")
+            item = self.fetch(conn, uid.encode(), False)
+            if not item:
+                raise ProviderError("Message is no longer available")
+            message = BytesParser(policy=policy.default).parsebytes(item[1])
+            meta = next((a for a in mime_details(message)["attachments"] if a["id"] == attachment_id), None)
+            if not meta or meta["size"] > MAX_ATTACHMENTS:
+                raise ProviderError("Attachment is unavailable or exceeds 20 MB")
+            part = list(message.walk())[int(attachment_id)]
+            return meta, part.get_payload(decode=True) or b""
+        finally:
+            try:
+                conn.logout()
+            except (OSError, imaplib.IMAP4.error):
+                pass
+
+    def send(self, data, original=None):
+        s = self.settings
+        if not self.capabilities()["send"]:
+            raise ProviderError(self.capabilities()["reason"])
+        msg = mime_message(data, self.address, original)
+        recipients = [a for key in ("to", "cc", "bcc") for a in addresses(data[key])]
+        password = password_store(self.account["id"])
+        context = ssl.create_default_context()
+        if s["smtp_security"] == "ssl":
+            smtp = smtplib.SMTP_SSL(s["smtp_host"], s["smtp_port"], timeout=25, context=context)
+        else:
+            smtp = smtplib.SMTP(s["smtp_host"], s["smtp_port"], timeout=25)
+        try:
+            if s["smtp_security"] == "starttls":
+                smtp.ehlo()
+                smtp.starttls(context=context)
+                smtp.ehlo()
+            smtp.login(s["username"], password)
+            refused = smtp.sendmail(self.address, recipients, msg.as_bytes())
+        finally:
+            # SMTP acceptance is not undone by a failed QUIT.
+            try:
+                smtp.quit()
+            except (OSError, smtplib.SMTPException):
+                pass
+        warning = (
+            " Some recipients were rejected; check the original mailbox before resending." if refused else ""
+        )
+        try:
+            conn, _ = self.connect()
+            try:
+                sent = self.mailbox(conn, "sent")
+                status, _ = conn.append(
+                    sent, r"(\Seen)", imaplib.Time2Internaldate(time.time()), msg.as_bytes()
+                )
+                if status != "OK":
+                    raise ProviderError("Sent copy rejected")
+            finally:
+                conn.logout()
+        except Exception:  # noqa: BLE001 - message already accepted by SMTP: never invite a resend
+            warning += " Sent copy could not be saved. Do not resend just to create a copy."
+        return {
+            "message": "Accepted by SMTP for delivery." + warning,
+            "status": "partial" if refused else "complete",
+            "accepted": [a for a in recipients if a not in refused],
+            "refused": list(refused),
+        }
 
 
 def create_reader(account: dict):
