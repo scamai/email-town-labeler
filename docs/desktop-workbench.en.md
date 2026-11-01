@@ -39,7 +39,7 @@ The bare URL printed in the terminal has no authority; reopen through the launch
 
 ## Connect accounts
 
-An existing default Gmail authorization is enrolled automatically. Use **Add account** for other
+An existing default Gmail authorization is enrolled automatically. Use **Accounts → + Add** in the sidebar for other
 mailboxes, with recognizable display names. The app does not extract Outlook or Apple Mail credentials.
 
 | Provider | Connection | Prerequisite |
@@ -85,6 +85,13 @@ These changes synchronize to other clients using the same mailbox. Local categor
 stay on this device. Selecting all results selects only loaded, filtered messages, not the whole mailbox.
 Synchronization runs every 60 seconds, UI polling every 5 seconds. Failure in one account retains its last
 list with an error and leaves others usable. Completion survives restart; undo tokens live only in the current process.
+
+The top bar holds **Compose** and **Drafts**. The list shows sender/time, subject, then category/account.
+Select messages to reveal batch actions. **More** groups read/star controls and local completion/category
+actions separately. The preview keeps archive/trash at the top and reply/forward below the sender details.
+Below 1,200 CSS pixels, opening a message replaces the list; **Back** returns to the same message.
+Below 768 pixels, the menu button opens filters/accounts. Compose keeps **Send** and **Save draft** visible
+while its fields scroll. See the [layout decisions](design-spec.md#desktop-layout-and-alignment).
 
 ## Appearance
 
@@ -152,6 +159,7 @@ uv run pytest tests/test_desktop_*.py
 uv run --with playwright playwright install chromium
 uv run --with playwright python scripts/check_desktop_ui.py
 uv run --with playwright python scripts/check_mail_ui.py
+uv run --with playwright python scripts/check_layout_ui.py
 ```
 
 Browser tests use clearly labeled synthetic mail from two accounts and exercise actual loopback HTTP actions,

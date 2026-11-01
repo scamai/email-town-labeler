@@ -208,6 +208,12 @@
     els.footerStatus.textContent =
       "Session expired. Reopen Email Town from the launcher.";
     els.restart.hidden = false;
+    state.refreshing = false;
+    state.activeId = null;
+    els.previewPane.classList.remove("is-open");
+    els.previewContent.hidden = true;
+    els.previewEmpty.hidden = false;
+    renderList();
   }
 
   function filteredMessages() {
@@ -297,7 +303,7 @@
       },
     );
     $("accountCount").textContent = state.accounts.length
-      ? `${state.accounts.length} accounts`
+      ? String(state.accounts.length)
       : "—";
     els.categoryFilters.replaceChildren();
     [{ id: "all", name: "All categories" }, ...state.categories].forEach(
@@ -315,7 +321,7 @@
       },
     );
     $("categoryCount").textContent = state.categories.length
-      ? `${state.categories.length} categories`
+      ? String(state.categories.length)
       : "—";
     syncFilterButtons();
     restoreFocus(focus);
@@ -347,6 +353,19 @@
   }
 
   function renderList() {
+    if (state.authLost) {
+      els.selectionToolbar.hidden = true;
+      $("mailSelectionToolbar").hidden = true;
+      const error = document.createElement("div");
+      error.className = "error-state";
+      const heading = document.createElement("h3");
+      heading.textContent = "Session expired";
+      const help = document.createElement("p");
+      help.textContent = "Reopen Email Town from the launcher to reconnect.";
+      error.append(heading, help);
+      els.messageList.replaceChildren(error);
+      return;
+    }
     window.EmailTownMailHost?.render?.();
     const focus = saveFocus();
     const messages = filteredMessages();
@@ -355,20 +374,49 @@
       state.filters.type === "today"
         ? "Today"
         : state.filters.type === "backlog"
-          ? "Backlog"
-          : ({inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash"}[state.folder] || "Inbox");
+          ? "Earlier"
+          : {
+              inbox: "Inbox",
+              sent: "Sent",
+              archive: "Archive",
+              trash: "Trash",
+            }[state.folder] || "Inbox";
+    const folderName =
+      { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
+        state.folder
+      ] || "Inbox";
+    const categoryName =
+      state.filters.category === "all"
+        ? ""
+        : categoryById(state.filters.category)?.name;
+    if (categoryName) els.listTitle.textContent = categoryName;
+    $("listContext").textContent = [
+      state.filters.account === "all"
+        ? "All accounts"
+        : accountById(state.filters.account)?.name,
+      categoryName || state.filters.type !== "all" ? folderName : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+    $("syncIndicator").title = state.lastRefresh
+      ? `Last sync ${formatDate(state.lastRefresh)}`
+      : "";
     els.listStatus.textContent = state.modelError
       ? `Classifier: ${text(state.modelError)}`
       : state.stale
         ? "Sync failed; showing the last loaded data."
         : state.refreshing && state.messages.length
           ? "Syncing latest changes…"
-          : state.lastRefresh
-            ? `Last sync ${formatDate(state.lastRefresh)}`
-            : "";
+          : "";
     renderMailboxNotice();
     els.selectionToolbar.hidden = !state.messages.length;
-    els.selectionCount.textContent = `${state.selected.size} selected`;
+    els.selectionCount.textContent = state.selected.size
+      ? `${state.selected.size} selected`
+      : `${messages.length} messages`;
+    $("clearSelectionButton").hidden = !state.selected.size;
+    els.selectAll.indeterminate =
+      messages.some((m) => state.selected.has(m.id)) &&
+      !messages.every((m) => state.selected.has(m.id));
     els.markDone.disabled = els.reopen.disabled = state.selected.size === 0;
     els.selectAll.checked =
       messages.length > 0 && messages.every((m) => state.selected.has(m.id));
@@ -429,20 +477,27 @@
       const sender = document.createElement("span");
       sender.className = "row-sender";
       sender.textContent = text(message.sender || "Unknown sender");
-      title.append(subject, sender);
+
       const snippet = document.createElement("div");
-      snippet.className = "row-preview";
+      snippet.className = "row-preview sr-only";
       snippet.textContent = `Classification: ${sourceName(message.source)}`;
       const account = document.createElement("div");
       account.className = "row-account";
       account.textContent = text(
         accountById(message.account_id)?.name || "Unknown account",
       );
-      body.append(account, title, snippet);
+
       const meta = document.createElement("div");
       meta.className = "row-meta";
       const date = document.createElement("time");
-      date.textContent = formatDate(message.date);
+      date.title = formatDate(message.date);
+      date.textContent = new Intl.DateTimeFormat(
+        "en-US",
+        Number(message.date) >= localMidnight()
+          ? { hour: "numeric", minute: "2-digit" }
+          : { month: "short", day: "numeric" },
+      ).format(new Date(Number(message.date) || 0));
+      title.append(sender, date);
       const category = document.createElement("span");
       category.className = "category-badge";
       category.dataset.category = message.category || "unknown";
@@ -451,10 +506,13 @@
           message.category ||
           "Unclassified",
       );
-      meta.append(date, category);
+      category.title = `Classification: ${sourceName(message.source)}`;
+      meta.append(category, account);
       if (message.starred) {
-        const star = document.createElement("span"); star.className = "unread-badge";
-        star.textContent = "★ Starred"; meta.append(star);
+        const star = document.createElement("span");
+        star.className = "unread-badge";
+        star.textContent = "★ Starred";
+        meta.append(star);
       }
       if (message.unread) {
         const unread = document.createElement("span");
@@ -462,13 +520,20 @@
         unread.textContent = "Unread";
         meta.append(unread);
       }
-      row.append(checkbox, body, meta);
+      body.append(title, subject, meta, snippet);
+      row.append(checkbox, body);
       row.addEventListener("click", () => openMessage(message.id));
       els.messageList.append(row);
     });
     els.selectionToolbar.hidden =
       state.selected.size === 0 && !state.messages.length;
-    els.selectionCount.textContent = `${state.selected.size} selected`;
+    els.selectionCount.textContent = state.selected.size
+      ? `${state.selected.size} selected`
+      : `${messages.length} messages`;
+    $("clearSelectionButton").hidden = !state.selected.size;
+    els.selectAll.indeterminate =
+      messages.some((m) => state.selected.has(m.id)) &&
+      !messages.every((m) => state.selected.has(m.id));
     els.selectAll.checked =
       messages.length > 0 &&
       messages.every((message) => state.selected.has(message.id));
@@ -482,6 +547,7 @@
     els.previewEmpty.hidden = true;
     els.previewContent.hidden = false;
     loadPreview(id);
+    if (window.innerWidth < 1200) els.previewClose.focus();
   }
   function safeOriginalUrl(value) {
     try {
@@ -508,7 +574,10 @@
   async function loadPreview(id) {
     const message = state.messages.find((item) => item.id === id);
     if (!message) return;
-    els.previewSource.textContent = `Account: ${text(accountById(message.account_id)?.name || "Unknown account")} · Classification: ${sourceName(message.source)}`;
+    els.previewSource.textContent = text(
+      accountById(message.account_id)?.name || "Unknown account",
+    );
+    els.previewSource.title = `Classification: ${sourceName(message.source)}`;
     els.previewCategory.textContent = text(
       categoryById(message.category)?.name ||
         message.category ||
@@ -873,10 +942,16 @@
       renderFilters();
       renderList();
     }
+    if (type || done || account || category) {
+      if (window.innerWidth < 1200) els.previewPane.classList.remove("is-open");
+      if (window.innerWidth < 768) closeSidebar();
+    }
   });
   function syncMobileSidebar() {
-    els.sidebar.inert =
-      window.innerWidth < 768 && !els.sidebar.classList.contains("is-open");
+    const open =
+      window.innerWidth < 768 && els.sidebar.classList.contains("is-open");
+    els.sidebar.inert = window.innerWidth < 768 && !open;
+    $("sidebarBackdrop").hidden = !open;
   }
   function closeSidebar() {
     els.sidebar.classList.remove("is-open");
@@ -891,6 +966,26 @@
     if (open) els.sidebarClose.focus();
   });
   els.sidebarClose.addEventListener("click", closeSidebar);
+  $("sidebarBackdrop").addEventListener("click", closeSidebar);
+  document.addEventListener("keydown", (event) => {
+    if (
+      event.key !== "Tab" ||
+      window.innerWidth >= 768 ||
+      !els.sidebar.classList.contains("is-open") ||
+      document.querySelector("dialog[open]")
+    )
+      return;
+    const buttons = [...els.sidebar.querySelectorAll("button:not(:disabled)")];
+    const first = buttons[0],
+      last = buttons.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
   els.previewClose.addEventListener("click", () => {
     els.previewPane.classList.remove("is-open");
     restoreFocus({ key: "focusKey", value: `open-${state.activeId}` });
@@ -900,6 +995,69 @@
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && els.sidebar.classList.contains("is-open"))
       closeSidebar();
+  });
+  document.addEventListener("click", (event) => {
+    document.querySelectorAll(".action-menu[open]").forEach((menu) => {
+      if (
+        !menu.contains(event.target) ||
+        event.target.closest(".menu-panel button, .menu-panel a")
+      ) {
+        if (menu.contains(event.target)) {
+          const dialog = document.querySelector("dialog[open]");
+          if (dialog)
+            dialog.addEventListener(
+              "close",
+              () => menu.querySelector("summary").focus(),
+              { once: true },
+            );
+          else menu.querySelector("summary").focus({ preventScroll: true });
+        }
+        menu.open = false;
+      }
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || document.querySelector("dialog[open]"))
+      return;
+    const menu = document.querySelector(".action-menu[open]");
+    if (menu) {
+      menu.open = false;
+      menu.querySelector("summary").focus();
+      event.stopImmediatePropagation();
+    } else if (
+      window.innerWidth < 1200 &&
+      els.previewPane.classList.contains("is-open")
+    )
+      els.previewClose.click();
+  });
+  document.querySelectorAll(".action-menu").forEach((menu) => {
+    menu.addEventListener("toggle", () => {
+      if (!menu.open) return;
+      const panel = menu.querySelector(".menu-panel");
+      const anchor = menu.querySelector("summary").getBoundingClientRect();
+      const inset = 8;
+      const availableBelow = window.innerHeight - anchor.bottom - inset * 2;
+      const availableAbove = anchor.top - inset * 2;
+      const above =
+        availableBelow < Math.min(panel.scrollHeight, 240) &&
+        availableAbove > availableBelow;
+      const height = Math.min(
+        panel.scrollHeight,
+        above ? availableAbove : availableBelow,
+      );
+      panel.style.maxHeight = `${Math.max(48, height)}px`;
+      panel.style.left = `${Math.max(inset, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - inset))}px`;
+      panel.style.top = `${above ? anchor.top - height - inset : anchor.bottom + inset}px`;
+    });
+  });
+  window.addEventListener("resize", () =>
+    document.querySelectorAll(".action-menu[open]").forEach((menu) => {
+      menu.open = false;
+    }),
+  );
+  $("mobileRefreshButton").addEventListener("click", () => {
+    refresh();
+    closeSidebar();
   });
   els.refresh.addEventListener("click", refresh);
   els.restart.addEventListener("click", () => window.location.reload());
@@ -1037,7 +1195,8 @@
     api,
     fetchBinary: async (path) => {
       const headers = { "X-Email-Town": "local" };
-      if (state.sessionToken) headers.Authorization = `Bearer ${state.sessionToken}`;
+      if (state.sessionToken)
+        headers.Authorization = `Bearer ${state.sessionToken}`;
       const response = await fetch(path, { credentials: "omit", headers });
       if (!response.ok) throw new Error(`Download failed (${response.status})`);
       return response.blob();

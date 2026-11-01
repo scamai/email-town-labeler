@@ -7,6 +7,17 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop layout
+
+- Reorganize mail navigation, message rows and preview actions with shared gutters and control sizes.
+  Contextual batch actions and More menus separate mailbox changes from local task organization.
+- Replace stacked tablet previews with a focused reading view and Back navigation; constrain menus
+  to the viewport and provide a mobile filter drawer with refresh and keyboard containment.
+- Align compose/account fields, strengthen input boundaries, keep Send/Save visible while composing,
+  and wrap long attachment names without splitting their Remove controls.
+- Replace stale loading screens on expired sessions with a clear reconnection message.
+- Add synthetic responsive/keyboard/layout checks, including 320px reflow and short compose windows.
+
 ### Desktop mail operations
 
 - Compose, reply, reply all and forward from a selected account, attach/download files,

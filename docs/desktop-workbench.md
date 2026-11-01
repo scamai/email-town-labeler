@@ -47,7 +47,7 @@ email-town-labeler desktop --no-browser
 
 ## 连接邮箱
 
-已有默认 Gmail 授权会自动纳入。其他账户从右上角“Add account”（添加账户）连接，并设置可辨认的名称。
+已有默认 Gmail 授权会自动纳入。其他账户从侧栏“Accounts → + Add”（添加账户）连接，并设置可辨认的名称。
 应用不会读取 Outlook 或 Apple Mail 保存的登录凭据。
 
 | 邮箱 | 连接方式 | 前提 |
@@ -63,7 +63,7 @@ email-town-labeler desktop --no-browser
 Exchange 本地部署不等于 Microsoft Graph 邮箱；需管理员允许的 IMAP 或其他适配。
 
 账户旁的“⋯”提供暂停、恢复和重新授权。暂停只是停止自动同步，已载入邮件仍能查看。
-重新授权保留原账户的整理状态，并检查邮箱身份；登录其他邮箱请使用“Add account”（添加账户）。
+重新授权保留原账户的整理状态，并检查邮箱身份；登录其他邮箱请使用侧栏“+ Add”（添加账户）。
 
 ## 统一处理
 
@@ -90,6 +90,12 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 
 自动同步间隔 60 秒，界面每 5 秒读取本机状态。一个账户断线不会清空其他账户；断线账户保留
 最后一次列表并显示错误。完成记录重启后仍存在；撤销令牌仅在当前进程中保存。
+
+顶部的 **Compose** 用于写信，**Drafts** 用于本机草稿。列表每封邮件依次显示发件人和时间、主题、分类与账户。
+选择邮件后才显示批量操作；**More** 中区分原邮箱操作与本机完成/分类操作。
+预览顶部保留归档、垃圾箱和 More，回复/转发位于发件人信息下方。
+窗口宽度不足 1200 CSS 像素时，打开邮件会替换列表，点击 **Back** 返回原位置；
+不足 768 像素时，通过左上角菜单打开账户和筛选。写信字段可以滚动，**Send / Save draft** 固定在窗口底部。
 
 ## 语言与颜色
 
@@ -139,6 +145,7 @@ uv run pytest tests/test_desktop_*.py
 uv run --with playwright playwright install chromium
 uv run --with playwright python scripts/check_desktop_ui.py
 uv run --with playwright python scripts/check_mail_ui.py
+uv run --with playwright python scripts/check_layout_ui.py
 ```
 
 浏览器测试使用明确标注的合成双账户数据，检查真实本地 HTTP 操作、筛选、预览、完成/撤销、

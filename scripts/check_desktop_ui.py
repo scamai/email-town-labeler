@@ -138,9 +138,9 @@ def main():
                     expect(page.locator("#previewCategory")).to_have_attribute(
                         "data-category", "action_needed"
                     )
-                    if width in (390, 1440):
+                    if width in (390, 768, 1280, 1440):
                         page.screenshot(path=str(out / f"{theme}-{width}-preview.png"))
-                    if width == 390:
+                    if width < 1200:
                         page.locator("#previewClose").click()
                     page.locator("#searchInput").fill("Order")
                     expect(page.locator(".message-row")).to_have_count(2)
@@ -187,6 +187,7 @@ def main():
             expect(page.locator("#toast")).to_have_text("Change undone")
             assert not any(m["done"] for m in manager.snapshot()["messages"])
             page.locator(".row-open").first.click()
+            page.locator("#previewMore summary").click()
             page.locator("#previewCategoryButton").click()
             page.locator("#categorySelect").select_option("travel")
             page.locator("#categoryForm button[type=submit]").click()

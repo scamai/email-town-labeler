@@ -9,11 +9,13 @@ category forms.
 
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import threading
 from pathlib import Path
 
+from check_desktop_ui import contrast
 from check_mail_ui import FixtureReader
 from playwright.sync_api import expect, sync_playwright
 
@@ -74,6 +76,10 @@ def assert_compose(page, capture: Path, attachment: Path) -> None:
         for selector in ("#composeTo", "#composeCc", "#composeBcc", "#composeSubject", "#composeBody")
     ]
     assert max(left_edges) - min(left_edges) <= 1, left_edges
+    colors = page.locator("#composeTo").evaluate(
+        "el => ({border:getComputedStyle(el).borderColor, bg:getComputedStyle(el).backgroundColor})"
+    )
+    assert contrast(colors["border"], colors["bg"]) >= 3, colors
     assert page.locator("#composeBody").evaluate(
         "el => getComputedStyle(el).fontFamily === getComputedStyle(document.body).fontFamily"
     )
@@ -93,6 +99,15 @@ def assert_compose(page, capture: Path, attachment: Path) -> None:
 
 
 def assert_account(page, capture: Path) -> None:
+    if page.viewport_size["width"] < 768:
+        page.locator("#sidebarToggle").click()
+    if page.viewport_size["width"] < 768:
+        expect(page.locator("#sidebarBackdrop")).to_be_visible()
+        page.locator("#mobileRefreshButton").focus()
+        page.keyboard.press("Shift+Tab")
+        expect(page.locator("#sidebar button").last).to_be_focused()
+        page.keyboard.press("Tab")
+        expect(page.locator("#mobileRefreshButton")).to_be_focused()
     page.locator("#addAccountButton").click()
     expect(page.locator("#accountDialog")).to_be_visible()
     page.locator("#providerSelect").select_option("imap")
@@ -135,12 +150,14 @@ def main() -> int:
                     )
                     page = context.new_page()
                     page.set_default_timeout(8000)
+                    page.on("dialog", lambda dialog: dialog.accept())
                     page.goto(server.launch_url)
                     expect(page.locator(".message-row")).to_have_count(2)
                     assert_list_geometry(page, f"{theme}-{width}")
                     if width == 390:
                         page.screenshot(path=str(out / f"{theme}-list.png"))
                     open_preview(page)
+                    page.screenshot(path=str(out / f"{theme}-{width}-preview.png"))
                     if width == 768:
                         workspace = bounds(page, ".workspace")
                         preview = bounds(page, "#previewPane")
@@ -154,8 +171,6 @@ def main() -> int:
                         page.locator("#previewClose").click()
                     else:
                         assert page.locator(".message-pane").is_visible()
-                    if width == 390:
-                        page.screenshot(path=str(out / f"{theme}-preview.png"))
                     if width == 1440:
                         open_preview(page)
                         assert_preview_keyboard(page)
@@ -169,11 +184,13 @@ def main() -> int:
                     expect(page.locator("#categoryDialog")).to_be_visible()
                     page.keyboard.press("Escape")
                     expect(page.locator("#categoryDialog")).to_be_hidden()
+                    expect(page.locator("#previewMore summary")).to_be_focused()
                     if width < 1200:
                         page.locator("#previewClose").click()
                     if width == 390:
                         attachment = out / "fixture-long-synthetic-attachment-name.txt"
                         attachment.write_text("synthetic attachment")
+                        page.set_viewport_size({"width": 390, "height": 640})
                         assert_compose(page, out / f"{theme}-compose.png", attachment)
                         assert_account(page, out / f"{theme}-account.png")
                     context.close()
@@ -183,7 +200,57 @@ def main() -> int:
                 page.goto(server.launch_url)
                 expect(page.locator(".message-row")).to_have_count(2)
                 assert_list_geometry(page, f"{theme}-320")
+                page.locator(".row-check").first.check()
+                page.locator("#bulkMore summary").click()
+                panel = page.locator("#bulkMore .menu-panel")
+                expect(panel).to_be_visible()
+                expect(panel).to_have_attribute("style", re.compile(r"top:"))
+                box = panel.bounding_box()
+                assert box and box["x"] >= 0 and box["x"] + box["width"] <= 320, box
+                assert box["y"] >= 0 and box["y"] + box["height"] <= 640, box
+                page.locator("#reopenButton").scroll_into_view_if_needed()
+                assert page.locator("#reopenButton").is_visible()
                 page.screenshot(path=str(out / f"{theme}-320-layout.png"))
+                page.keyboard.press("Escape")
+                page.locator("#sidebarToggle").click()
+                expect(page.locator("#mobileRefreshButton")).to_be_visible()
+                page.locator("#mobileRefreshButton").click()
+                expect(page.locator("#sidebarBackdrop")).to_be_hidden()
+                # State captures stay on the real app/CSP; only synthetic API snapshots vary.
+                base = manager.snapshot()
+                cases = (
+                    ("loading", {**base, "messages": [], "refreshing": True}, ".loading-state"),
+                    ("empty", {**base, "messages": [], "refreshing": False}, ".empty-state"),
+                    (
+                        "error",
+                        {**base, "model_error": "Fixture classifier unavailable. Mail is still readable."},
+                        "#listStatus",
+                    ),
+                )
+                for name, snapshot, selector in cases:
+
+                    def fixture_state(route, request, snapshot=snapshot):
+                        route.fulfill(json=snapshot)
+
+                    page.route("**/api/state", fixture_state)
+                    page.reload()
+                    expect(page.locator(selector)).to_be_visible()
+                    assert_no_overflow(page, name)
+                    page.screenshot(path=str(out / f"{theme}-320-{name}.png"))
+                    page.unroute("**/api/state", fixture_state)
+
+                def expired_session(route):
+                    route.fulfill(status=401, json={"error": "fixture session expired"})
+
+                page.route("**/api/state", expired_session)
+                page.reload()
+                expect(page.locator("#restartButton")).to_be_visible()
+                expect(page.locator(".error-state h3")).to_have_text("Session expired")
+                expect(page.locator(".loading-state")).to_have_count(0)
+                footer = bounds(page, ".app-footer")
+                assert footer["y"] + footer["height"] <= 640, footer
+                assert_no_overflow(page, "session-expired")
+                page.screenshot(path=str(out / f"{theme}-320-session.png"))
                 context.close()
             browser.close()
     finally:

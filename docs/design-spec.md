@@ -379,3 +379,67 @@ attachment bytes are executed in the workbench. Session tokens never enter brows
 attachment URLs. Drafts are local, not provider draft synchronization. Provider write capability
 is derived from granted scopes or explicit SMTP configuration; broad grants are not silently
 requested during refresh. See the desktop guide for limits and unverified provider acceptance.
+
+
+## Desktop layout and alignment
+
+Design Read: a daily multi-account mail workbench, optimized for scanning, batch handling and
+replying, using the existing quiet surfaces and category hues. This is the Standard evolve lane:
+recompose existing controls, keep provider behavior and original-mail safety contracts unchanged.
+
+- Platform: responsive browser UI launched locally on macOS; mouse, keyboard and touch layouts.
+  This is not a new native window system. No public-web SEO or signature animation is applicable.
+- Profile: `clade.design-direction/v1`, variant `V2`, mode `evolve`, preset `product-quiet`,
+  family `email-town-existing`, composition 2, motion 1, density 3, appearance `system`, signature none.
+- Design system: existing `desktop/web/style.css` tokens and supplied house/envelope logo.
+  The stylesheet defines the shared button, field, menu, navigation and dialog rules once.
+  Existing runnable synthetic fixtures serve as the component/state preview, without another UI stack.
+- Components: 40px main controls, 36px compact actions, 32px text actions; 6px controls, 8px dialogs,
+  4px labels; 24px pane gutters (16px narrow). Six text sizes: 12/13/15/18/20/24px and three weights.
+  System sans throughout, including the compose textarea. Input boundary tokens meet 3:1 contrast. Floating menus/dialogs alone use elevation;
+  inset selection rails remain on messages and category navigation. Visible focus, pressed, selected,
+  disabled and loading states share tokens. Only color and drawer position transition; reduced motion
+  disables those transitions.
+- Screens: inbox/sent/archive/trash lists, selected batches, reading pane, compose/reply/forward,
+  drafts, add/reauthorize/manage-account and category dialogs, empty/search/error states.
+- Hierarchy: Compose is the global primary action; account enrollment lives with Accounts. List rows
+  use sender/time, subject, then category/account. Classification provenance remains available in
+  accessibility text and preview tooltips, without repeating a full technical line per message.
+- Selection: one count and selection strip; batch actions appear only with a selection. Native details
+  disclosures hold secondary actions. Mailbox and local actions have separate labels. Inapplicable
+  Trash/Restore actions are hidden, while unavailable grants remain disabled.
+- Reading: archive/trash in the top action strip, subject and envelope next, then reply/forward and
+  plaintext body. Recipient headers precede the body. Full-width list replacement below 1200px avoids
+  the old implicit second grid row; Back restores focus. Below 768px the sidebar is a drawer with a
+  dismissible backdrop, keyboard containment, manual refresh and an explicit close button.
+- Compose: aligned label/input columns, inherited sans text, bounded scroll area and persistent
+  footer. Long filenames wrap while Remove stays intact. IMAP server/port inputs align even when
+  labels wrap. No content is added to or removed from the send payload by layout changes.
+
+Benchmark and rejected patterns:
+
+- [Gmail reading pane](https://support.google.com/mail/answer/9499937?hl=en) documents split and
+  no-split arrangements; [Outlook layout](https://support.microsoft.com/en-us/outlook/mail/change-how-the-message-list-is-displayed-in-outlook)
+  separates message list and reading-pane choices. We retain that distinction and use a deliberate
+  no-split narrow layout rather than shrinking both panes.
+- [Carbon table actions](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines)
+  supplies the contextual batch-action pattern; this UI retains mail rows rather than imitating a spreadsheet.
+- [W3C reflow](https://www.w3.org/WAI/WCAG21/Understanding/reflow) supplies the 320 CSS pixel floor.
+  Baseline counterexamples were wrapped preview button walls, two competing primary actions, repeated
+  classification metadata, and a tablet preview pushed below the list. Marketing effects, new palette,
+  and another prototype framework were rejected because they do not help these mail tasks.
+
+Verification uses `check_desktop_ui.py`, `check_mail_ui.py` and `check_layout_ui.py`. Synthetic captures
+cover light/dark at 390/768/1280/1440, 320px reflow, and compose at 390×640. Geometry assertions measure
+shared left edges and field alignment, viewport containment and fixed-footer reachability; keyboard
+checks cover reading/return, disclosure Escape and category-dialog focus restoration. Existing mail
+flow checks still observe attachment bytes, drafts, uncertain sends and partial batch outcomes across
+real loopback HTTP. No real messages are sent or moved by these checks.
+
+The rendered review addressed four baseline hierarchy/layout findings, then corrected mobile filename
+wrapping, label/input alignment, a desktop Back-button cascade defect, and viewport clipping of
+wrapped bulk menus. Expired sessions show a reconnection error instead of a stale loading placeholder.
+Popovers are clamped to available screen space and scroll internally when needed. Source design lint has zero
+warnings; static HTML contrast cannot resolve external styles, so rendered category-palette checks are
+used (worst light 5.53:1, dark 7.36:1). This is not a full accessibility certification: VoiceOver, physical
+touch devices, user task-time measurements and other browser engines remain unverified.
