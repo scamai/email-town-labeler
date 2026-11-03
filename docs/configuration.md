@@ -9,7 +9,7 @@ install`, or `docker compose restart`).
 | What | macOS | Linux | Windows |
 |---|---|---|---|
 | config dir: `config.toml`, `client_secret.json`, `token.json` | `~/Library/Application Support/email-town-labeler/` | `~/.config/email-town-labeler/` (`$XDG_CONFIG_HOME`) | `%LOCALAPPDATA%\email-town-labeler\` |
-| data dir: `state.sqlite`, `models/`, `logs/` | `~/Library/Application Support/email-town-labeler/` | `~/.local/share/email-town-labeler/` (`$XDG_DATA_HOME`) | `%LOCALAPPDATA%\email-town-labeler\` |
+| data dir: `state.sqlite`, `models/`, `logs/`, `update-check.json` | `~/Library/Application Support/email-town-labeler/` | `~/.local/share/email-town-labeler/` (`$XDG_DATA_HOME`) | `%LOCALAPPDATA%\email-town-labeler\` |
 
 Paths come from [platformdirs](https://pypi.org/project/platformdirs/). `email-town-labeler setup`,
 `email-town-labeler doctor` and `email-town-labeler status --json` print the exact paths on your machine.
@@ -25,6 +25,7 @@ container the files are:
 /data/data/state.sqlite
 /data/data/models/
 /data/data/logs/
+/data/data/update-check.json  # when the update check last ran (see [updates])
 /data/hf-cache/            # Hugging Face cache (HF_HOME), only with the embed image
 ```
 
@@ -86,6 +87,9 @@ tune_policy = true             # re-tune action/promotional thresholds from the 
 action_recall_target = 0.9     # keep action needed recall at least this
 promo_important_max_rate = 0.01  # of mail labeled promotional, at most this may be important
 max_examples = 20000           # newest decisions per run (100 .. 1000000)
+
+[updates]
+check = true                   # setup/status/doctor/model list|pull in a terminal: look for a newer release daily
 
 [labels]                       # optional: rename the Gmail labels per class
 # action_needed = "todo"
@@ -274,6 +278,19 @@ decision time; no key here makes anything leave your machine.
 - **`tune_policy`**, **`action_recall_target`**, **`promo_important_max_rate`**: threshold
   re-tuning. Keys set in `[policy]` are never tuned.
 
+### `[updates]`
+
+- **`check`** (default `true`): after `setup`, `status`, `doctor`, `model list` or `model pull`,
+  when their output goes to a terminal and `--json` is not given, email-town-labeler fetches a
+  small public file (`latest.json`) from its GitHub Releases at most once a day and prints one
+  line on stderr if a newer version exists, with the command that installs it. It installs
+  nothing, sends no mail data, account, install ID or version, and never changes a command's
+  exit code. `run` (the service), `once`, `backfill`, `--version` and the Docker health check
+  never check; `run` logs one line at start-up if an earlier check found a newer version. The
+  first check prints a line saying what it fetches and how to turn it off. `false` turns it off,
+  as does `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`; `DO_NOT_TRACK=1` and `CI` (set by most CI
+  systems) skip it too. Exactly what is sent and stored: [privacy.md](privacy.md#update-check).
+
 ### `[teacher_labels]`
 
 Maps a meaning to the Gmail label name your teacher uses. Valid keys: `action_needed`,
@@ -298,5 +315,8 @@ Mail that arrived before the first run is left alone unless you run `email-town-
 |---|---|
 | `EMAIL_TOWN_LABELER_HOME` | put config and data under one directory (see above) |
 | `EMAIL_TOWN_LABELER_ALLOW_REMOTE_ENDPOINT` | `1`: same as `[model] allow_remote_endpoint = true` |
+| `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK` | `1` (any value but empty, `0`, `false`, `no` or `off`): no update check, as with `[updates] check = false` |
+| `DO_NOT_TRACK` | `1` (same values): no update check either |
+| `CI` | set (to anything but empty, `0`, `false`, `no` or `off`, as CI systems do): no update check |
 | `HF_HOME` | Hugging Face cache location for `embedding_probe` embedders |
-| `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | honored by the Google client and model downloads |
+| `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` | honored by the Google client, model downloads and the update check |

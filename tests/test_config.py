@@ -38,7 +38,7 @@ def test_spec_example_parses(tmp_path):
         "[engine]\ndry_run = false\n"
     )
     assert load_config(p) == Config()
-    assert dump_config(Config()).count("=") == 18
+    assert dump_config(Config()).count("=") == 19
 
 
 @pytest.mark.parametrize(
@@ -70,6 +70,9 @@ def test_spec_example_parses(tmp_path):
         ("[model]\nkeep_loaded_minutes = 1441\n", "keep_loaded_minutes"),
         ("[model]\nkeep_loaded_minutes = 2.5\n", "whole number"),
         ("[policy]\nthreshold = 0.5\n", "unknown key"),
+        ("[updates]\ncheck = 'no'\n", "true or false"),
+        ("[updates]\ncheck = 0\n", "true or false"),
+        ("[updates]\ninterval_hours = 1\n", "unknown key"),
         ("[gmail]\nlabel_prefix = 'INBOX'\n", "system label"),
         ("not toml = = \n", "not valid TOML"),
     ],
@@ -219,3 +222,13 @@ def test_keep_loaded_minutes(tmp_path):
     p.write_text("[model]\nkeep_loaded_minutes = -1\n")
     cfg = load_config(p)
     assert cfg.keep_loaded_minutes == -1 and "keep_loaded_minutes = -1" in dump_config(cfg)
+
+
+def test_updates_check(tmp_path):
+    p = tmp_path / "config.toml"
+    assert load_config(p).update_check is True  # the default, also for configs from older versions
+    assert "[updates]\ncheck = true\n" in dump_config(Config())  # setup writes the switch, so it is findable
+    p.write_text("[updates]\ncheck = false\n")
+    cfg = load_config(p)
+    assert cfg.update_check is False
+    assert load_config(save_config(cfg, tmp_path / "again.toml")).update_check is False
