@@ -140,6 +140,7 @@ _LAYOUT: list[tuple[str, str, str]] = [
     ("learn", "action_recall_target", "learn_action_recall_target"),
     ("learn", "promo_important_max_rate", "learn_promo_important_max_rate"),
     ("learn", "max_examples", "learn_max_examples"),
+    ("updates", "check", "update_check"),
 ]
 
 
@@ -182,6 +183,8 @@ class Config:
     learn_action_recall_target: float = 0.9  # keep action needed recall at least this
     learn_promo_important_max_rate: float = 0.01  # of mail labeled promotional, at most this is important
     learn_max_examples: int = 20000  # newest decisions used per run (bounds time and memory)
+    # [updates]: setup/status/doctor/model list|pull in a terminal look for a newer release daily
+    update_check: bool = True  # (update_check.py); false: never. `run` never checks.
     label_names: dict[str, str] = field(default_factory=dict)  # optional [labels] overrides
     # optional [label_colors] overrides: class -> {"background", "text"} or False (leave that label alone)
     label_color_overrides: dict[str, Any] = field(default_factory=dict)
@@ -415,6 +418,7 @@ _EXPECT = {
     "learn_action_recall_target": float,
     "learn_promo_important_max_rate": float,
     "learn_max_examples": int,
+    "update_check": bool,
 }
 
 

@@ -111,6 +111,19 @@ jobs:
         with:
           name: dist
           path: dist/
+      # The file installed copies fetch at most once a day to learn about a new version
+      # (src/email_town_labeler/update_check.py, docs/privacy.md#update-check). It holds the version
+      # and nothing else; clients accept only X.Y.Z, so a pre-release tag gets no file (and its
+      # release is marked a pre-release, which never becomes releases/latest).
+      - name: Write latest.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf '{"version": "%s"}\n' "$VERSION" > dist/latest.json
+            cat dist/latest.json
+          else
+            echo "::notice::$GITHUB_REF_NAME is not vX.Y.Z: no latest.json, so installed copies are not told about it"
+          fi
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -119,5 +132,28 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md."
+            PRE=()
+            [ -f dist/latest.json ] || PRE=(--prerelease --latest=false)  # not vX.Y.Z: never releases/latest
+            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md." "${PRE[@]}"
+          fi
+      # releases/latest/download/latest.json is what installed copies fetch. After an X.Y.Z tag it
+      # must be this version; after any other tag it must still be the previous release's file.
+      - name: Check what installed copies will see
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          if ! SERVED=$(gh release download "$LATEST_TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json --output -); then
+            echo "::error::releases/latest is $LATEST_TAG, which has no latest.json: every installed copy's update check fails"
+            exit 1
+          fi
+          echo "latest release: $LATEST_TAG; its latest.json: $SERVED"
+          if [ -f dist/latest.json ]; then
+            if [ "$LATEST_TAG" != "$GITHUB_REF_NAME" ] || [ "$SERVED" != "$(cat dist/latest.json)" ]; then
+              echo "::error::installed copies will not hear about $GITHUB_REF_NAME (latest release: $LATEST_TAG, latest.json: $SERVED)"
+              exit 1
+            fi
+          elif [ "$LATEST_TAG" = "$GITHUB_REF_NAME" ]; then
+            echo "::error::$GITHUB_REF_NAME is not vX.Y.Z but became releases/latest: mark it a pre-release"
+            exit 1
           fi

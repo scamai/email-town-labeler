@@ -89,10 +89,18 @@ reading and labeling parts ([exactly what it does](docs/privacy.md#what-gmailmod
 **It will never:**
 
 - ❌ send, delete, archive, move or mark any email as read
-- ❌ upload your email anywhere (the only network traffic is the Gmail API, plus a model download you ask for)
-- ❌ phone home: no analytics, no crash reports, no update checks
+- ❌ upload your email anywhere (the only network traffic is the Gmail API, a model download you ask for, and the update check below)
+- ❌ phone home: no analytics, no crash reports, no install ID
 - ❌ store your email: its local database holds message ids, label names and numbers, never subjects, senders or bodies
 - ❌ touch any label except its own
+
+**Update check.** When you run `setup`, `status`, `doctor`, `model list` or `model pull` in a
+terminal, email-town-labeler fetches a small public file (`latest.json`) from its GitHub Releases
+at most once a day and prints a line if a newer version exists. It sends no mail data, account,
+install ID or version; GitHub sees your IP address and the time. It installs nothing; `run` and
+the Docker image's default command and health check never check. Turn it off with
+`[updates] check = false` or `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`; `DO_NOT_TRACK=1` or `CI`
+also skips it ([details](docs/privacy.md#update-check)).
 
 **How to take it all back:** `email-town-labeler undo` removes every label it ever added, and
 <https://myaccount.google.com/permissions> revokes its access. Full threat model: [docs/privacy.md](docs/privacy.md).
@@ -291,6 +299,9 @@ dry_run = false              # true: classify and record, never change Gmail
 #   left unset, these two come from the model (town-modernbert: 0.07 and 0.8)
 protect_known_contacts = true
 new_sender = true
+
+[updates]
+check = true                 # false: never look for a newer release (see "Update check" above)
 ```
 
 File locations per OS, every key, and `EMAIL_TOWN_LABELER_HOME`: [docs/configuration.md](docs/configuration.md).
@@ -449,7 +460,8 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
 <summary><b>Does it send my email anywhere?</b></summary>
 
 No. It reads mail from the Gmail API and classifies it in-process. The only other network
-traffic is a model download you ask for. The `ollama_choice` backend sends text to an Ollama
+traffic is a model download you ask for, and the daily [update check](docs/privacy.md#update-check),
+which sends no mail data. The `ollama_choice` backend sends text to an Ollama
 server, and only on this machine (`localhost`) unless you opt in with
 `[model] allow_remote_endpoint = true`; a model package cannot change that
 ([details](docs/privacy.md#model-endpoints)).

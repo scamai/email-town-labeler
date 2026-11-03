@@ -9,6 +9,19 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Update check.** After `setup`, `status`, `doctor`, `model list` or `model pull` in a
+  terminal, email-town-labeler fetches a public `latest.json` from its GitHub Releases at most
+  once a day (cached in `<data dir>/update-check.json`, failures too) and prints one line on
+  stderr when a newer version exists, with the command that installs it from this repository's
+  tag. It installs nothing, sends no mail data, account, install ID or version (user agent
+  `email-town-labeler`, no cookie or query string), gives up after 2 s, and never changes an
+  exit code. The first check says what it fetches and how to turn it off. Never from `run`,
+  `once`, `backfill`, `--version`, `--json`, a non-terminal or a development version; `run`
+  logs one line at start-up if an earlier check found a newer version. Off with
+  `[updates] check = false`, `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`, `DO_NOT_TRACK=1` or `CI`.
+  **This changes a promise:** the README used to say "no update checks"; it now describes this
+  check ([privacy.md](docs/privacy.md#update-check)). The release workflow attaches
+  `latest.json` to every `vX.Y.Z` release and checks that `releases/latest` serves it.
 - `email-town-labeler labels rename-prefix NEW [--dry-run]` renames the parent label and every
   label under `label_prefix` in place (Gmail `labels.patch`, same ids), so messages keep their
   labels and recorded decisions and corrections stay valid, then writes the new `label_prefix`.

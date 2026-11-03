@@ -21,7 +21,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from . import __version__
+from . import __version__, update_check
 from .config import Config, ConfigError, Paths, load_config, save_config
 from .taxonomy import CONTENT_LABELS, LABEL_CLASSES, NEW_SENDER, UNKNOWN
 
@@ -485,6 +485,7 @@ def cmd_setup(ctx: Ctx) -> int:
 
 def cmd_run(ctx: Ctx) -> int:
     setup_logging(ctx.args.verbose, ctx.paths.ensure().logs_dir)
+    update_check.log_known_update(ctx.paths, lambda: ctx.cfg)  # reads the cache only; never fetches
     eng = ctx.engine(dry_run=ctx.args.dry_run, service=True)
     stop = threading.Event()
     prev: dict[int, Any] = {}
@@ -1333,15 +1334,33 @@ def main(
     if args.fn is not cmd_run:
         setup_logging(args.verbose)
     try:
+        rc = _dispatch(ctx)
+    except KeyboardInterrupt:
+        print("interrupted", file=sys.stderr)
+        return 1
+    _check_for_update(ctx)
+    return rc
+
+
+def _check_for_update(ctx: Ctx) -> None:
+    """After setup, status, doctor, model list or model pull in a terminal: at most one fetch a day,
+    and a line on stderr if a newer release exists (update_check.py). Never changes the exit code."""
+    try:
+        update_check.after_command(ctx.args, ctx.paths, lambda: ctx.cfg)
+    except KeyboardInterrupt:  # Ctrl-C while it waits: the command itself has already finished
+        pass
+
+
+def _dispatch(ctx: Ctx) -> int:
+    """Run the command; every error but KeyboardInterrupt becomes a one-line message and exit 1."""
+    args = ctx.args
+    try:
         if getattr(args, "single_instance", False):  # run/once/backfill/undo/labels: one per data dir
             from .lock import InstanceLock
 
             with InstanceLock(ctx.paths.data_dir):
                 return int(args.fn(ctx) or 0)
         return int(args.fn(ctx) or 0)
-    except KeyboardInterrupt:
-        print("interrupted", file=sys.stderr)
-        return 1
     except (CLIError, ConfigError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

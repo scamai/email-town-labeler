@@ -21,9 +21,11 @@ flowchart LR
   g["Google: Gmail API<br/>gmail.googleapis.com"]
   hf["Model host (optional)<br/>GitHub release / Hugging Face / https URL"]
   ol["Ollama (optional)<br/>localhost:11434 by default"]
+  up["GitHub Releases<br/>latest.json (public)"]
   ij <-- "OAuth + Gmail API calls (HTTPS)" --> g
   ij -. "model download, only on request" .-> hf
   ij -. "local HTTP, only with ollama_choice" .-> ol
+  ij -. "update check: at most daily, in a terminal" .-> up
 ```
 
 | Data flow | When | Contains mail content? |
@@ -31,7 +33,39 @@ flowchart LR
 | email-town-labeler to Google (Gmail API, OAuth endpoints) | always | Google already has your mail; email-town-labeler reads it from Google and sends back label changes. |
 | email-town-labeler to GitHub releases, Hugging Face or a model URL | only when you run `model pull` or `setup` downloads a model, or the configured model is not on disk yet | No. A plain download of a model package, verified against sha256 hashes (for published models, the archive's hash is pinned in the code too). |
 | email-town-labeler to Ollama | only if you choose the `ollama_choice` backend | Yes: the rendered message text is sent to the Ollama URL in the model package. Only loopback hosts are allowed unless you opt in (see [Model endpoints](#model-endpoints)). |
-| email-town-labeler to anyone else | never | There is no telemetry, analytics, crash reporting, update check or "phone home". |
+| email-town-labeler to GitHub Releases (`latest.json`) | at most once a day, after `setup`, `status`, `doctor`, `model list` or `model pull` in a terminal; never from `run`, `once`, `backfill`, `--json` or a non-terminal (so not from the service or the Docker health check); off with `[updates] check = false` (see [Update check](#update-check)) | No. One HTTPS GET of a public file, with no mail data, account, install ID, version, cookie or query string. |
+| email-town-labeler to anyone else | never | There is no telemetry, analytics, crash reporting, install ID or "phone home". |
+
+### Update check
+
+So that you hear about fixes, the interactive commands look for a newer release, and only tell
+you about it:
+
+- **What is sent:** one `GET https://github.com/scamai/email-town-labeler/releases/latest/download/latest.json`
+  with the user agent `email-town-labeler` (no version), and no query string, body, cookie,
+  token or install ID. GitHub redirects it to the newest release's copy, then to its download
+  host (`release-assets.githubusercontent.com`; checked 2026-11-02), which serves
+  `{"version": "X.Y.Z"}`. Redirects are followed only to `https://` URLs. GitHub sets cookies
+  in its answer; email-town-labeler keeps none, so no request carries one. GitHub sees your IP
+  address, the time and the request headers: the user agent, plus `Host`,
+  `Accept-Encoding: identity` and `Connection: close`, which Python's `urllib` always sends.
+- **When:** after `setup`, `status`, `doctor`, `model list` or `model pull`, when their output goes
+  to a terminal and `--json` is not given, at most once every 24 hours. The result, a failure
+  too, is cached in `update-check.json` in the data directory. Before the first check
+  email-town-labeler prints one line saying what it fetches and how to turn it off. `run` (the
+  background service), `once`, `backfill`, `--version`, a development version and the Docker
+  image's default command and health check never check; `run` only logs one line at start-up
+  if the cache already knows a newer version.
+- **What it does with the answer:** prints one line on stderr with the new version, its
+  release page and the command that installs it from this repository's tag. It installs
+  nothing. `latest.json` is not signed, so only a version of the form `X.Y.Z` is accepted, and
+  the URL and command come from the code, never from the file. Failures (offline, a 2-second
+  timeout, an unexpected answer) are silent: they show only with `-vv`, and never change a
+  command's exit code.
+- **Turning it off:** `[updates] check = false` in `config.toml`
+  ([configuration.md](configuration.md#updates)), or the environment variable
+  `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`. `DO_NOT_TRACK=1` and `CI` (set by most CI systems)
+  turn it off too.
 
 ### Model endpoints
 
@@ -68,6 +102,7 @@ in memory for the duration of one classification batch and is not written to dis
 | `personal.json` | the personal head (a 7x16 weight matrix) and learned thresholds from `learn`, with signal counts and held-out scores | Numbers only, no ids or content, but derived from your mail: keep it private. Delete it (or `learn --reset`) to go back to the model as shipped. |
 | `models/` | model packages (`model.json` + weights) | Not from your mail, unless you ran `personalize` (the refitted head is derived from it). The published `town-modernbert` was trained on someone else's consenting inbox: see [below](#the-published-model-and-whose-mail-it-learned-from). |
 | `logs/` | operational logs | No. See below. |
+| `update-check.json` | when the last [update check](#update-check) ran, the newest version it saw, or the type of error | No |
 
 ### Contacts
 

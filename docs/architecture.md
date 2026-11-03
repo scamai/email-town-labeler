@@ -25,7 +25,9 @@ flowchart TB
   cli --> pers["personalize.py<br/>refit head from corrections"]
   cli --> svc["service.py<br/>launchd / systemd --user / Task Scheduler"]
   cli --> cfg["config.py<br/>TOML + paths"]
+  cli --> upd["update_check.py<br/>newer release? (interactive only, daily)"]
   gc <--> G[("Gmail API")]
+  upd -.-> R[("GitHub Releases<br/>latest.json")]
 ```
 
 ## The sync loop

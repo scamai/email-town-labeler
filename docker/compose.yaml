@@ -32,8 +32,12 @@ services:
     environment:
       EMAIL_TOWN_LABELER_HOME: /data
       TZ: ${TZ:-UTC}
-    # The daemon only makes outbound HTTPS calls (Gmail API, optional model downloads).
-    # No ports are published.
+      # EMAIL_TOWN_LABELER_NO_UPDATE_CHECK: "1"
+    # The daemon (`run`) only makes outbound HTTPS calls (Gmail API, optional model downloads);
+    # it never checks for updates, and neither does the health check. `setup`, `status`, `doctor`
+    # and `model list|pull` run in a terminal (`docker compose run`) fetch a public latest.json
+    # from GitHub Releases at most once a day; EMAIL_TOWN_LABELER_NO_UPDATE_CHECK: "1" above, or
+    # [updates] check = false, turns that off. No ports are published.
     read_only: true
     tmpfs:
       - /tmp
