@@ -7,6 +7,8 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-03
+
 ### Added
 
 - **Update check.** After `setup`, `status`, `doctor`, `model list` or `model pull` in a
@@ -132,7 +134,7 @@ contain breaking changes; they are called out.
   project N and link the page with its Enable button. The `run` service still logs it as
   `HttpError 403` and retries. New `gmail.client.api_disabled_project`.
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-23
 
 First public version.
 
@@ -174,5 +176,6 @@ First public version.
   after setup.
 - Not on PyPI yet: install from GitHub. The PyPI publish job is off until the name is decided.
 
-[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0
