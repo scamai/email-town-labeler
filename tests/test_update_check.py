@@ -735,19 +735,20 @@ def test_run_logs_nothing_without_a_cache(on, caplog):
 def test_container_detection_picks_the_docker_upgrade_command(monkeypatch):
     """The real _in_container: a container marker file switches the hint to the Docker command."""
     real_exists = update_check.Path.exists
-    for marker, expected in (("/.dockerenv", True), ("/run/.containerenv", True), (None, False)):
-        monkeypatch.setattr(
-            update_check.Path,
-            "exists",
-            lambda self, marker=marker: (
-                str(self) == marker
-                if str(self) in ("/.dockerenv", "/run/.containerenv")
-                else real_exists(self)
-            ),
-        )
+    markers = (update_check.Path("/.dockerenv"), update_check.Path("/run/.containerenv"))
+    for present, expected in ((markers[0], True), (markers[1], True), (None, False)):
+
+        def fake_exists(self, present=present):
+            # Path equality, not str(): on Windows str(Path("/.dockerenv")) is "\\.dockerenv".
+            if self in markers:
+                return self == present
+            return real_exists(self)
+
+        monkeypatch.setattr(update_check.Path, "exists", fake_exists)
         assert update_check._in_container() is expected
         command = update_check.upgrade_command("9.9.9")
+        docker = update_check.DOCKER_UPGRADE.format(version="9.9.9")
         if expected:
-            assert command == update_check.DOCKER_UPGRADE.format(version="9.9.9")
+            assert command == docker
         else:
-            assert command != update_check.DOCKER_UPGRADE.format(version="9.9.9") and "pipx" in command
+            assert command != docker and "pipx" in command
