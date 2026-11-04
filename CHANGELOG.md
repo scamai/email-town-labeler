@@ -52,6 +52,47 @@ contain breaking changes; they are called out.
   account homes/log paths are made absolute when generating services. See
   [daily client workflows](docs/client-workflow.md) for migration and validation boundaries.
 
+### Fixed
+
+- **The README's privacy promises now match the code.** "It will never" said the only network
+  traffic was the Gmail API, a model download and the update check, and left out that the
+  `ollama_choice` backend sends each message's From, Subject and the start of its body (2,000
+  characters by default) to the Ollama server you configure, on this machine unless you opt in.
+  It said the local database holds only ids, label names and numbers, but it also keeps your own
+  account address and the addresses you have sent mail to (the contacts table), both since 0.1.0,
+  and when each message arrived, since 0.1.1. README, `docs/privacy.md`, `docs/architecture.md`,
+  `docs/design-spec.md`, `docs/models.md` and CONTRIBUTING.md now say so. Nothing in the code
+  changed.
+
+### Changed
+
+- **Private reporting.** Report security and privacy problems through GitHub private
+  vulnerability reporting (Security tab → Report a vulnerability) or to contact@scam.ai with the
+  subject line `[SECURITY][Email Town]`; security@scam.ai is no longer listed. SECURITY.md follows
+  Reality Inc.'s organization-wide policy: acknowledgment within 2 business days and an initial
+  assessment within 5 (it said 3 and 10), the same safe harbor, and no bug bounty.
+- The bug report form says that issues are public, asks for `doctor --redact` output instead of
+  plain `doctor` (which prints your account address and home paths), and asks you to replace
+  message ids in log lines. The issue chooser, CONTRIBUTING.md and CODE_OF_CONDUCT.md point at
+  the private channels.
+
+## [0.1.1] - 2026-11-03
+
+### Added
+
+- **Update check.** After `setup`, `status`, `doctor`, `model list` or `model pull` in a
+  terminal, email-town-labeler fetches a public `latest.json` from its GitHub Releases at most
+  once a day (cached in `<data dir>/update-check.json`, failures too) and prints one line on
+  stderr when a newer version exists, with the command that installs it from this repository's
+  tag. It installs nothing, sends no mail data, account, install ID or version (user agent
+  `email-town-labeler`, no cookie or query string), gives up after 2 s, and never changes an
+  exit code. The first check says what it fetches and how to turn it off. Never from `run`,
+  `once`, `backfill`, `--version`, `--json`, a non-terminal or a development version; `run`
+  logs one line at start-up if an earlier check found a newer version. Off with
+  `[updates] check = false`, `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`, `DO_NOT_TRACK=1` or `CI`.
+  **This changes a promise:** the README used to say "no update checks"; it now describes this
+  check ([privacy.md](docs/privacy.md#update-check)). The release workflow attaches
+  `latest.json` to every `vX.Y.Z` release and checks that `releases/latest` serves it.
 - `email-town-labeler labels rename-prefix NEW [--dry-run]` renames the parent label and every
   label under `label_prefix` in place (Gmail `labels.patch`, same ids), so messages keep their
   labels and recorded decisions and corrections stay valid, then writes the new `label_prefix`.
@@ -162,7 +203,7 @@ contain breaking changes; they are called out.
   project N and link the page with its Enable button. The `run` service still logs it as
   `HttpError 403` and retries. New `gmail.client.api_disabled_project`.
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-23
 
 First public version.
 
@@ -204,5 +245,6 @@ First public version.
   after setup.
 - Not on PyPI yet: install from GitHub. The PyPI publish job is off until the name is decided.
 
-[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0

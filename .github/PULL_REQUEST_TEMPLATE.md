@@ -17,5 +17,5 @@
 
 - [ ] No real email anywhere in this PR: code, tests, fixtures, screenshots, description
 - [ ] No new log line, exception message or output prints subject, sender, addresses, snippet or body
-- [ ] No new network destination other than Google APIs and user-requested model downloads
+- [ ] No new network destination other than Google APIs, user-requested model downloads, the update check's `latest.json` (docs/privacy.md#update-check) and, for `ollama_choice`, the user's Ollama server (docs/privacy.md#model-endpoints)
 - [ ] Label changes remain limited to labels under the configured prefix

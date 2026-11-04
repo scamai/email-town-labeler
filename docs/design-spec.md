@@ -13,9 +13,18 @@ Runs on macOS, Windows and Linux; Docker for servers.
 ## Non-negotiables
 
 1. **Privacy.** Never log, print or send email content (subject, sender, snippet, body, addresses)
-   anywhere. The only addresses stored are the contacts (lower-cased recipients of mail the user
-   sent); only `contacts list --yes-show-addresses` prints them. Logs carry message ids, classes, probabilities, counts. Tests use made-up mail only.
-   No telemetry. Model downloads are the only non-Google network calls, and only on request.
+   anywhere, except to the Ollama server the user chose for `ollama_choice` (below). The only
+   addresses stored are the contacts (lower-cased recipients of mail the user sent) and the
+   user's own account address (`kv` key `account_email`, shown by `status`); only
+   `contacts list --yes-show-addresses` prints the contacts. Logs carry message ids, classes, probabilities, counts. Tests use made-up mail only.
+   No telemetry. Apart from `ollama_choice` (below), the only non-Google network calls are model
+   downloads, only on request, and the update check (`update_check.py`): one GET of a public
+   `latest.json` from GitHub Releases, at most daily, only from interactive commands in a
+   terminal, never from `run`; it sends no mail data, account, install ID or version, and
+   `[updates] check = false` turns it off. `ollama_choice` is the one backend that sends
+   content, and only when the user picks it: it posts `features.email_text` (From, Subject,
+   list/calendar flags, the first `max_body_chars` characters of the body, default 2000) to the
+   package's Ollama URL, which must be loopback unless the user sets `allow_remote_endpoint`.
 2. **Never destructive.** The tool only ever adds/removes labels under its own prefix. It never
    archives, deletes, marks read, or touches other labels. `undo` removes only its own labels.
 3. **Model-agnostic.** The model is a plug-in (manifest + backend). The infrastructure must work
@@ -40,6 +49,7 @@ src/email_town_labeler/
   contacts.py        pure: bare lower-cased addresses from From / To / Cc / Bcc headers
   engine.py          sync loop: history → classify → policy → label; contacts; feedback capture
   cli.py             argparse CLI
+  update_check.py    at most daily: is there a newer release? (interactive commands only; prints, never installs)
   service.py         background service install (launchd/systemd/schtasks)
   lock.py            single-instance file lock per data dir (msvcrt / fcntl)
   gmail/auth.py      OAuth (local-server + headless URL/paste flows)
@@ -290,10 +300,12 @@ auto = true                  # interval_hours = 24, min_new_signals = 20, min_ex
 teacher = "auto"             # prior_strength = 10, *_weight, teacher_wait_days = 3, confirm_days = 7,
 tune_policy = true           # action_recall_target = 0.9, promo_important_max_rate = 0.01,
                              # max_examples = 20000 (see configuration.md)
+[updates]
+check = true                 # update_check.py; false: never
 [teacher_labels]             # optional: meaning -> Town label name
 ```
 Files: `config_dir/client_secret.json`, `config_dir/token.json`, `data_dir/state.sqlite`,
-`data_dir/personal.json` (learn.py),
+`data_dir/personal.json` (learn.py), `data_dir/update-check.json` (update_check.py),
 `data_dir/models/`, `data_dir/logs/`.
 
 ### cli.py (`email-town-labeler …`)
@@ -311,10 +323,33 @@ older than `max(10 × poll_seconds, 15 min)` (the problem then names the open er
 `last_error` (JSON `{error, at, failures_in_a_row}`, text row `last error`) is shown only while the
 last poll failure is newer than the last successful poll; `run` stores `last_error`,
 `last_error_ts` and `poll_failures` in `kv` on each failure.
-Exit codes: 0 ok, 1 error, 2 usage.
+Exit codes: 0 ok, 1 error, 2 usage. After the command, `main` calls
+`update_check.after_command` (never raises, never changes the exit code); `run` calls
+`update_check.log_known_update` at start-up.
+
+### update_check.py
+```python
+LATEST_URL = "https://github.com/scamai/email-town-labeler/releases/latest/download/latest.json"
+USER_AGENT = "email-town-labeler"   # the only header we set; no version, cookie, token or query
+INTERACTIVE = {"setup", "status", "doctor", "model list", "model pull"}
+after_command(args, paths, load_config) -> None  # cli.main, after the command
+log_known_update(paths, load_config) -> None     # run: cache only, one INFO line
+fetch_latest(opener=None, *, url=LATEST_URL, timeout=2.0) -> str   # "X.Y.Z" or raises
+```
+`after_command` checks only for an INTERACTIVE command, stdout a TTY, no `--json`, a release
+`__version__` (X.Y.Z), none of `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK` / `DO_NOT_TRACK` / `CI`
+set, and `[updates] check` true; at most once per 24 h, cached (failures too) in
+`data_dir/update-check.json`, written before the request. The first check ever prints
+`FIRST_RUN` (what is fetched, how to turn it off). A newer version prints one stderr line: the
+version, the release URL and an upgrade command built from constants (the repository's tag; never
+a bare PyPI name). `latest.json` = `{"version": "X.Y.Z"}`, attached by `release.yml`; anything
+else in it is ignored. 2 s in all; errors go to debug logs only. Output is stripped of control
+characters.
 
 ## Test strategy
 - Unit tests per module with fakes; no network, no weights, runs in <30 s on all OSes.
+  `tests/conftest.py` turns the update check off for every test (and fails a test that builds its
+  real opener); `tests/test_update_check.py` turns it on with fakes and a server on 127.0.0.1.
 - `tests/test_e2e.py`: real `GmailClient` + `fake_service` + `rules` model + `Engine` through a
   simulated day: bootstrap → new mail (with injected API failures) → label → user correction →
   feedback → expired history → restart → backfill → trash/spam → undo; asserts no double labels,

@@ -63,7 +63,7 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 
 | Symptom | Fix |
 |---|---|
-| `needs 'sentence_transformers': install it with pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler"` | Install the extra in the same environment: `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler"` (or `pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler"` in a venv). email-town-labeler is not on PyPI: never `pip install email-town-labeler` from there. In Docker, build with `--build-arg EXTRAS=embed`. |
+| `needs 'sentence_transformers': install it with pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` | Install the extra in the same environment: `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` (or `pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` in a venv). email-town-labeler is not on PyPI: never `pip install email-town-labeler` from there. In Docker, build with `--build-arg EXTRAS=embed`. |
 | sha256 mismatch on `model pull` | The download is corrupt or the package changed upstream. Re-run; if it persists, report it to the model's publisher. Do not edit the hashes. |
 | `torch` install pulls gigabytes of CUDA libraries on Linux | Install the CPU wheel first: `pip install --index-url https://download.pytorch.org/whl/cpu torch`, then the extra. |
 | `cannot reach Ollama` | Start it with `ollama serve`, and check `config.url` in the model's `model.json`. |

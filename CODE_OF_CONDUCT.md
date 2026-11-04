@@ -19,5 +19,5 @@ requests, discussions, and any other channel where people represent the project.
 
 ## Reporting
 
-Report unacceptable behavior privately to the maintainers at **security@scam.ai** (subject line "Code of Conduct"). All reports are reviewed promptly and
+Report unacceptable behavior privately to the maintainers at **contact@scam.ai** (subject line `[Email Town] Code of Conduct`). All reports are reviewed promptly and
 handled confidentially. Maintainers will respect the privacy and security of the reporter.

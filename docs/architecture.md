@@ -25,7 +25,9 @@ flowchart TB
   cli --> pers["personalize.py<br/>refit head from corrections"]
   cli --> svc["service.py<br/>launchd / systemd --user / Task Scheduler"]
   cli --> cfg["config.py<br/>TOML + paths"]
+  cli --> upd["update_check.py<br/>newer release? (interactive only, daily)"]
   gc <--> G[("Gmail API")]
+  upd -.-> R[("GitHub Releases<br/>latest.json")]
 ```
 
 ## The sync loop
@@ -107,9 +109,12 @@ a backend. The engine only sees the `Classifier` protocol from `models/base.py`.
 ## State
 
 `state.sqlite` (WAL mode, versioned schema) has key/value settings (history id, bootstrap
-info, learning schedule), decisions (id, class, probability, probabilities, scores, yes/no
-features, model id, personal head id, applied flag, time), feedback (id, predicted, corrected,
-time) and teacher labels (id, class, time). Nothing in it is mail content.
+info, your account address, poll counts and last error type, learning schedule), decisions (id,
+class, probability, probabilities, scores, yes/no features, model id, personal head id, applied
+flag, decision time, arrival time), feedback (id, predicted, corrected, time), teacher labels
+(id, class, time) and contacts (lower-cased addresses you have sent mail to, first-sent time).
+Nothing in it is mail content; the only addresses are your own and your contacts'
+([privacy.md](privacy.md#what-is-stored-on-disk)).
 
 ## Background service
 

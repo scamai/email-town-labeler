@@ -25,14 +25,21 @@ derived from real mail. It applies to:
   domain with a real-looking message;
 - **issues, pull requests and discussions**: describe the shape of the problem ("a newsletter
   with a `List-Id` header and an HTML-only body") or write a synthetic reproduction;
-- **logs and debug output you paste**: `doctor` and `status` are designed to be safe, but
-  read what you paste first;
-- **code**: never log, print, or raise subject, sender, addresses, snippet or body. Persist content only in the explicitly saved private desktop draft store; SMTP partial-delivery receipts may retain recipient addresses for recovery.
-  Log message ids, class names, probabilities, counts and error types only. Exception
-  messages must not embed content either. Reviewers will block PRs that break this.
+- **logs and debug output you paste**: `doctor` and `status` show nothing about your messages,
+  but they print your account address and home paths, so paste `doctor --redact` or
+  `status --redact` output. Log lines carry message ids: replace them with `<id>`. Read what
+  you paste first;
+- **code**: never log, print or raise subject, sender, addresses, snippet or body.
+  Stored exceptions are the contacts table, the user's own account address, explicitly saved
+  private desktop drafts and attachments, and SMTP partial-delivery recipient receipts
+  ([privacy.md](docs/privacy.md#what-is-stored-on-disk),
+  [desktop storage](docs/privacy.md#local-desktop-workbench)). Log message ids, class names,
+  probabilities, counts and error types only. Exception messages must not embed content
+  either. Reviewers will block PRs that break this.
 
-If you accidentally post private data, edit it out and tell a maintainer
-(security@scam.ai) so the history can be purged.
+If you accidentally post private data, edit it out and tell a maintainer privately (email
+contact@scam.ai with the subject line `[Email Town]`) so the history can be purged. Security
+and privacy problems in the code go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## Development setup
 
@@ -75,6 +82,10 @@ sure `pytest`, `ruff check .` and `ruff format --check .` pass locally.
 
 Tests that need an optional extra must skip cleanly when it is missing
 (`pytest.importorskip("sentence_transformers")`).
+
+`tests/conftest.py` turns the update check off for every test (and fails any test that would
+build its real opener). A test of the update check turns it on itself with a fake opener; see
+`tests/test_update_check.py`.
 
 ## Code guidelines
 
@@ -127,7 +138,18 @@ tests that skip without the extra, and documentation in `docs/models.md`.
 ## Releases (maintainers)
 
 1. Update `__version__` in `src/email_town_labeler/__init__.py` and move "Unreleased" in CHANGELOG.md
-   under the new version.
+   under the new version. In the same commit, before tagging, pin every install line to the new tag:
+   `git grep -nE 'git\+https://github\.com/scamai/email-town-labeler(@v[0-9]+\.[0-9]+\.[0-9]+)?"' -- ':!CONTRIBUTING.md'`
+   lists them, pinned or not (README.md, docs/, the `SOURCE` constant behind the CLI's install
+   hints, and the test that checks that hint); set or replace the `@vX.Y.Z` suffix before the
+   closing quote. Unpinned, they install `main`, which after step 3 is a
+   development version, and a development version never runs the update check.
 2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` checks the tag matches the
    version, publishes to PyPI via trusted publishing, pushes images to GHCR, and creates a
-   GitHub release.
+   GitHub release with `latest.json` (`{"version": "X.Y.Z"}`, what installed copies' update
+   check fetches), then checks that `releases/latest` serves it. A tag that is not `vX.Y.Z` gets
+   no `latest.json` and is published as a pre-release, so `releases/latest` stays on the last
+   `X.Y.Z` (the same check confirms it).
+3. Right after the release, set `__version__` on `main` to the next patch version with `.dev0`
+   (`X.Y.(Z+1).dev0`): installs from `main` are then development versions, which never run the
+   update check, and a release is the only thing that reports a plain `X.Y.Z`.

@@ -1,12 +1,13 @@
 import functools
 import http.server
+import re
 import shutil
 import threading
 
 import pytest
 
 from email_town_labeler.models import registry
-from email_town_labeler.models.backends._common import MissingExtraError
+from email_town_labeler.models.backends._common import SOURCE, MissingExtraError
 from email_town_labeler.models.base import Classifier, ModelManifest
 from email_town_labeler.taxonomy import CLASSES
 from tests._model_fixtures import HashEmbedder, head_package, rec
@@ -46,7 +47,8 @@ def test_missing_extra_names_it(tmp_path):
     pkg = head_package(tmp_path / "x")
     with pytest.raises(
         MissingExtraError,
-        match=r'pip install "email-town-labeler\[embed\] @ git\+https://github.com/scamai/email-town-labeler"',
+        # SOURCE carries the release pin (CONTRIBUTING "Releases"); tests/test_cli.py checks its literal value.
+        match=re.escape(f'pip install "email-town-labeler[embed] @ {SOURCE}"'),
     ):
         registry.load_model(str(pkg), models_dir=tmp_path)
 

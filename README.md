@@ -88,11 +88,19 @@ reading and labeling parts ([exactly what it does](docs/privacy.md#what-gmailmod
 
 **The automatic classifier will never:**
 
-- ❌ The label-only classifier service does not send, delete, archive, move or mark mail as read; the separate desktop workbench supports explicit mailbox actions.
-- ❌ The label-only classifier uploads no email content (its network traffic is the Gmail API, plus model downloads you ask for)
-- ❌ phone home: no analytics, no crash reports, no update checks
-- ❌ store your email: its local database holds message ids, label names and numbers, never subjects, senders or bodies
+- ❌ send, delete, archive, move or mark any email as read
+- ❌ upload your email anywhere (the only network traffic is the Gmail API, a model download you ask for, and the update check below; if you pick the `ollama_choice` backend, each message's From, Subject and the start of its body, 2,000 characters by default, also go to your Ollama server, which has to be on this machine unless you opt in: [details](docs/privacy.md#model-endpoints))
+- ❌ phone home: no analytics, no crash reports, no install ID
+- ❌ store your email: its local database holds message ids, class names, numbers and times, plus your own account address and the addresses you have sent mail to (so it can tell mail from people you know); never a message's subject, sender or body ([full list](docs/privacy.md#what-is-stored-on-disk))
 - ❌ touch any label except its own
+
+**Update check.** When you run `setup`, `status`, `doctor`, `model list` or `model pull` in a
+terminal, email-town-labeler fetches a small public file (`latest.json`) from its GitHub Releases
+at most once a day and prints a line if a newer version exists. It sends no mail data, account,
+install ID or version; GitHub sees your IP address and the time. It installs nothing; `run` and
+the Docker image's default command and health check never check. Turn it off with
+`[updates] check = false` or `EMAIL_TOWN_LABELER_NO_UPDATE_CHECK=1`; `DO_NOT_TRACK=1` or `CI`
+also skips it ([details](docs/privacy.md#update-check)).
 
 The [desktop workbench](docs/desktop-workbench.en.md) additionally sends and manages mail when you request it.
 Its local drafts store message bodies and attachments; trash and send actions affect the original mailbox.
@@ -107,7 +115,7 @@ You need Python 3.10+ (macOS, Linux or Windows) and a Gmail or Google Workspace 
 **1. Install**
 
 ```bash
-pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"
+pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"
 ```
 
 **2. Create your own Google sign-in** (one time, about 10 minutes, free). This is what keeps
@@ -140,7 +148,7 @@ Check on it any time with `email-town-labeler status`.
 <summary><b>More install options</b> (pip, uv, gcloud helper, personal-Gmail note)</summary>
 
 - [pipx](https://pipx.pypa.io) keeps it in its own environment. In a virtualenv,
-  `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"`
+  `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"`
   works too, as does `uv tool install` with the same argument. Without `[onnx]` you get the
   dependency-free `rules` model only.
 - Print the gcloud commands for the scriptable part of the Google Cloud setup, plus console links
@@ -294,6 +302,9 @@ dry_run = false              # true: classify and record, never change Gmail
 #   left unset, these two come from the model (town-modernbert: 0.07 and 0.8)
 protect_known_contacts = true
 new_sender = true
+
+[updates]
+check = true                 # false: never look for a newer release (see "Update check" above)
 ```
 
 File locations per OS, every key, and `EMAIL_TOWN_LABELER_HOME`: [docs/configuration.md](docs/configuration.md).
@@ -345,10 +356,10 @@ the built-in backends.
 | Backend | Install | Notes |
 |---|---|---|
 | `rules` | included | Heuristics over Gmail's categories and mail headers. No ML dependencies, no download. The fallback when the `[onnx]` extra is missing. |
-| `embedding_probe` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler"` | Sentence-transformers embedder + small linear head. Personalizable. |
-| `onnx_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"` | ONNX encoder + linear head, no torch. Personalizable. |
-| `hf_sequence_classifier` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler"` | A fine-tuned transformers classifier (BERT, ModernBERT, ...) shipped inside the package (`town-modernbert-torch`). |
-| `onnx_sequence_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler"` | The same classifier as one ONNX graph, no torch (`town-modernbert`). |
+| `embedding_probe` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` | Sentence-transformers embedder + small linear head. Personalizable. |
+| `onnx_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` | ONNX encoder + linear head, no torch. Personalizable. |
+| `hf_sequence_classifier` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` | A fine-tuned transformers classifier (BERT, ModernBERT, ...) shipped inside the package (`town-modernbert-torch`). |
+| `onnx_sequence_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` | The same classifier as one ONNX graph, no torch (`town-modernbert`). |
 | `ollama_choice` | a running [Ollama](https://ollama.com) | Asks a local LLM. No training needed; slower. |
 
 ```bash
@@ -400,7 +411,7 @@ flowchart LR
   E -- "add label e/(class)" --> G
   G -- "you change a label" --> E
   G -- "Town's labels (optional)" --> E
-  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
+  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers,<br/>contacts")]
   DB -. "learn (daily, local)" .-> E
 ```
 
@@ -452,8 +463,10 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
 <summary><b>Does it send my email anywhere?</b></summary>
 
 No. It reads mail from the Gmail API and classifies it in-process. The only other network
-traffic is a model download you ask for. The `ollama_choice` backend sends text to an Ollama
-server, and only on this machine (`localhost`) unless you opt in with
+traffic is a model download you ask for, and the daily [update check](docs/privacy.md#update-check),
+which sends no mail data. One backend is the exception, and only if you pick it:
+`ollama_choice` sends each message's From, Subject and the start of its body to an Ollama
+server, which has to be on this machine (`localhost`) unless you opt in with
 `[model] allow_remote_endpoint = true`; a model package cannot change that
 ([details](docs/privacy.md#model-endpoints)).
 
@@ -550,8 +563,10 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 
 Bug reports, docs fixes, backends and models are welcome. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) first, especially the privacy rule: **no real email, in
-any form, in code, tests, fixtures, issues or logs.** Security or privacy problems go to
-security@scam.ai, not to public issues ([SECURITY.md](SECURITY.md)).
+any form, in code, tests, fixtures, issues or logs.** Report security or privacy problems
+privately, never in a public issue: use **Report a vulnerability** on this repository's
+Security tab, or email contact@scam.ai with the subject line `[SECURITY][Email Town]`
+([SECURITY.md](SECURITY.md)).
 
 If it makes your inbox calmer, a ⭐ helps other people find it.
 
