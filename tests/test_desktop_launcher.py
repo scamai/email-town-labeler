@@ -13,7 +13,19 @@ def test_background_reopen_and_authenticated_stop(tmp_path):
     args = [sys.executable, "-m", "email_town_labeler", "--home", str(tmp_path), "desktop"]
     root = Paths.default(tmp_path).data_dir / "workbench"
     try:
-        subprocess.run([*args, "--background", "--no-browser"], check=True, capture_output=True, timeout=20)
+        try:
+            subprocess.run(
+                [*args, "--background", "--no-browser"], check=True, capture_output=True, timeout=20
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            # This test uses an empty synthetic home; retain child diagnostics on CI failures.
+            print("Launcher stdout:", exc.stdout)
+            print("Launcher stderr:", exc.stderr)
+            log = root / "desktop.log"
+            if log.exists():
+                print("Workbench log:", log.read_text(encoding="utf-8", errors="replace"))
+            print("Launch capability created:", (root / "launch.json").exists())
+            raise
         assert running(root)
         first = json.loads((root / "launch.json").read_text())["pid"]
         subprocess.run([*args, "--background", "--no-browser"], check=True, capture_output=True, timeout=10)
