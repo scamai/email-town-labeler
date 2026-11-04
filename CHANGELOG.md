@@ -7,6 +7,11 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop startup
+
+- Bind the local workbench directly to numeric loopback without reverse DNS, so an unavailable
+  system hostname resolver cannot block the launcher readiness handshake.
+
 ### Desktop layout
 
 - Reorganize mail navigation, message rows and preview actions with shared gutters and control sizes.

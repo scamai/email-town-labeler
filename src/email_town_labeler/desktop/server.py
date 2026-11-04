@@ -11,6 +11,7 @@ import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
+from socketserver import TCPServer
 from urllib.parse import parse_qs, quote, urlsplit
 
 from ..gmail.auth import _write_private
@@ -33,6 +34,12 @@ class LocalServer(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", port), Handler)
         self.origin = f"http://127.0.0.1:{self.server_port}"
         self.host = f"127.0.0.1:{self.server_port}"
+
+    def server_bind(self):
+        # HTTPServer resolves a hostname here. This numeric loopback listener needs no DNS,
+        # and an unavailable system resolver must not delay the launch handshake.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     @property
     def launch_url(self):

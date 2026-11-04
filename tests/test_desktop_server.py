@@ -82,3 +82,23 @@ def test_assets_and_request_limits(server):
         == 415
     )
     assert request(server, "/api/session", method="POST", data={"token": "x" * MAX_BODY})[0] == 413
+
+
+def test_loopback_http_serves_without_reverse_dns(monkeypatch):
+    def unavailable_dns(_host):
+        raise TimeoutError("system hostname resolver unavailable")
+
+    monkeypatch.setattr("socket.getfqdn", unavailable_dns)
+    manager = SimpleNamespace(snapshot=lambda: {"messages": []})
+    local = LocalServer(manager)
+    thread = threading.Thread(target=local.serve_forever, daemon=True)
+    thread.start()
+    try:
+        # Observe authenticated HTTP across the listener boundary with DNS unavailable.
+        status, _, body = request(local, auth=True)
+        assert status == 200
+        assert json.loads(body) == {"messages": []}
+    finally:
+        local.shutdown()
+        local.server_close()
+        thread.join(2)
