@@ -376,6 +376,20 @@ class GmailClient:
             body["color"] = dict(color)
         return self._execute(self._users.labels().create(userId=ME, body=body))
 
+    def get_label(self, id: str) -> dict:
+        """Read a full label resource, including visibility (not guaranteed by labels.list)."""
+        return self._execute(self._users.labels().get(userId=ME, id=id))
+
+    def show_label(self, id: str) -> dict:
+        """Show a label in Gmail's sidebar and message list; leave name, color and mail untouched."""
+        return self._execute(
+            self._users.labels().patch(
+                userId=ME,
+                id=id,
+                body={"labelListVisibility": "labelShow", "messageListVisibility": "show"},
+            )
+        )
+
     def set_label_color(self, id: str, color: dict[str, str]) -> dict:
         """labels.patch the color of one user label. A 400 (color outside the palette) propagates."""
         return self._execute(self._users.labels().patch(userId=ME, id=id, body={"color": dict(color)}))

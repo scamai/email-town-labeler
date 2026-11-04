@@ -110,7 +110,14 @@ def _walk(part: dict, acc: dict) -> None:
         acc["has_calendar"] = True
     if filename:
         size = (part.get("body") or {}).get("size", 0)
-        acc["attachments"].append({"filename": filename, "mime": mime, "size": size})
+        acc["attachments"].append(
+            {
+                "filename": filename,
+                "mime": mime,
+                "size": size,
+                "id": (part.get("body") or {}).get("attachmentId") or "part:" + part.get("partId", ""),
+            }
+        )
     elif mime == "text/plain":
         acc["plain"].append(_decode_body(part))
     elif mime == "text/html":

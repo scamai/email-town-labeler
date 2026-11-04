@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="artifact-type" content="decision"><title>Email Town · 客户端分类实测与推进方案</title>
+<style>
+:root{color-scheme:light;--bg:#ffffff;--panel:#f6f8fc;--ink:#1f1f1f;--muted:#5f6368;--line:#d5d9e0;--accent:#175fc1}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9da7b3;--line:#30363d;--accent:#58a6ff}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9da7b3;--line:#30363d;--accent:#58a6ff}
+*{box-sizing:border-box}html{font-size:17px}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;line-height:1.8}
+main{max-width:1050px;margin:auto;padding:32px 32px 72px}a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+header{padding:22px 0 28px;border-bottom:2px solid var(--line)}h1{font-size:2.25rem;line-height:1.35;letter-spacing:-.025em;margin:14px 0}h2{font-size:1.45rem;line-height:1.5;margin:0 0 16px}h3{font-size:1.1rem}p{margin:12px 0}.stamp,.eyebrow,.reading{color:var(--muted)}.stamp,.eyebrow{font-size:.88rem}.eyebrow{margin-bottom:6px}.deck{font-size:1.12rem;max-width:850px}.verdict{padding:14px 20px;background:var(--panel);border-left:4px solid var(--accent)}section{padding-top:32px}nav{display:flex;flex-wrap:wrap;gap:8px 24px;padding:16px 0;border-bottom:1px solid var(--line)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}table{width:100%;border-collapse:collapse;min-width:650px;font-size:.94rem}th,td{text-align:left;vertical-align:top;padding:14px 16px;border-bottom:1px solid var(--line)}th{background:var(--panel)}th:first-child,td:first-child{min-width:140px}tr:last-child td{border-bottom:0}ul,ol{padding-left:1.5em}li{margin:8px 0}code{font-size:.9em;overflow-wrap:anywhere}small{font-size:.88rem}.reading{font-size:.88rem}footer{margin-top:32px;padding-top:18px;border-top:1px solid var(--line)}
+@media(max-width:600px){main{padding:20px 18px 48px}h1{font-size:1.8rem}.deck{font-size:1rem}h2{font-size:1.3rem}.verdict{padding:12px 14px}table{min-width:600px}th,td{padding:12px}header{padding-top:8px}}
+@media print{main{max-width:none}nav{display:none}section{break-inside:avoid}a{color:inherit}}
+</style></head><body><main><p><a href="../../README.md">← 项目 README / English overview</a> · 中文实测与方案</p>
+<header><p class="stamp">客户端集成评估 · 2026-10-30 · 代码基线 4bbfa24 · Codex</p>
+<h1>分类已进入三个客户端，下一步优化每日处理。</h1>
+<p class="deck">已在同一个工作 Gmail 账户实测：Gmail 显示项目标签；Outlook for Mac 和 Apple Mail 显示对应分类文件夹，并能打开“需要处理”的邮件列表。建议先改善现有客户端的入口与操作，再按需要开发小型管理软件。</p>
+<p class="verdict"><strong>推荐：现有客户端优先；完整邮件客户端暂不列为第一步。</strong><br>本次验证了显示和打开列表。修改分类能否在每个客户端正确写回、完成状态、多账户及 Microsoft 邮箱接入，仍需分别验证或开发。下一步由维护者用可控测试邮件验证一次完整处理流程。</p></header>
+<nav aria-label="报告目录"><a href="#evidence">实测结果</a><a href="#workflow">每日怎么用</a><a href="#options">实现方式</a><a href="#next">开发顺序</a><a href="#limits">验证边界</a></nav>
+<section id="evidence"><p class="eyebrow">01 / 已验证</p><h2>邮箱提供商决定后台接口，客户端决定显示形式。</h2>
+<p>Outlook 软件中添加的 Gmail 账户，仍然是 Google 邮箱；可以继续由现有 Gmail 分类引擎写标签。它与 Outlook.com／Microsoft 365 邮箱需要接入 Microsoft Graph 是两回事。</p>
+<p class="reading">手机阅读：左右滑动表格可查看完整内容，包括右侧的限制与待验证项。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="客户端实测矩阵"><table><thead><tr><th>账户 → 客户端</th><th>2026-10-30 实测</th><th>尚未证明</th></tr></thead><tbody>
+<tr><td>工作 Gmail → Gmail 网页</td><td>侧边栏出现 e 下全部七类；邮件行显示 e/... 标签。搜索 <code>in:inbox label:"e/action needed"</code> 返回分类邮件。</td><td>新邮件端到端分类延迟、完成状态及多账户统一视图。</td></tr>
+<tr><td>同一 Gmail → Outlook for Mac</td><td>16.114.3：展开 e 后出现七个分类文件夹；点击 action needed 能打开邮件列表。</td><td>没有证明邮件行会显示同样的彩色标签；未执行改分类、拖动或归档。</td></tr>
+<tr><td>同一 Gmail → Apple Mail</td><td>16.0：展开账户及 e 后出现七个分类邮箱；打开 action needed 能看到邮件列表。智能邮箱条件提供日期、账户、所在邮箱、旗标等。</td><td>没有证明可替换 Apple 原生 Primary 等分类页；未保存智能邮箱、改分类或归档。</td></tr>
+<tr><td>Microsoft 邮箱 → Outlook</td><td>官方 API 支持消息 categories 与分类颜色；本项目尚无 Graph 连接器。</td><td>未接入或修改用户 Microsoft 邮箱；租户授权、同步及各端显示待验证。</td></tr>
+<tr><td>Microsoft／其他邮箱 → Apple Mail 或其他客户端</td><td>当前引擎未接入；不能由 Gmail 的成功推出所有账户都成功。</td><td>跨客户端分类、通用 IMAP 表达方式及操作回写均待验证。</td></tr>
+</tbody></table></div><p class="reading">窄屏表格可左右滑动。实测来自本机客户端界面；未将私人账户地址、邮件主题、数量或截图写入报告。</p>
+<h3>显示机制：Google 标签映射为客户端文件夹。</h3><p>七类为 action needed、new sender、newsletters、orders、promotional、travel、updates。Google 的 IMAP 扩展将标签暴露为文件夹，解释了这次观察；不能把 Outlook 的原生 categories 与 Gmail 文件夹视为同一种机制。<a href="https://developers.google.com/workspace/gmail/imap/imap-extensions">Google IMAP 文档</a> · <a href="https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0">Graph 消息更新</a> · <a href="https://learn.microsoft.com/en-us/graph/api/resources/outlookcategory?view=graph-rest-1.0">Microsoft 分类</a></p></section>
+<section id="workflow"><p class="eyebrow">02 / 产品目标</p><h2>让人每天先看到该处理什么，同时保留积压与未分类邮件。</h2>
+<ol><li><strong>需要处理：</strong>先提供所有日期的 action needed 入口，再提供“今天收到”的子筛选；不能让昨日积压消失。</li><li><strong>待检查：</strong>新发件人、尚未分类及同步异常的邮件要有可见入口，不能把“模型没贴标签”等同于“不重要”。</li><li><strong>稍后批量看：</strong>订阅、促销、订单、旅行等分类集中查看，用户仍在熟悉的客户端阅读和回复。</li></ol>
+<p>这些是建议入口，尚未创建。Gmail 可用搜索和标签；Outlook for Mac 官方支持保存搜索；Apple Mail 有智能邮箱。具体条件组合、跨账户范围和固定入口的操作成本需要实际试用。<a href="https://support.google.com/mail/answer/7190?hl=en">Gmail 搜索</a> · <a href="https://support.microsoft.com/en-us/outlook/save-a-search-by-using-a-smart-folder-in-outlook-for-mac">Outlook 保存搜索</a></p>
+<p><strong>“需要处理”是模型判断，不是已验证的未完成任务。</strong>当前引擎把分类标签增删当成纠错反馈；读过也不代表做完。第一轮应明确完成规则，再决定采用用户主动归档退出收件箱，或新增独立完成标记。不要用移除分类表示完成，也不要让模型自动归档来制造收件箱清空的效果。<a href="../../src/email_town_labeler/engine.py">capture_feedback 实现</a></p>
+<p>日期筛选按用户时区定义“今天”；Gmail 的 <code>newer_than:1d</code> 是最近一天，不等于自然日。会话视图也可能合并不同日期的邮件。当前数据库记录历史分类决定，不能直接把它的条数当成实时待处理数量。</p></section>
+<section id="options"><p class="eyebrow">03 / 方案取舍</p><h2>先利用已有同步；插件和小软件按具体缺口加入。</h2>
+<p class="reading">手机阅读：左右滑动表格可查看完整内容，包括右侧的限制与待验证项。</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="实现方式比较"><table><thead><tr><th>方式</th><th>适用用途</th><th>建议与边界</th></tr></thead><tbody>
+<tr><td><strong>原生标签／文件夹＋固定入口</strong></td><td>最快让现有 Gmail 分类可见、可查，并在原客户端阅读回复。</td><td>优先；显示与打开已实测。纠错写回、归档语义、跨账户保存视图还需验收。</td></tr>
+<tr><td>轻量管理软件</td><td>多账户登录、模型下载、运行状态、异常修复、引导创建客户端入口。</td><td>值得作为下一阶段。保留现有引擎；不必先实现撰写、附件和完整收发。尚未实现，也未验证安装打包。</td></tr>
+<tr><td>Outlook 插件</td><td>在支持的账户和客户端内提供纠错／处理面板。</td><td>按目标环境验证。官方矩阵：Mac 的 IMAP CloudCache 可支持，IMAP Direct 不支持；Windows／Web／移动端不支持非 Microsoft 账户插件。不能承诺 Gmail 在所有 Outlook 上通用。</td></tr>
+<tr><td>Apple Mail 扩展</td><td>利用 MailKit 在接收邮件时执行颜色、旗标等允许的动作。</td><td>可做技术验证；不是任意添加标签徽章或替换原生分类页的接口。后台稍后贴标签能否触发相应扩展动作，尚未验证。</td></tr>
+<tr><td>统一分类工作台</td><td>原生视图不足时，提供一致的跨账户处理列表与完成状态。</td><td>保留备选。只有实际试用证明现有客户端仍明显增加操作负担，才投入新的邮件展示与状态同步层。</td></tr>
+</tbody></table></div><p class="reading">窄屏可左右滑动。工作量为范围判断，没有工期估算或用户效率测量。</p>
+<p>插件依据：<a href="https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/outlook-add-ins-overview">Outlook add-ins 支持矩阵</a> · <a href="https://developer.apple.com/documentation/mailkit/memessageactionhandler">MailKit 消息动作</a> · <a href="https://developer.apple.com/videos/play/wwdc2021/10168/">Apple Mail 扩展介绍</a>。这些官方能力不代表本项目已有插件；本机 Outlook 的 CloudCache／Direct 模式也未确认。</p></section>
+<section id="next"><p class="eyebrow">04 / 推荐推进顺序</p><h2>第一项验收是现有客户端中的完整闭环。</h2>
+<ol><li><strong>P0 · 可控邮件验收：</strong>由维护者准备专用测试邮件，覆盖今天、昨天、多标签、已读未处理及离线恢复。在每个目标客户端检查分类出现、打开、纠错、服务器回写、学习反馈及完成后的去向。只读显示已通过；涉及真实邮件变更的步骤未执行。</li><li><strong>P0 · 固定每日入口：</strong>按验收过的条件配置常用分类、今日子视图、全日期需要处理及待检查入口；记录从打开软件到开始处理所需步骤。完成状态先明确再实施；本次未修改客户端持久设置。</li><li><strong>P1 · 多账户与可见状态：</strong>修正独立实例的服务管理限制，账户、游标、凭据和消息身份保持隔离，共享模型资源。为普通用户提供登录、同步状态和失败恢复的小窗口。</li><li><strong>P1 · 真正的 Microsoft 邮箱：</strong>新增 Graph 连接器，写原生 categories，测试新邮件、手工纠错、增量同步、授权过期与各客户端显示。不能把现有 Gmail→Outlook 显示当成这项已完成。</li><li><strong>P2 · 效果与发行：</strong>用获准的实际样本检查中文与各账户误报漏报；再做免命令行安装、OAuth 审核方案、签名公证与升级。通用 IMAP、插件、统一工作台按试用发现的缺口排序。</li></ol>
+<p>建议用同一组代表性任务连续试用一周，对照当前使用方式记录耗时、切换次数和重要邮件遗漏；这只是建议的观察窗口，不是开发工期。当前没有测得节省时间或产品市场需求。</p></section>
+<section id="limits"><p class="eyebrow">05 / 方法与边界</p><h2>验证方法与边界：显示路径已通过，完整操作仍待测。</h2>
+<p>检查本地代码及官方文档；通过客户端界面展开分类并打开列表；执行 Gmail 只读搜索；查看 Apple Mail 智能邮箱条件后取消。未发送、移动、归档或改标签，未保存搜索／智能邮箱，未开发或发布软件。没有主动制造新来信，因此不能给出新邮件分类延迟保证。结论限定于本机版本和此次工作 Gmail 账户，不代表 Windows、手机或所有账户配置。</p>
+<p>项目进展沿用前次检查：本地分类、纠错学习、断线恢复和资源优化已有基础；Python 测试 495 通过、7 跳过，详见<a href="2026-10-30-desktop-direction.html#state">此前代码盘点</a>。本次只改研究资料，未重跑产品测试，既有测试也不能代替以上客户端写操作验收。仓库未发现独立 TODO／ROADMAP；上述排序是新建议，未查询其他外部任务系统。</p>
+<p>本报告依据新增实测与用户澄清，将此前“优先验证统一工作台”的建议调整为“先打磨现有客户端”。没有把未测能力写成不可能，也没有把官方接口存在写成项目已经支持。</p></section>
+<footer>本地研究资料 · 无私人邮件内容 · <a href="client-integration-review.md">渲染与独立复核记录</a></footer></main></body></html>

@@ -7,6 +7,11 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## The privacy rule
 
+The local `desktop` UI intentionally displays private mail in authenticated local browser memory.
+Only explicitly saved desktop drafts may persist message bodies and attachments in the private local draft store. Do not include real content in fixtures/screenshots or print it in logs. Use synthetic
+accounts with `demo=True` for UI tests. This exception does not change CLI/log privacy rules.
+See [the workbench privacy boundary](docs/privacy.md#local-desktop-workbench).
+
 email-town-labeler exists to keep mail private. Contributors are held to the same standard as the
 code.
 
@@ -24,9 +29,11 @@ derived from real mail. It applies to:
   but they print your account address and home paths, so paste `doctor --redact` or
   `status --redact` output. Log lines carry message ids: replace them with `<id>`. Read what
   you paste first;
-- **code**: never log, print, raise, or persist subject, sender, addresses, snippet or body.
-  The two stored exceptions are the contacts table and the user's own account address
-  ([privacy.md](docs/privacy.md#what-is-stored-on-disk)). Log message ids, class names,
+- **code**: never log, print or raise subject, sender, addresses, snippet or body.
+  Stored exceptions are the contacts table, the user's own account address, explicitly saved
+  private desktop drafts and attachments, and SMTP partial-delivery recipient receipts
+  ([privacy.md](docs/privacy.md#what-is-stored-on-disk),
+  [desktop storage](docs/privacy.md#local-desktop-workbench)). Log message ids, class names,
   probabilities, counts and error types only. Exception messages must not embed content
   either. Reviewers will block PRs that break this.
 
@@ -87,8 +94,7 @@ build its real opener). A test of the update check turns it on itself with a fak
 - Cross-platform: `pathlib`, `platformdirs`, no shell-isms; OS-specific code only in
   `service.py` (and the per-platform lock in `lock.py`).
 - Core dependencies stay small. ML libraries go into extras and are imported lazily.
-- email-town-labeler never touches labels outside its own prefix, and never archives, deletes or
-  marks mail read. Changes that would need a broader action will not be accepted.
+- The automatic classifier never touches labels outside its prefix and never sends, archives, deletes or marks mail read. Explicit desktop mail operations may do these actions on selected messages and authorized accounts. Do not add automatic send/delete rules, permanent deletion, broad IMAP expunge, or automatic retries of uncertain sends.
 - `features.email_text` is the model input contract. Changing it changes every model's input:
   it needs a strong reason and a note in CHANGELOG.md.
 - Add a CHANGELOG.md entry under "Unreleased" for user-visible changes.

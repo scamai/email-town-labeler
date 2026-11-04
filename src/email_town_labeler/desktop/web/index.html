@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Email Town on-device unified mail workbench"
+    />
+    <title>Email Town · Unified mail workbench</title>
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <button
+            class="icon-button mobile-only"
+            id="sidebarToggle"
+            type="button"
+            aria-label="Open filters and accounts"
+            aria-expanded="false"
+          >
+            ☰
+          </button>
+          <img
+            class="brand-mark"
+            src="/logo.svg"
+            width="36"
+            height="36"
+            alt=""
+            aria-hidden="true"
+          />
+          <div>
+            <h1>Email Town</h1>
+            <p>On-device mail workbench</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <span class="sync-indicator" id="syncIndicator" role="status"
+            ><span class="status-dot" aria-hidden="true"></span
+            ><span id="syncText">Connecting</span></span
+          >
+          <button
+            class="button button-secondary"
+            id="refreshButton"
+            type="button"
+          >
+            Refresh
+          </button>
+          <button class="button button-quiet" id="draftsButton" type="button">
+            Drafts
+          </button>
+          <button
+            class="button button-primary"
+            id="composeButton"
+            type="button"
+          >
+            Compose
+          </button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" id="sidebar" aria-label="Filters and accounts">
+          <div class="sidebar-heading">
+            <h2>Views</h2>
+            <button
+              class="text-button mobile-only"
+              id="mobileRefreshButton"
+              type="button"
+            >
+              Refresh
+            </button>
+            <button
+              class="icon-button mobile-only"
+              id="sidebarClose"
+              type="button"
+              aria-label="Close filters and accounts"
+            >
+              ×
+            </button>
+          </div>
+          <nav class="filter-nav" aria-label="Date range">
+            <button
+              class="nav-item is-active"
+              data-type-filter="all"
+              type="button"
+            >
+              <span>All dates</span><span class="count" id="countAll">—</span>
+            </button>
+            <button class="nav-item" data-type-filter="today" type="button">
+              <span>Today</span><span class="count" id="countToday">—</span>
+            </button>
+            <button class="nav-item" data-type-filter="backlog" type="button">
+              <span>Earlier · unfinished</span
+              ><span class="count" id="countBacklog">—</span>
+            </button>
+          </nav>
+          <div class="sidebar-section">
+            <div class="section-label"><span>Completion</span></div>
+            <div class="segmented-control" role="group" aria-label="Completion">
+              <button
+                class="segment is-active"
+                data-done-filter="all"
+                type="button"
+              >
+                All
+              </button>
+              <button class="segment" data-done-filter="pending" type="button">
+                Open
+              </button>
+              <button class="segment" data-done-filter="done" type="button">
+                Done
+              </button>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <div class="section-label">
+              <span
+                >Accounts <span id="accountCount" class="muted">—</span></span
+              >
+              <button
+                class="text-button"
+                id="addAccountButton"
+                type="button"
+                aria-label="Add account"
+              >
+                + Add
+              </button>
+            </div>
+            <div id="accountFilters" class="filter-list"></div>
+          </div>
+          <div class="sidebar-section">
+            <div class="section-label">
+              <span>Categories</span
+              ><span id="categoryCount" class="muted">—</span>
+            </div>
+            <div id="categoryFilters" class="filter-list"></div>
+          </div>
+          <p class="local-note">
+            Categories and completion stay on this device. Mail actions sync to
+            your original mailboxes.
+          </p>
+        </aside>
+        <button
+          class="sidebar-backdrop"
+          id="sidebarBackdrop"
+          type="button"
+          aria-label="Close filters and accounts"
+          tabindex="-1"
+          hidden
+        ></button>
+
+        <main class="message-pane" aria-label="Unified mail list">
+          <section class="mail-operations" aria-label="Mailbox operations">
+            <div class="folder-tabs" role="group" aria-label="Mailbox folder">
+              <button
+                class="folder-tab is-active"
+                data-mail-folder="inbox"
+                type="button"
+              >
+                Inbox
+              </button>
+              <button class="folder-tab" data-mail-folder="sent" type="button">
+                Sent
+              </button>
+              <button
+                class="folder-tab"
+                data-mail-folder="archive"
+                type="button"
+              >
+                Archive
+              </button>
+              <button class="folder-tab" data-mail-folder="trash" type="button">
+                Trash
+              </button>
+            </div>
+          </section>
+          <div class="pane-header">
+            <div>
+              <p class="eyebrow" id="listContext">All accounts</p>
+              <h2 id="listTitle">Inbox</h2>
+            </div>
+            <div class="list-tools">
+              <label class="search-field"
+                ><span class="sr-only">Search mail</span
+                ><svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="m16 16 5 5" /></svg
+                ><input
+                  id="searchInput"
+                  type="search"
+                  placeholder="Search subject or sender"
+                  autocomplete="off"
+              /></label>
+              <button
+                class="icon-button"
+                id="clearFiltersButton"
+                type="button"
+                title="Clear search and filters"
+                aria-label="Clear search and filters"
+              >
+                <svg
+                  class="control-icon"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="m6 6 12 12M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="toolbar" id="selectionToolbar" hidden>
+            <label class="check-wrap"
+              ><input id="selectAll" type="checkbox" /><span
+                >Select all loaded</span
+              ></label
+            >
+            <span class="selection-count" id="selectionCount">0 messages</span>
+            <button
+              class="text-button"
+              id="clearSelectionButton"
+              type="button"
+              hidden
+            >
+              Clear
+            </button>
+          </div>
+          <div
+            class="mail-selection-toolbar"
+            id="mailSelectionToolbar"
+            hidden
+            aria-label="Selected message actions"
+          >
+            <span class="sr-only" id="mailSelectionCount"></span>
+            <button
+              class="button button-secondary button-small"
+              id="markDoneButton"
+              type="button"
+              title="Mark complete on this device"
+            >
+              Mark done
+            </button>
+            <button
+              class="button button-secondary button-small"
+              data-mail-action="archive"
+              type="button"
+            >
+              Archive
+            </button>
+            <button
+              class="button button-secondary button-small"
+              data-mail-action="restore"
+              type="button"
+            >
+              Restore
+            </button>
+            <button
+              class="button button-danger button-small"
+              data-mail-action="trash"
+              type="button"
+            >
+              Trash
+            </button>
+            <details class="action-menu" id="bulkMore">
+              <summary class="button button-secondary button-small">
+                More <span aria-hidden="true">⌄</span>
+              </summary>
+              <div class="menu-panel">
+                <span class="menu-label">Original mailbox</span>
+                <button data-mail-action="read" type="button">Mark read</button>
+                <button data-mail-action="unread" type="button">
+                  Mark unread
+                </button>
+                <button data-mail-action="star" type="button">Star</button>
+                <button data-mail-action="unstar" type="button">Unstar</button>
+                <span class="menu-label">On this device</span>
+                <button id="reopenButton" type="button">Reopen task</button>
+              </div>
+            </details>
+          </div>
+          <div
+            class="list-status"
+            id="listStatus"
+            role="status"
+            aria-live="polite"
+          ></div>
+          <div class="demo-banner" id="demoBanner" hidden>
+            Demo data: this is not a live mailbox.
+          </div>
+          <div
+            class="job-status"
+            id="jobStatus"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
+          <div class="load-more-bar" id="loadMoreBar" hidden>
+            <span id="loadedSummary">Showing loaded mail only</span
+            ><button
+              class="button button-secondary button-small"
+              id="loadMoreButton"
+              type="button"
+            >
+              Load more mail
+            </button>
+          </div>
+          <div
+            class="message-list"
+            id="messageList"
+            tabindex="-1"
+            aria-label="mail"
+          ></div>
+        </main>
+
+        <section
+          class="preview-pane"
+          id="previewPane"
+          aria-label="Mail preview"
+          aria-live="polite"
+        >
+          <div class="preview-empty" id="previewEmpty">
+            <span class="empty-icon" aria-hidden="true">✉</span>
+            <h2>Select a message</h2>
+            <p>Select a message from the list to preview it on this device.</p>
+          </div>
+          <article class="preview-content" id="previewContent" hidden>
+            <div class="preview-header">
+              <button
+                class="button button-quiet button-small preview-back"
+                id="previewClose"
+                type="button"
+                aria-label="Close mail preview"
+              >
+                ← Back
+              </button>
+              <span class="preview-heading-label">Message</span>
+              <div class="preview-actions">
+                <button
+                  class="button button-secondary button-small"
+                  data-single-action="archive"
+                  type="button"
+                >
+                  Archive
+                </button>
+                <button
+                  class="button button-secondary button-small"
+                  data-single-action="restore"
+                  type="button"
+                >
+                  Restore
+                </button>
+                <button
+                  class="button button-danger button-small"
+                  data-single-action="trash"
+                  type="button"
+                >
+                  Trash
+                </button>
+                <details class="action-menu" id="previewMore">
+                  <summary class="button button-secondary button-small">
+                    More <span aria-hidden="true">⌄</span>
+                  </summary>
+                  <div class="menu-panel">
+                    <span class="menu-label">Original mailbox</span>
+                    <button data-single-action="read" type="button">
+                      Mark read
+                    </button>
+                    <button data-single-action="star" type="button">
+                      Star
+                    </button>
+                    <a
+                      id="originalLink"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      hidden
+                      >Open original ↗</a
+                    >
+                    <span class="menu-label">On this device</span>
+                    <button id="previewDoneButton" type="button">
+                      Mark done
+                    </button>
+                    <button id="previewCategoryButton" type="button">
+                      Change category
+                    </button>
+                  </div>
+                </details>
+              </div>
+            </div>
+            <div class="preview-meta">
+              <span class="source-badge" id="previewSource"></span
+              ><span class="category-badge" id="previewCategory"></span
+              ><span class="unread-badge" id="previewUnread">Unread</span>
+            </div>
+            <h2 id="previewSubject"></h2>
+            <p class="preview-byline" id="previewByline"></p>
+            <time class="preview-date" id="previewDate"></time>
+            <div id="previewEnvelope"></div>
+            <div class="reply-actions" aria-label="Reply and forward"></div>
+            <pre class="email-body" id="previewBody"></pre>
+          </article>
+        </section>
+      </div>
+      <footer class="app-footer">
+        <span id="footerStatus">Classified on your device</span
+        ><button class="text-button" id="restartButton" type="button" hidden>
+          Restart
+        </button>
+      </footer>
+    </div>
+
+    <dialog id="accountDialog" aria-labelledby="accountDialogTitle">
+      <form method="dialog" id="accountForm" class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Account settings</p>
+            <h2 id="accountDialogTitle">Add account</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-close-dialog
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p class="dialog-intro">
+          Connect your inbox. Classification and organization run on this
+          device.
+        </p>
+        <label class="field-label" for="accountName"
+          >Display name <span class="required">Required</span></label
+        ><input
+          class="text-input"
+          id="accountName"
+          name="name"
+          required
+          maxlength="80"
+          placeholder="e.g. Work"
+        /><label class="field-label" for="providerSelect">Connection</label
+        ><select class="text-input" id="providerSelect" name="provider">
+          <option value="gmail">Gmail (browser authorization)</option>
+          <option value="gmail-existing">Existing Email Town directory</option>
+          <option value="imap">IMAP (TLS)</option>
+          <option value="microsoft">Microsoft (device login)</option>
+        </select>
+        <div id="existingFields" hidden>
+          <label class="field-label" for="homeDirectory"
+            >Email Town directory</label
+          ><input
+            class="text-input"
+            id="homeDirectory"
+            name="home"
+            placeholder="Choose an existing local directory"
+          />
+          <p class="field-help">
+            Enter the absolute directory used with Email Town’s --home option.
+            It must contain this account’s Gmail authorization.
+          </p>
+        </div>
+        <div id="imapFields" hidden>
+          <div class="field-grid">
+            <div>
+              <label class="field-label" for="imapHost">Server</label
+              ><input
+                class="text-input"
+                id="imapHost"
+                name="host"
+                autocomplete="off"
+              />
+            </div>
+            <div>
+              <label class="field-label" for="imapPort">Port</label
+              ><input
+                class="text-input"
+                id="imapPort"
+                name="port"
+                type="number"
+                value="993"
+                min="1"
+                max="65535"
+              />
+            </div>
+          </div>
+          <label class="field-label" for="imapUsername">Username</label
+          ><input
+            class="text-input"
+            id="imapUsername"
+            name="username"
+            autocomplete="username"
+          /><label class="field-label" for="imapPassword">App password</label
+          ><input
+            class="text-input"
+            id="imapPassword"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+          />
+          <p class="field-help">
+            Used to sign in to your IMAP and SMTP provider and saved in your
+            system credential vault. SMTP is never guessed.
+          </p>
+          <div class="field-grid smtp-fields">
+            <div>
+              <label class="field-label" for="smtpHost">SMTP server</label
+              ><input
+                class="text-input"
+                id="smtpHost"
+                name="smtp_host"
+                autocomplete="off"
+                placeholder="smtp.example.com"
+              />
+            </div>
+            <div>
+              <label class="field-label" for="smtpPort">SMTP port</label
+              ><input
+                class="text-input"
+                id="smtpPort"
+                name="smtp_port"
+                type="number"
+                value="587"
+                min="1"
+                max="65535"
+              />
+            </div>
+          </div>
+          <label class="field-label" for="smtpSecurity">SMTP security</label
+          ><select class="text-input" id="smtpSecurity" name="smtp_security">
+            <option value="starttls">STARTTLS</option>
+            <option value="ssl">SSL</option>
+          </select>
+          <p class="field-help">
+            Add SMTP settings to send and reply from this account.
+          </p>
+        </div>
+        <div id="microsoftHelp" class="info-callout" hidden>
+          Microsoft accounts require a registered public-client app with device
+          login enabled.
+        </div>
+        <div id="clientIdFields" hidden>
+          <label class="field-label" for="clientId">Client ID</label
+          ><input
+            class="text-input"
+            id="clientId"
+            name="client_id"
+            autocomplete="off"
+          />
+        </div>
+        <p class="form-error" id="accountFormError" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>
+            Cancel</button
+          ><button
+            class="button button-primary"
+            id="submitAccountButton"
+            type="submit"
+          >
+            Connect
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="manageAccountDialog" aria-labelledby="manageAccountTitle">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <h2 id="manageAccountTitle">Account settings</h2>
+          <button
+            type="button"
+            class="icon-button"
+            data-close-dialog
+            aria-label="Close account settings"
+          >
+            ×
+          </button>
+        </div>
+        <p id="manageAccountStatus"></p>
+        <p class="field-help">
+          Pausing stops automatic sync; loaded mail remains available. Local
+          completion and categories are kept.
+        </p>
+        <button
+          type="button"
+          class="button button-secondary"
+          id="pauseAccountButton"
+        >
+          Pause sync
+        </button>
+        <button
+          type="button"
+          class="button button-primary"
+          id="reconnectAccountButton"
+        >
+          Reauthorize this mailbox
+        </button>
+      </div>
+    </dialog>
+
+    <dialog id="categoryDialog" aria-labelledby="categoryDialogTitle">
+      <form method="dialog" class="dialog-card" id="categoryForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Local category</p>
+            <h2 id="categoryDialogTitle">Change category</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-close-dialog
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <label class="field-label" for="categorySelect">Choose a category</label
+        ><select class="text-input" id="categorySelect"></select>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-close-dialog>
+            Cancel</button
+          ><button class="button button-primary" type="submit">
+            Save category
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="composeDialog" aria-labelledby="composeTitle">
+      <form class="dialog-card compose-card" id="composeForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Mail</p>
+            <h2 id="composeTitle">Compose message</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-compose-close
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div class="compose-fields">
+          <div class="compose-grid">
+            <label class="field-label" for="composeAccount">From</label
+            ><select class="text-input" id="composeAccount" required></select>
+            <label class="field-label" for="composeTo">To</label
+            ><input
+              class="text-input"
+              id="composeTo"
+              type="text"
+              autocomplete="email"
+              placeholder="name@example.com"
+            />
+            <label class="field-label" for="composeCc">Cc</label
+            ><input
+              class="text-input"
+              id="composeCc"
+              type="text"
+              placeholder="Optional"
+            />
+            <label class="field-label" for="composeBcc">Bcc</label
+            ><input
+              class="text-input"
+              id="composeBcc"
+              type="text"
+              placeholder="Optional"
+            />
+            <label class="field-label" for="composeSubject">Subject</label
+            ><input
+              class="text-input"
+              id="composeSubject"
+              type="text"
+              maxlength="240"
+            />
+            <label class="field-label" for="composeBody">Message</label
+            ><textarea
+              class="text-input compose-body"
+              id="composeBody"
+              rows="10"
+            ></textarea>
+          </div>
+          <div class="attachment-row">
+            <button
+              class="button button-secondary button-small"
+              id="addAttachmentButton"
+              type="button"
+            >
+              Add attachments</button
+            ><input id="composeAttachments" type="file" multiple hidden /><span
+              id="attachmentSummary"
+              class="field-help"
+              >No attachments</span
+            >
+          </div>
+          <p class="field-help" id="composeCapabilityNote"></p>
+          <p class="form-error" id="composeError" role="alert" hidden></p>
+        </div>
+        <div class="dialog-actions">
+          <button class="button button-quiet" type="button" data-compose-close>
+            Cancel</button
+          ><button
+            class="button button-secondary"
+            id="saveDraftButton"
+            type="button"
+          >
+            Save draft</button
+          ><button class="button button-primary" id="sendButton" type="submit">
+            Send
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="draftsDialog" aria-labelledby="draftsTitle">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Stored on this device</p>
+            <h2 id="draftsTitle">Drafts</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            data-drafts-close
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <p class="field-help">
+          Drafts do not sync automatically. Attachments stay with each saved
+          draft.
+        </p>
+        <div id="draftList" class="draft-list"></div>
+      </div>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script src="app.js" defer></script>
+    <script src="mail.js" defer></script>
+  </body>
+</html>

@@ -7,6 +7,56 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop startup
+
+- Bind the local workbench directly to numeric loopback without reverse DNS, so an unavailable
+  system hostname resolver cannot block the launcher readiness handshake.
+
+### Desktop layout
+
+- Reorganize mail navigation, message rows and preview actions with shared gutters and control sizes.
+  Contextual batch actions and More menus separate mailbox changes from local task organization.
+- Replace stacked tablet previews with a focused reading view and Back navigation; constrain menus
+  to the viewport and provide a mobile filter drawer with refresh and keyboard containment.
+- Align compose/account fields, strengthen input boundaries, keep Send/Save visible while composing,
+  and wrap long attachment names without splitting their Remove controls.
+- Replace stale loading screens on expired sessions with a clear reconnection message.
+- Add synthetic responsive/keyboard/layout checks, including 320px reflow and short compose windows.
+
+### Desktop mail operations
+
+- Compose, reply, reply all and forward from a selected account, attach/download files,
+  and save private on-device drafts. Gmail and Graph use their APIs; IMAP accounts can configure TLS SMTP.
+- Explicit read/unread, star/unstar, archive, Trash and restore actions sync to the original mailboxes,
+  with bounded multi-account selections and Inbox/Sent/Archive/Trash views.
+- Durable operation receipts block duplicate requests; interrupted sends remain unconfirmed,
+  partial SMTP delivery retains the draft, and IMAP moves never use global EXPUNGE.
+- Expanded OAuth permissions require explicit reconnection for previously read-only grants.
+  Live provider send/delete acceptance requires dedicated authorized test mailboxes.
+
+
+### Added
+
+- English-first on-device mail workbench with consistent category colors across navigation,
+  message badges and previews, including dark and high-contrast appearances. Category IDs and
+  mailbox labels remain unchanged; existing account names and message content are preserved.
+- Email Town envelope-and-house vector mark, browser favicon and reproducible macOS launcher icon
+  (`scripts/build_desktop_brand.py`). The local launcher installs the packaged icon.
+
+- Client workflow tools: `labels check [--json]` audits Gmail visibility; explicit
+  `labels show [--dry-run]` creates missing configured labels and makes them visible without
+  changing messages or unrelated labels. Dry-run/check can run alongside the engine; actual
+  repair takes the account lock. No automatic visibility override at startup.
+- `triage [--plan] [--view action|today|backlog|new-sender|unclassified] [--date YYYY-MM-DD]
+  [--timezone IANA] [--limit N] [--json]`: offline Gmail queries or bounded live message counts,
+  retaining old backlog and unclassified mail. Uses local calendar boundaries, including DST;
+  no message content, state database or model needed. Counts are not task-completion state.
+- Optional independent background service names: `service install|status|uninstall --name NAME`,
+  `setup --install-service --service-name NAME`, and `status|doctor --service-name NAME`.
+  Pair each name with its own `--home`; unnamed service identities remain unchanged. Relative
+  account homes/log paths are made absolute when generating services. See
+  [daily client workflows](docs/client-workflow.md) for migration and validation boundaries.
+
 ### Fixed
 
 - **The README's privacy promises now match the code.** "It will never" said the only network

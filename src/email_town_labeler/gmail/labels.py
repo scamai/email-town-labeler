@@ -157,6 +157,10 @@ class LabelMap:
         self._ensure_name(self.prefix)  # the parent stays uncolored
         return self._ensure_name(f"{self.prefix}/{self.names[cls]}", self.colors.get(cls))
 
+    def ensure_parent(self) -> str:
+        """Ensure the uncolored parent even when all child labels already exist."""
+        return self._ensure_name(self.prefix)
+
     def sync_colors(self) -> int:
         """Patch existing class labels whose color is missing or differs from the wanted one.
 

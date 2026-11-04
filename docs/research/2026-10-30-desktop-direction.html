@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="artifact-type" content="decision">
+<title>Email Town · 桌面产品方向评估</title>
+<style>
+:root{color-scheme:light;--bg:#ffffff;--panel:#f6f8fc;--ink:#1f1f1f;--muted:#5f6368;--line:#d5d9e0;--accent:#175fc1}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9da7b3;--line:#30363d;--accent:#58a6ff}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9da7b3;--line:#30363d;--accent:#58a6ff}
+*{box-sizing:border-box}html{font-size:17px}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;line-height:1.8}
+main{max-width:1050px;margin:auto;padding:32px 32px 72px}a{color:var(--accent);text-underline-offset:3px;overflow-wrap:anywhere}a:focus-visible{outline:3px solid var(--accent);outline-offset:4px}
+header{padding:22px 0 28px;border-bottom:2px solid var(--line)}h1{font-size:2.25rem;line-height:1.35;letter-spacing:-.025em;margin:14px 0}h2{font-size:1.45rem;line-height:1.5;margin:0 0 16px}h3{font-size:1.1rem}p{margin:12px 0}.stamp,.eyebrow,.reading{color:var(--muted)}.stamp,.eyebrow{font-size:.88rem}.eyebrow{margin-bottom:6px}.deck{font-size:1.12rem;max-width:850px}.verdict{padding:14px 20px;background:var(--panel);border-left:4px solid var(--accent)}section{padding-top:32px}nav{display:flex;flex-wrap:wrap;gap:8px 24px;padding:16px 0;border-bottom:1px solid var(--line)}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}table{width:100%;border-collapse:collapse;min-width:650px;font-size:.94rem}th,td{text-align:left;vertical-align:top;padding:14px 16px;border-bottom:1px solid var(--line)}th{background:var(--panel)}th:first-child,td:first-child{min-width:140px}tr:last-child td{border-bottom:0}ul,ol{padding-left:1.5em}li{margin:8px 0}code{font-size:.9em;overflow-wrap:anywhere}small{font-size:.88rem}.reading{font-size:.88rem}footer{margin-top:32px;padding-top:18px;border-top:1px solid var(--line)}
+@media(max-width:600px){main{padding:20px 18px 48px}h1{font-size:1.8rem}.deck{font-size:1rem}h2{font-size:1.3rem}.verdict{padding:12px 14px}table{min-width:600px}th,td{padding:12px}header{padding-top:8px}}
+@media print{main{max-width:none}nav{display:none}section{break-inside:avoid}a{color:inherit}}
+</style>
+</head>
+<body><main>
+<p><a href="../../README.md">← 项目 README / English overview</a> · 中文评估</p>
+<header>
+<p class="verdict"><strong>后续实测已更新推荐方向：</strong>分类已在本机 Gmail、Outlook 和 Apple Mail 中可见。请先阅读<a href="2026-10-30-client-integration.html">客户端实测与推进方案</a>；下文保留为此前代码盘点与方案基线。</p>
+<p class="stamp">决策评估 · 截至 2026-10-30 · 代码基线 4bbfa24 · Codex · 证据见页末</p>
+<h1>分类引擎已有基础，下一步值得验证多邮箱工作台。</h1>
+<p class="deck">Email Town 已能在本机为 Gmail 分类并学习纠错；用户现在的主要困难是多个邮箱分散、分类结果不易查看。建议验证一个 macOS 分类工作台：统一查看、预览、纠错和标记已处理，再打开原邮箱回复。先验证每日处理邮件是否更轻松，再决定是否扩展成完整客户端和公开发行。</p>
+<p class="verdict"><strong>判断：技术路线可行（推断），产品收益尚未验证。</strong><br>代码和测试证据较强；跨邮箱真实使用、中文邮件效果、安装包及授权审核仍未知。下一步由项目维护者组织一轮多账户工作流验证，先覆盖 Gmail，再验证 Microsoft 邮箱。</p>
+</header>
+<nav aria-label="报告目录"><a href="#state">当前进展</a><a href="#options">方案取舍</a><a href="#product">第一版范围</a><a href="#next">推进顺序</a><a href="#sources">证据</a></nav>
+<section id="key"><p class="eyebrow">阅读口径</p><p><strong>已验证</strong>＝本次检查了代码、命令输出或官方文档；<strong>推断</strong>＝基于这些事实的设计建议；<strong>待验证</strong>＝尚无真实使用或运行证据。工作台指统一处理列表；连接器指登录并同步某一邮箱服务的组件。报告不是已实现功能清单，也不是开发排期承诺。</p></section>
+<section id="state">
+<p class="eyebrow">01 / 当前进展</p><h2>近期优化解决了后台运行问题，产品入口仍然偏开发者。</h2>
+<div class="table-wrap" tabindex="0" role="region" aria-label="当前能力与缺口"><table>
+<thead><tr><th>方面</th><th>已验证现状</th><th>对下一步的意义</th></tr></thead><tbody>
+<tr><td>分类与恢复</td><td>本地模型、增量同步、重试、睡眠后断线重连、回填、撤销、个人纠错学习。</td><td>可以复用引擎，无需从头构建分类系统。<a href="#s-code">代码证据</a></td></tr>
+<tr><td>资源优化</td><td>模型卡记录：M4 Pro 上 int8 下载 263 MB；加载峰值 1.52 GB，对照 float32 为 824 MB、2.96 GB。后台工作进程可空闲退出。</td><td>适合继续探索桌面常驻，但加载时仍不算轻量；这些历史测量本次未重跑。int8 是可选模型。<a href="#s-model">模型证据</a></td></tr>
+<tr><td>多账户</td><td>每个账户使用独立数据目录和实例；没有统一账户管理。原生后台服务名称固定，不能直接假设多次安装就能并行管理多个账户。</td><td>首要任务是账户隔离与生命周期管理。现有分类数据库按消息 ID 建键，聚合时必须带上账户身份。<a href="#s-code">代码证据</a></td></tr>
+<tr><td>可用性</td><td>只有命令行及后台服务；安装要求 Python、Google Cloud 配置和模型下载。没有桌面收件箱、邮件索引或搜索界面。</td><td>增加状态窗口只能改善运维；统一邮件工作台还需要独立的数据与交互层。</td></tr>
+<tr><td>质量与发布</td><td>本次本机 Python 3.12：495 passed、7 skipped；lint 与格式检查通过。基线提交的 CI 9 个系统/Python 组合及 Docker 构建成功。已有 v0.1.0 Python 发布包，无 Mac 安装包。</td><td>属于有测试基础的早期工具，不能据此宣称消费级客户端已经成熟。<a href="#s-checks">检查口径</a></td></tr>
+</tbody></table></div>
+<p class="reading">窄屏表格可左右滑动。读法：已实现能力、历史模型测量、此次测试结果分别取证；测试通过不等于所有真实邮箱行为都已验证。</p>
+<p>本地工作区没有找到独立 TODO／ROADMAP，GitHub 开放 issue 查询为空。现有缺项散在 README 和模型文档：PyPI 发布、即时推送、完整模型微调；Outlook／IMAP／Fastmail 明确写着暂未规划。发送、删除、归档和自动回复则是当前产品明确排除的行为，不能误当成漏做的任务。</p>
+</section>
+<section id="why">
+<p class="eyebrow">02 / 原因</p><h2>“标签难用”同时来自平台差异和分类噪声。</h2>
+<p>Gmail 标签、Microsoft 邮箱的 categories（分类）以及普通 IMAP 邮箱并非同一种对象。Gmail 提供自己的 IMAP 扩展；Microsoft Graph 可以同步消息、设置分类，但显示颜色仍依赖客户端。把一个 Google 标签写回去，并不能保证它在所有邮件软件里都以相同方式出现。具体 Outlook 版本和账户类型尚未确认，不能把旧版 Outlook 的限制一概套用。<a href="#s-platform">平台依据</a></p>
+<p>在 Gmail 手机应用里添加另一家邮箱，也不意味着那个邮箱已经成为 Gmail API 能读取的 Google 邮箱。Google 官方说明：Gmailify／网页端 POP 代收在 2026 年第一季度后不再接纳新用户，老用户可用至 2027 年 1 月；手机应用仍可用 IMAP 接入。新产品不宜把“先汇总进 Gmail”作为必要前提。<a href="https://support.google.com/mail/answer/16604719?hl=en">Google 说明</a></p>
+<p>模型也有边界。模型卡的 87.3% 来自方法评估中 2,101 封留出邮件，与原工具标签比较；不是最终发布权重在新用户上的准确率。推荐策略下“需要处理”的召回率为 0.88、精确率为 0.41，取舍是少漏掉重要邮件、多产生提醒。训练邮件来自一人的英文收件箱；中文、多账户及不同职业场景的效果未测。<a href="#s-model">评估口径</a></p>
+<p><strong>设计推断：</strong>统一界面要给人清楚的分类、快速纠错和完成状态；仅把所有“需要处理”堆在一起，可能增加负担。“已处理”应与“分类错了”分开，避免把完成任务误当成模型训练标签。</p>
+</section>
+<section id="options">
+<p class="eyebrow">03 / 方案取舍</p><h2>统一分类工作台最贴近当前问题，但应与现成客户端比较。</h2>
+<div class="table-wrap" tabindex="0" role="region" aria-label="方案比较"><table>
+<thead><tr><th>选择</th><th>能解决什么</th><th>主要代价与判断</th></tr></thead><tbody>
+<tr><td>Apple Mail／Thunderbird</td><td>已有多账户统一收件箱、阅读和回复。</td><td>采用成本最低，应作为基线；它们并未自动接入本项目的统一分类与学习。若只是少切换账户，可能已经足够。</td></tr>
+<tr><td>菜单栏控制面板</td><td>登录、状态、开关、模型下载和错误提示。</td><td>相对小，但邮件仍分散；只能作为产品的一部分。</td></tr>
+<tr><td><strong>分类工作台（推荐验证）</strong></td><td>跨账户分类列表、预览、纠错、已处理，跳转原邮箱。</td><td>需要多账户同步和展示层；能复用现有引擎，控制范围后较适合个人项目。</td></tr>
+<tr><td>完整邮件客户端</td><td>完整阅读、撰写、附件、草稿、搜索、离线和收发。</td><td>长期维护面广，且发送、归档等涉及改变现有产品边界。等工作台收益明确后再评估。</td></tr>
+</tbody></table></div>
+<p class="reading">窄屏表格可左右滑动。读法：成本是范围上的定性推断，不是已报价的工期。现成客户端能力见 <a href="https://support.apple.com/en-asia/guide/mail/mlhle2e8ce37/mac">Apple Mail</a> 与 <a href="https://www.thunderbird.net/en-US/features/">Thunderbird 官方介绍</a>。这些方案尚未在用户的实际账户组合中比较。</p>
+<p>浏览器扩展能改善某个网页界面，但需要分别跟随 Gmail／Outlook 页面变化，也不直接提供跨服务的统一数据层，因此不作为首选。若只想改善一个网页，结论可能改变。</p>
+</section>
+<section id="product">
+<p class="eyebrow">04 / 建议的第一版，尚未实现</p><h2>第一版应完成“发现 → 判断 → 处理”的一个闭环。</h2>
+<ul>
+<li><strong>一个列表：</strong>所有账户的“需要处理”、订阅、订单、旅行等统一分组；显示来源账户、主题、发件人和同步时间，支持按账户筛选。各账户仍各自拥有邮件，不做邮箱迁移。</li>
+<li><strong>三个关键动作：</strong>查看简短预览、改分类、标记已处理；明确显示低置信度。需要回复时打开原邮箱对应邮件；精确跳转必须实测，不支持时提供可理解的替代路径。</li>
+<li><strong>一个状态入口：</strong>授权过期、离线、模型下载、暂停和恢复都有可见状态；电脑睡眠期间不承诺持续分类。</li>
+</ul>
+<p>技术上建议保留 Python 分类与学习引擎，增加独立的账户管理和连接器接口；macOS 优先时可验证 SwiftUI 界面与受控本地工作进程的组合。如果明确需要 Windows／Linux 同步发行，再比较跨平台桌面外壳。安装打包、进程恢复和模型共享必须先做小型技术验证，尚未证明当前程序可直接装进沙盒。</p>
+<p>读取先通过 Gmail API，下一步按实际账户需要接 Microsoft Graph（Outlook.com／Microsoft 365），普通 IMAP 再按需接入。在 Outlook 客户端里看到一个 Gmail 账户，并不表示该账户应改用 Graph。Graph 的增量同步及分类接口已有官方支持；企业租户的授权政策仍需实际测试。<a href="#s-platform">接口依据</a></p>
+<p>统一分类应以本地语义为基础，再按能力选择性写回 Gmail 标签／Microsoft 分类；不要为了显示分类就把普通 IMAP 邮件移动到文件夹。反馈同步要避免把自身写回当成用户纠错，并保存人的修改优先级。</p>
+<p><strong>隐私设计变化必须讲清楚：</strong>当前数据库不保存主题和正文。工作台需要显示邮件，可先按需读取并在内存中短期缓存；若增加持久索引、离线正文或全文搜索，就要重新定义保留期限、清除、加密和退出账户的行为。凭据放入系统钥匙串；正文预览要限制活动内容与远程资源。不能继续沿用“完全不存邮件内容”的承诺而悄悄加入缓存。</p>
+</section>
+<section id="release">
+<p class="eyebrow">05 / 发行可行性</p><h2>可发布 Mac 软件，但授权与安装体验是独立工作。</h2>
+<p>建议先自用验证，再提供签名并公证的直接下载安装包，最后判断 Mac App Store 是否值得。Apple 允许商店外分发；商店要求沙盒。现有 Python 依赖、模型下载、后台进程、升级与回滚、Apple Silicon／Intel 支持，都要在目标机器验证。此建议不是“打包即可上架”的承诺。<a href="https://developer.apple.com/macos/distribution/">Apple 分发说明</a></p>
+<p>普通用户不应被要求自行创建 Google Cloud 项目。公开应用若请求 Gmail 受限权限，通常需要 OAuth 审核；纯本地运行并不自动豁免。若让受限邮件数据经过第三方服务器，还涉及安全评估。个人使用和特定内部使用有例外，不能直接套到公开发行。<a href="https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification">Google 审核说明</a></p>
+<p>已有 v0.1.0 资产是 Python 安装包及模型包，不能当成上述桌面发行已经完成的证据。近期优化多列在 Unreleased 下；后续要让版本号、变更记录和可下载包对应起来。PyPI 名称还被无关项目占用，桌面产品的名称及发行渠道需要明确。</p>
+</section>
+<section id="next">
+<p class="eyebrow">06 / 下一步与排序</p><h2>先验证统一处理的价值，再投入更多平台与发行工作。</h2>
+<p><strong>唯一的下一步：</strong>项目维护者组织多账户工作流验证。下一轮开始时确认常用邮箱类型及手机需求，先比较现成统一收件箱，再验证工作台原型。完成标准：用户能在同一列表找到、判断并完成跨两个账户的待处理邮件，纠错不跨账户、断网和重新授权后可恢复，并能回到正确原邮件。建议连续自用一周后复盘；这是验证窗口，开发工期与启动日尚未承诺。</p>
+<ol>
+<li><strong>P0 · 账户基础和最小工作台：</strong>两 Gmail 账户隔离、消息身份带账户、独立同步游标和凭据、不会覆盖彼此的后台管理；共享模型资源；列表、预览、纠错及完成状态。这一步仅验证多账户基础；若实际痛点是 Gmail 加 Microsoft 邮箱，必须完成下一步后才能判断跨服务收益。</li>
+<li><strong>P1 · 第二类邮箱：</strong>若用户常用 Microsoft 邮箱，加入 Graph；确认企业租户可授权，真实测试分类和重新同步。其他服务按实际账户排序。</li>
+<li><strong>P1 · 使用质量：</strong>检查“需要处理”的误报／漏报；加入明确授权的个人评估集及中文样本，分别按账户和语言统计。先调阈值与反馈体验，再决定是否训练新模型。</li>
+<li><strong>P2 · 小范围发行：</strong>免命令行安装、OAuth 审核方案、钥匙串、签名公证、卸载与清理、版本更新与回滚；先确认冷启动和长期常驻资源表现。</li>
+<li><strong>P3 · 后续按证据决定：</strong>普通 IMAP、离线全文搜索、手机端、即时推送、完整微调或完整收发。它们不是现阶段统一工作台的先决条件。</li>
+</ol>
+<p>以上是本次新增建议，不是仓库既有承诺。用相同的代表性处理任务，对照现成客户端和工作台，记录切换账户次数、处理耗时、误报／漏报及每日主动使用情况，当前均未测量。只有在减少操作负担且未增加重要邮件遗漏时，才继续扩展；具体可接受阈值由用户在试用前设定。若现成客户端已经解决主要问题，优先保留引擎并改善安装；若必须在手机和电脑同时操作，就重新评估本地状态同步的成本。</p>
+</section>
+<section id="limits">
+<p class="eyebrow">07 / 边界</p><h2>技术证据充足，用户收益与新产品运行仍未验证。</h2>
+<p>本次没有构建桌面应用、连接 Outlook／IMAP、进行公开发布或重新训练模型。现有测试的端到端场景使用内存假 Gmail，不是真实跨服务测试。本机服务状态检查只能证明检查时的运行与最近轮询，不能证明全部邮件分类正确或长期稳定。测试跳过项和历史测量在下方明确列出。</p>
+<p>尚不清楚用户的账户数量、提供商组合、企业登录限制、中文比例、手机和离线要求。暂按 macOS 优先、个人使用、多个独立邮箱评估。没有用户访谈、商业需求验证、预算估算或确定工期。</p>
+<p>未进行失败的产品实验；不选完整客户端与浏览器扩展是基于范围的取舍，并非实测失败。检索 Apple 的部分文档端点失败后改读官方分发说明，未以检索失败推断平台能力不存在。</p>
+</section>
+<section id="method">
+<p class="eyebrow">08 / 研究方法</p><h2>结论来自代码盘点、测试、运行状态和官方平台文档。</h2>
+<ol><li>阅读 README、设计、架构、模型卡、配置、状态存储、后台服务及最近提交；独立只读代理核对现有能力与计划。</li><li>搜索本仓库计划文件与缺项文字，并查询开放 GitHub issues、release 和基线 CI；未找到开放 issue 不代表外部任务系统没有计划。</li><li>运行本地 pytest、ruff lint／format；读取已安装服务的脱敏状态，不触发回填或标签修改。实际账户、邮件内容和使用统计不写入本报告。</li><li>核对 Google、Microsoft、Apple 官方能力、权限与发行要求；以 Apple Mail／Thunderbird 的统一收件箱作为替代方案。</li></ol>
+</section>
+<section id="sources">
+<p class="eyebrow">09 / 可复核证据 · 2026-10-30</p><h2>证据区分实测、文档事实与产品推断。</h2>
+<div class="table-wrap" tabindex="0" role="region" aria-label="证据台账"><table><thead><tr><th>主张</th><th>观察与范围</th><th>等级与来源</th></tr></thead><tbody>
+<tr id="s-code"><td>可复用分类引擎；没有统一多账户应用</td><td>基线 4bbfa24；README 功能表／FAQ，config.Paths、state 表及 service 固定标识。</td><td>已验证 · <a href="../../README.md">README</a> · <a href="../architecture.md">架构</a> · <a href="../../src/email_town_labeler/service.py">service.py</a> · <a href="../../src/email_town_labeler/state.py">state.py</a></td></tr>
+<tr id="s-model"><td>资源优化有效但精度不能泛化</td><td>历史单台 M4 Pro 测量；int8 与 float32 在 350 封单邮箱样本中 347 封一致。方法评估留出集 n=2,101；来源训练邮件总计 n=4,176。上述性能／精度未在本次重测。</td><td>已验证“文档记载” · <a href="../model-cards/town-modernbert-int8.md">int8 卡</a> · <a href="../model-cards/town-modernbert.md">float32 卡</a> · <a href="../../CHANGELOG.md">变更日志</a></td></tr>
+<tr id="s-checks"><td>现有代码具备测试基础</td><td><code>.venv/bin/python -m pytest -ra</code>：495 passed、7 skipped，8.59s；6 项缺少 torch／transformers／sentence_transformers，1 项因 onnxruntime 已安装而跳过缺依赖场景。<code>ruff check .</code> 通过；<code>ruff format --check .</code> 83 文件合规。</td><td>本次已验证；不包含重跑跨平台构建／Docker。<a href="https://github.com/scamai/email-town-labeler/actions/runs/40278216057">基线 hosted CI</a> 10 个 job 成功，是既有记录而非本次本地全矩阵测试。</td></tr>
+<tr><td>没有统一路线图，已有 Python 发布</td><td>本仓库文件与计划文字搜索；<code>gh issue list --state open</code> 返回空。<code>gh release view v0.1.0</code> 显示 Python wheel、sdist、校验文件与模型包。</td><td>本次已验证 · <a href="https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0">release</a>；不是整个组织的计划清单。</td></tr>
+<tr id="s-platform"><td>跨服务接口可用，标签语义不同</td><td>Gmail 专有 IMAP 扩展；Graph 按文件夹增量同步、分类集合与更新权限。尚未接入用户 Microsoft 账户。</td><td>已验证“官方接口” · <a href="https://developers.google.com/workspace/gmail/imap/imap-extensions">Gmail</a> · <a href="https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0">Graph delta</a> · <a href="https://learn.microsoft.com/en-us/graph/api/resources/outlookcategory?view=graph-rest-1.0">分类</a> · <a href="https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0">消息更新</a></td></tr>
+<tr><td>建议验证工作台，再考虑完整客户端</td><td>结合现有实现、用户描述和平台接口做范围比较；没有使用收益、付费意愿或工期测量。</td><td>推断 · 本报告 options／product／next；产品收益待验证。</td></tr>
+</tbody></table></div>
+<p class="reading">窄屏表格可左右滑动。读法：来源可以复核事实；“推断”行代表设计判断。源码引用应结合基线 <a href="https://github.com/scamai/email-town-labeler/tree/4bbfa247f6149c9274ebaae206c2fdbcfc438128">4bbfa24</a> 阅读。布局和主题沿用仓库 <code>scripts/make_readme_art.py</code> 的字体与色系，浅色链接加深以保证对比度。</p>
+</section>
+<footer>本地决策资料；没有发布应用或改变邮箱内容。渲染与复核记录：<a href="artifact-review.md">artifact-review.md</a>。</footer>
+</main></body></html>

@@ -40,6 +40,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+desktop = ["keyring>=25.0"]
 embed = ["sentence-transformers>=5.0", "torch>=2.4"]
 onnx = ["onnxruntime>=1.18", "tokenizers>=0.20"]
 # Everything optional at once (both ML backends). Large: pulls torch.
@@ -72,6 +73,7 @@ include = [
   "README.md",
   "LICENSE",
   "CHANGELOG.md",
+  "TODO.md",
   "MODEL_CARD_TEMPLATE.md",
 ]
 
