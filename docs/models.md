@@ -6,7 +6,9 @@ same no matter which model decides the label. A model is a **package** (a direct
 that knows how to run that kind of package).
 
 The design is inspired by hosted inbox-labeling tools, with one difference that drives
-everything here: the model runs on your machine and nothing about your mail leaves it.
+everything here: the model runs on your machine and nothing about your mail leaves it. The one
+exception is an `ollama_choice` server that you yourself put on another host
+([`ollama_choice` config](#ollama_choice-config)).
 
 > **Default model: [`town-modernbert`](#published-models-the-catalog).** ModernBERT-large
 > fine-tuned on one person's consenting inbox, run with ONNX. `setup` downloads it when the
@@ -383,9 +385,11 @@ for a ModernBERT-large-sized model.
 }
 ```
 
-This backend sends the rendered message text to `url`. Because `url` comes from the model
-package, email-town-labeler refuses any host that is not loopback (`localhost`, `127.0.0.0/8`, `::1`):
-a package cannot make it send your mail elsewhere. If you run Ollama on another machine you
+This backend sends the rendered message text to `url`: the From and Subject headers, whether
+the message has mailing-list headers or a calendar invite, and the first `max_body_chars`
+characters of the body. Because `url` comes from the model package, email-town-labeler refuses
+any host that is not loopback (`localhost`, `127.0.0.0/8`, `::1`): a package cannot make it
+send your mail elsewhere. If you run Ollama on another machine you
 control, opt in yourself with `[model] allow_remote_endpoint = true` in `config.toml` or
 `EMAIL_TOWN_LABELER_ALLOW_REMOTE_ENDPOINT=1` (see [privacy.md](privacy.md#model-endpoints)). A
 package cannot set this.

@@ -20,14 +20,19 @@ derived from real mail. It applies to:
   domain with a real-looking message;
 - **issues, pull requests and discussions**: describe the shape of the problem ("a newsletter
   with a `List-Id` header and an HTML-only body") or write a synthetic reproduction;
-- **logs and debug output you paste**: `doctor` and `status` are designed to be safe, but
-  read what you paste first;
+- **logs and debug output you paste**: `doctor` and `status` show nothing about your messages,
+  but they print your account address and home paths, so paste `doctor --redact` or
+  `status --redact` output. Log lines carry message ids: replace them with `<id>`. Read what
+  you paste first;
 - **code**: never log, print, raise, or persist subject, sender, addresses, snippet or body.
-  Log message ids, class names, probabilities, counts and error types only. Exception
-  messages must not embed content either. Reviewers will block PRs that break this.
+  The two stored exceptions are the contacts table and the user's own account address
+  ([privacy.md](docs/privacy.md#what-is-stored-on-disk)). Log message ids, class names,
+  probabilities, counts and error types only. Exception messages must not embed content
+  either. Reviewers will block PRs that break this.
 
-If you accidentally post private data, edit it out and tell a maintainer
-(security@scam.ai) so the history can be purged.
+If you accidentally post private data, edit it out and tell a maintainer privately (email
+contact@scam.ai with the subject line `[Email Town]`) so the history can be purged. Security
+and privacy problems in the code go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## Development setup
 

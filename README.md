@@ -89,9 +89,9 @@ reading and labeling parts ([exactly what it does](docs/privacy.md#what-gmailmod
 **It will never:**
 
 - ❌ send, delete, archive, move or mark any email as read
-- ❌ upload your email anywhere (the only network traffic is the Gmail API, a model download you ask for, and the update check below)
+- ❌ upload your email anywhere (the only network traffic is the Gmail API, a model download you ask for, and the update check below; if you pick the `ollama_choice` backend, each message's From, Subject and the start of its body, 2,000 characters by default, also go to your Ollama server, which has to be on this machine unless you opt in: [details](docs/privacy.md#model-endpoints))
 - ❌ phone home: no analytics, no crash reports, no install ID
-- ❌ store your email: its local database holds message ids, label names and numbers, never subjects, senders or bodies
+- ❌ store your email: its local database holds message ids, class names, numbers and times, plus your own account address and the addresses you have sent mail to (so it can tell mail from people you know); never a message's subject, sender or body ([full list](docs/privacy.md#what-is-stored-on-disk))
 - ❌ touch any label except its own
 
 **Update check.** When you run `setup`, `status`, `doctor`, `model list` or `model pull` in a
@@ -408,7 +408,7 @@ flowchart LR
   E -- "add label e/(class)" --> G
   G -- "you change a label" --> E
   G -- "Town's labels (optional)" --> E
-  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers")]
+  E -- "corrections + scores" --> DB[("state.sqlite<br/>ids, classes, numbers,<br/>contacts")]
   DB -. "learn (daily, local)" .-> E
 ```
 
@@ -461,8 +461,9 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
 
 No. It reads mail from the Gmail API and classifies it in-process. The only other network
 traffic is a model download you ask for, and the daily [update check](docs/privacy.md#update-check),
-which sends no mail data. The `ollama_choice` backend sends text to an Ollama
-server, and only on this machine (`localhost`) unless you opt in with
+which sends no mail data. One backend is the exception, and only if you pick it:
+`ollama_choice` sends each message's From, Subject and the start of its body to an Ollama
+server, which has to be on this machine (`localhost`) unless you opt in with
 `[model] allow_remote_endpoint = true`; a model package cannot change that
 ([details](docs/privacy.md#model-endpoints)).
 
@@ -559,8 +560,10 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 
 Bug reports, docs fixes, backends and models are welcome. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) first, especially the privacy rule: **no real email, in
-any form, in code, tests, fixtures, issues or logs.** Security or privacy problems go to
-security@scam.ai, not to public issues ([SECURITY.md](SECURITY.md)).
+any form, in code, tests, fixtures, issues or logs.** Report security or privacy problems
+privately, never in a public issue: use **Report a vulnerability** on this repository's
+Security tab, or email contact@scam.ai with the subject line `[SECURITY][Email Town]`
+([SECURITY.md](SECURITY.md)).
 
 If it makes your inbox calmer, a ⭐ helps other people find it.
 
