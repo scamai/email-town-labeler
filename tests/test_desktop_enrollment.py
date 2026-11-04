@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -76,7 +77,9 @@ def test_microsoft_device_flow_handles_pending_slow_down_and_saves_private_token
     assert len(calls) == 3
     assert calls[0][0] == desktop_manager.MICROSOFT_TOKEN
     assert calls[0][1]["device_code"] == "device-secret"
-    assert token_path.stat().st_mode & 0o077 == 0
+    # _write_private guarantees POSIX mode bits only where supported; Windows uses ACLs.
+    if os.name != "nt":
+        assert token_path.stat().st_mode & 0o077 == 0
     token_text = token_path.read_text()
     assert "access-secret" in token_text and "refresh-secret" in token_text
     workbench.close()
