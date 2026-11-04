@@ -157,7 +157,7 @@ class GmailReader:
         identity, mid = provider_id.split(":", 1)
         if identity != self.identity or mid not in self.cache:
             raise ProviderError("Message is no longer in the current list. Refresh")
-        rows = self.client.get_records([mid])
+        rows = self.client.get_records([mid], include_html=True)
         if not rows:
             raise ProviderError("Message was moved or deleted. Refresh")
         return {
@@ -165,9 +165,10 @@ class GmailReader:
             "attachments": [
                 {
                     "id": a.get("id", ""),
-                    "name": a.get("filename", "attachment"),
+                    "name": a.get("filename") or "Inline image",
                     "type": a.get("mime", "application/octet-stream"),
                     "size": a.get("size", 0),
+                    "content_id": a.get("content_id", ""),
                 }
                 for a in rows[0].get("attachments", [])
                 if a.get("id")
@@ -471,11 +472,19 @@ class MicrosoftReader:
         )
         body = message.get("body") or {}
         text = body.get("content") or ""
+        html = ""
         if body.get("contentType", "").lower() == "html":
+            html = text[:262144]
             text = html_to_text(text)
+        # Graph hasAttachments excludes inline attachments; CID-only mail still needs them.
+        # https://learn.microsoft.com/en-us/graph/api/resources/message
+        attachments = (
+            self._attachments(mid) if message.get("hasAttachments") or "cid:" in html.lower() else []
+        )
         return {
             **self.record(self.cache[mid]),
             "body_text": text,
+            "body_html": html,
             "headers": {
                 **self.record(self.cache[mid])["headers"],
                 **{
@@ -500,7 +509,7 @@ class MicrosoftReader:
                     "",
                 ),
             },
-            "attachments": self._attachments(mid) if message.get("hasAttachments") else [],
+            "attachments": attachments,
             "url": safe_link(message.get("webLink", "")),
         }
 
@@ -512,7 +521,7 @@ class MicrosoftReader:
 
     def _attachments(self, mid):
         result, seen = [], set()
-        url = f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}/attachments?$select=id,name,size,contentType"
+        url = f"https://graph.microsoft.com/v1.0/me/messages/{quote(mid, safe='')}/attachments?$select=id,name,size,contentType,contentId"
         while url:
             if url in seen or len(seen) > 20:
                 raise ProviderError("Attachment list is too large")
@@ -524,6 +533,7 @@ class MicrosoftReader:
                     "name": a.get("name", "attachment"),
                     "size": a.get("size", 0),
                     "type": a.get("contentType", "application/octet-stream"),
+                    "content_id": a.get("contentId", ""),
                 }
                 for a in page.get("value", [])
                 if a.get("@odata.type", "#microsoft.graph.fileAttachment")

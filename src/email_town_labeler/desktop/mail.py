@@ -143,7 +143,12 @@ def mime_message(data, sender, original=None):
 def mime_details(message):
     attachments = []
     for index, part in enumerate(message.walk()):
-        if part.is_multipart() or not (part.get_filename() or part.get_content_disposition() == "attachment"):
+        content_id = str(part.get("Content-ID", "")).strip().strip("<>")
+        if part.is_multipart() or not (
+            part.get_filename()
+            or part.get_content_disposition() == "attachment"
+            or (content_id and part.get_content_maintype() == "image")
+        ):
             continue
         raw = part.get_payload(decode=True) or b""
         try:
@@ -151,9 +156,23 @@ def mime_details(message):
         except ValueError:
             name = "attachment"
         attachments.append(
-            {"id": str(index), "name": name, "size": len(raw), "type": part.get_content_type()}
+            {
+                "id": str(index),
+                "name": name,
+                "size": len(raw),
+                "type": part.get_content_type(),
+                "content_id": content_id,
+            }
         )
+    html = ""
+    part = message.get_body(preferencelist=("html",))
+    if part is not None:
+        try:
+            html = str(part.get_content())[:262144]
+        except (ValueError, LookupError, KeyError):
+            pass
     return {
+        "body_html": html,
         "headers": {
             k: str(message.get(k, ""))
             for k in ("from", "to", "cc", "reply-to", "message-id", "references", "subject")

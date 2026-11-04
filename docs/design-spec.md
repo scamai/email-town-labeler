@@ -415,6 +415,19 @@ attachment URLs. Drafts are local, not provider draft synchronization. Provider 
 is derived from granted scopes or explicit SMTP configuration; broad grants are not silently
 requested during refresh. See the desktop guide for limits and unverified provider acceptance.
 
+Image preview contract: `GmailClient.get_records(..., include_html=True)` is desktop-only opt-in;
+default classifier records omit HTML. All readers supply transient `body_html` and attachment `content_id`
+metadata, including unnamed CID parts and Graph inline-only messages. The manager discards HTML after
+extracting at most 50 validated image descriptors into `/api/message`'s `images` list. Each descriptor has
+`alt` and either an HTTPS `url` or `attachment_id` plus a supported raster `type`. `/api/state` has no images.
+`GET /api/image?id=...&attachment_id=...` requires the normal bearer header, accepts only attachments
+referenced by that loaded message, and checks raster signatures and the 8 MiB limit. It cannot proxy URLs.
+The browser renders separate image elements below plaintext; no sender DOM, CSS, script, srcset or event
+attributes enter the page. Embedded downloads are sequential with a 15-second timeout and 32 MiB Blob
+budget. External loads require an explicit click for the current preview, use no referrer, and receive
+no workbench token. Preview changes abort pending requests and revoke Blob URLs; stale callbacks do not
+change the next message. See `tests/test_desktop_images.py` and `scripts/check_images_ui.py`.
+
 
 ## Desktop layout and alignment
 

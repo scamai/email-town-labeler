@@ -75,8 +75,12 @@ must be re-added explicitly.
 
 Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model.
 Local overrides take precedence and are independent of completion. They currently neither write back to the
-provider nor train the existing CLI feedback model. Images/HTML/attachments do not execute; Gmail and Outlook
-links can also open the original message in the provider web client.
+provider nor train the existing CLI feedback model. Images referenced by the HTML body appear below the
+plaintext body; the sender's HTML layout, scripts and styles are never rendered. CID-linked PNG, JPEG,
+GIF, WebP, AVIF and BMP images load from the mailbox automatically (8 MiB each, 32 MiB per open preview).
+HTTPS external images stay blocked until **Load external images** is clicked for that preview. This can
+tell the sender the message was opened. Unsupported sources, SVGs and oversized inline files can be viewed
+through the original message or downloaded attachments. Gmail and Outlook links open the original message.
 
 Inbox, Sent, Archive and Trash are separate views. Counts cover loaded messages only; truncation is
 explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox while preserving local
@@ -134,7 +138,10 @@ the app. This remains a local launcher, not a signed App Store application.
 ## Privacy
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
-the **local browser's memory**. The process retains at most 64 previews, capped at 256 KiB each. There is no
+the **local browser's memory**. The process retains at most 64 previews, each with at most 256 KiB of body
+text plus up to 50 image references. Image blobs are released when switching messages or losing the session.
+External images load directly in the browser without a referrer or the workbench bearer token; the remote
+host sees the browser's IP and image URL, and its own cookie/cache policies apply. There is no
 general mail-content disk cache, telemetry or remote classification. Drafts saved explicitly or before
 sending persist locally, including attachment bytes, without additional application-level encryption. OS swap, browser extensions
 and screenshots are part of the local machine's privacy boundary.

@@ -15,6 +15,7 @@ from ..models.worker import load_service_model
 from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
 from .accounts import Accounts, imap_settings, password_store
+from .images import body_images, valid_image_bytes
 from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
     MICROSOFT_TOKEN,
@@ -319,6 +320,7 @@ class Workbench:
         with self.lock:
             self.bodies[key] = {
                 "body": str(full.get("body_text") or full.get("snippet") or "(No text available)")[:262144],
+                "images": body_images(full.get("body_html"), full.get("attachments", [])),
                 "url": full.get("url", ""),
                 "headers": full.get("headers", {}),
                 "recipients": recipient_headers(full.get("headers", {})),
@@ -412,6 +414,16 @@ class Workbench:
             return reader.attachment(item["provider_id"], attachment_id)
         finally:
             lock.release()
+
+    def image(self, key, attachment_id):
+        detail = self.detail(key)
+        image = next((item for item in detail["images"] if item.get("attachment_id") == attachment_id), None)
+        if not image:
+            raise ValueError("This image is not available in the message")
+        _meta, raw = self.attachment(key, attachment_id)
+        if not valid_image_bytes(image["type"], raw):
+            raise ValueError("Image format is unsupported or exceeds 8 MB. Download the attachment instead")
+        return image["type"], raw
 
     def mail_action(self, data):
         action, ids = data.get("action"), data.get("ids")

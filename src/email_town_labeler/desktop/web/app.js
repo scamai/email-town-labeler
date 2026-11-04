@@ -197,6 +197,7 @@
     return data;
   }
   function handleUnauthorized() {
+    window.EmailTownImages?.clear();
     state.authLost = true;
     state.sessionToken = "";
     sessionStorage.removeItem("email-town-session");
@@ -1194,11 +1195,12 @@
   // exposing the session token or other credentials globally.
   window.EmailTownMailHost = {
     api,
-    fetchBinary: async (path) => {
+    fetchBinary: async (path, { signal } = {}) => {
       const headers = { "X-Email-Town": "local" };
       if (state.sessionToken)
         headers.Authorization = `Bearer ${state.sessionToken}`;
-      const response = await fetch(path, { credentials: "omit", headers });
+      const response = await fetch(path, { credentials: "omit", headers, signal });
+      if (response.status === 401) handleUnauthorized();
       if (!response.ok) throw new Error(`Download failed (${response.status})`);
       return response.blob();
     },

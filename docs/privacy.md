@@ -14,14 +14,23 @@ stored on disk. If the code ever disagrees with this page, that is a bug: please
 ## Local desktop workbench
 
 `desktop` is an explicit display surface for private mail, unlike CLI status/log output. It reads
-Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders and plaintext bodies only through
+Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders, plaintext bodies and referenced images through
 an authenticated loopback HTTP server in the user's browser. Manual categories and completion are local.
 The desktop workbench can explicitly send/reply/forward, change read/unread and starred state, archive,
 trash and restore messages, and upload/download attachments; these operations require the relevant account
 grant and are separate from the label-only CLI service.
 Classification is shared on-device; remote model endpoints are refused even if allowed by the CLI config.
 
-The process holds bounded previews in RAM (64 × at most 256 KiB); it does not create a general mail-content
+Inline raster images referenced by Content-ID are fetched through the authenticated mailbox connection
+and displayed as browser Blob URLs. Raw email HTML, scripts and styles are never rendered. External HTTPS
+images require a click for each preview and load directly from the browser: image hosts can see the
+browser's IP and the requested URL (including tracking identifiers); their cookie and cache policies apply.
+Requests omit the referrer and never receive the workbench session token. The server does not proxy
+arbitrary URLs. Other image schemes and inline SVG are not displayed.
+
+The process holds bounded previews in RAM (64 × at most 256 KiB of body text plus 50 image references).
+Inline previews are limited to 8 MiB per image and 32 MiB of Blob data per open message; switching messages
+or losing authentication cancels pending loads and revokes those URLs. It does not create a general mail-content
 cache, while explicitly saved drafts and their attachments are stored under `workbench/mail` as described below.
 Browser extensions, OS swap and screenshots are outside that guarantee.
 `workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
@@ -63,6 +72,7 @@ flowchart LR
 | Data flow | When | Contains mail content? |
 |---|---|---|
 | email-town-labeler to Google (Gmail API, OAuth endpoints) | always | Google already has your mail; email-town-labeler reads it from Google and sends back label changes. |
+| Desktop browser to image hosts named in a message | only after clicking Load external images for that preview | The image URL and browser IP are visible to that host; this may signal that the message was opened. No workbench token or referrer is sent. |
 | email-town-labeler to GitHub releases, Hugging Face or a model URL | only when you run `model pull` or `setup` downloads a model, or the configured model is not on disk yet | No. A plain download of a model package, verified against sha256 hashes (for published models, the archive's hash is pinned in the code too). |
 | email-town-labeler to Ollama | for every message it classifies, only if you choose the `ollama_choice` backend | Yes: the From and Subject headers, whether the message has mailing-list headers or a calendar invite, and the body text with its whitespace collapsed, cut to 2,000 characters unless the model package's `max_body_chars` sets another length (`features.py` `email_text`). It goes to the Ollama URL in the model package. Only loopback hosts are allowed unless you opt in (see [Model endpoints](#model-endpoints)). |
 | email-town-labeler to GitHub Releases (`latest.json`) | at most once a day, after `setup`, `status`, `doctor`, `model list` or `model pull` in a terminal; never from `run`, `once`, `backfill`, `--json` or a non-terminal (so not from the service or the Docker health check); off with `[updates] check = false` (see [Update check](#update-check)) | No. One HTTPS GET of a public file, with no mail data, account, install ID, version, cookie or query string. |

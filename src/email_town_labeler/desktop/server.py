@@ -72,7 +72,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
         )
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.end_headers()
@@ -111,6 +111,7 @@ class Handler(BaseHTTPRequestHandler):
             "/": ("index.html", "text/html; charset=utf-8"),
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
             "/mail.js": ("mail.js", "text/javascript; charset=utf-8"),
+            "/images.js": ("images.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
             "/logo.svg": ("logo.svg", "image/svg+xml"),
         }
@@ -145,6 +146,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._response(
                     200, self.server.manager.mail_store.draft(parse_qs(parsed.query).get("id", [""])[0])
                 )
+            elif parsed.path == "/api/image":
+                params = parse_qs(parsed.query)
+                kind, raw = self.server.manager.image(
+                    params.get("id", [""])[0], params.get("attachment_id", [""])[0]
+                )
+                self._response(200, raw, content_type=kind)
             elif parsed.path == "/api/attachment":
                 params = parse_qs(parsed.query)
                 meta, raw = self.server.manager.attachment(
