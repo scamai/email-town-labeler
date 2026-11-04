@@ -25,6 +25,9 @@ contain breaking changes; they are called out.
 
 ### Desktop mail operations
 
+- Display CID-linked raster images below the message body for Gmail, Outlook and IMAP, including
+  unnamed inline attachments. External HTTPS images have a per-preview Load external images button;
+  switching messages cancels pending downloads and releases image previews. Sender HTML is not rendered.
 - Keep the open preview's Unread badge in sync with mailbox state after read/unread actions
   and background refreshes, matching the message list without reopening the message.
 - Compose, reply, reply all and forward from a selected account, attach/download files,

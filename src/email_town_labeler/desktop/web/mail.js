@@ -593,6 +593,7 @@
     }
   }
   function clearDetail() {
+    window.EmailTownImages?.clear();
     local.detail = null;
     document
       .querySelectorAll(
@@ -615,6 +616,7 @@
     }
   }
   function renderDetail(detail) {
+    window.EmailTownImages?.render(detail);
     const actions = document.querySelector(".reply-actions");
     if (!actions) return;
     [

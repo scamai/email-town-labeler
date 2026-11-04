@@ -16,6 +16,7 @@ class EmailRecord(TypedDict, total=False):
     snippet: str
     headers: dict[str, str]  # lower-case header name -> value
     body_text: str
+    body_html: str  # Opt-in desktop parsing only; never rendered as HTML or used by classifiers.
     body_source: str  # "plain" | "html" | "none"
     has_calendar: bool
     attachments: list[dict]

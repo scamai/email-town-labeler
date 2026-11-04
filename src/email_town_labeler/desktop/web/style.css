@@ -1387,3 +1387,26 @@ dialog::backdrop {
     outline: 2px solid Highlight;
   }
 }
+.preview-images {
+  margin-block: 1.5rem;
+  min-width: 0;
+}
+.preview-images h3 {
+  font-size: 0.95rem;
+}
+.message-image {
+  margin: 1rem 0;
+  overflow-wrap: anywhere;
+}
+.message-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.message-image img[hidden] {
+  display: none;
+}
+.message-image figcaption,
+.image-notice {
+  font-size: 0.85rem;
+}

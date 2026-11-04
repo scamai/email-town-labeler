@@ -258,7 +258,7 @@ class GmailClient:
                 break
         return ids[:max_results]
 
-    def get_records(self, ids: list[str]) -> list[EmailRecord]:
+    def get_records(self, ids: list[str], *, include_html=False) -> list[EmailRecord]:
         """format=full gets, parsed, in input order. Quota-heavy: batched (<=50) and paced.
 
         404s (deleted since listing) are skipped; rate-limited items are retried with backoff;
@@ -269,7 +269,7 @@ class GmailClient:
             return self._users.messages().get(userId=ME, id=mid, format="full")
 
         got, order = self._fetch_all(ids, make, self._bucket, "get_records")
-        return [parse_message(got[m]) for m in order if m in got]
+        return [parse_message(got[m], include_html=include_html) for m in order if m in got]
 
     def get_metadata(self, ids: list[str], headers: Iterable[str]) -> list[EmailRecord]:
         """format=metadata gets: id, thread_id, label_ids, internal_date, history_id and only the named

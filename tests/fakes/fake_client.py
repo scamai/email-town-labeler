@@ -175,9 +175,13 @@ class FakeGmailClient:
         msgs.sort(key=lambda m: (m["internal_date"], m["id"]), reverse=True)
         return [m["id"] for m in msgs[:max_results]]
 
-    def get_records(self, ids: list[str]) -> list[EmailRecord]:
+    def get_records(self, ids: list[str], *, include_html=False) -> list[EmailRecord]:
         self._call("get_records", tuple(ids))
-        return [copy.deepcopy(self.messages[i]) for i in ids if i in self.messages]
+        records = [copy.deepcopy(self.messages[i]) for i in ids if i in self.messages]
+        if not include_html:
+            for record in records:
+                record.pop("body_html", None)
+        return records
 
     def get_metadata(self, ids: list[str], headers: Iterable[str]) -> list[EmailRecord]:
         self._call("get_metadata", tuple(ids))

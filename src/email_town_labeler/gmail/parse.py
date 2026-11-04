@@ -106,9 +106,17 @@ def html_to_text(html: str) -> str:
 def _walk(part: dict, acc: dict) -> None:
     mime = (part.get("mimeType") or "").lower()
     filename = part.get("filename") or ""
+    content_id = next(
+        (
+            h.get("value", "").strip().strip("<>")
+            for h in (part.get("headers") or [])
+            if h.get("name", "").lower() == "content-id"
+        ),
+        "",
+    )
     if mime == "text/calendar" or filename.lower().endswith(".ics"):
         acc["has_calendar"] = True
-    if filename:
+    if filename or (content_id and mime.startswith("image/")):
         size = (part.get("body") or {}).get("size", 0)
         acc["attachments"].append(
             {
@@ -116,6 +124,7 @@ def _walk(part: dict, acc: dict) -> None:
                 "mime": mime,
                 "size": size,
                 "id": (part.get("body") or {}).get("attachmentId") or "part:" + part.get("partId", ""),
+                "content_id": content_id,
             }
         )
     elif mime == "text/plain":
@@ -126,7 +135,7 @@ def _walk(part: dict, acc: dict) -> None:
         _walk(child, acc)
 
 
-def parse_message(msg: dict) -> EmailRecord:
+def parse_message(msg: dict, *, include_html=False) -> EmailRecord:
     """Flatten a format=full message. Plain text wins over HTML; body capped at MAX_BODY_CHARS."""
     payload = msg.get("payload") or {}
     headers: dict[str, str] = {}
@@ -142,7 +151,7 @@ def parse_message(msg: dict) -> EmailRecord:
     body = plain if plain.strip() else html_to_text("\n".join(acc["html"]))
     source = "plain" if plain.strip() else ("html" if any(t.strip() for t in acc["html"]) else "none")
 
-    return EmailRecord(
+    record = EmailRecord(
         id=msg["id"],
         thread_id=msg.get("threadId") or "",
         label_ids=list(msg.get("labelIds") or []),
@@ -156,6 +165,9 @@ def parse_message(msg: dict) -> EmailRecord:
         has_calendar=acc["has_calendar"],
         attachments=acc["attachments"],
     )
+    if include_html:
+        record["body_html"] = "\n".join(acc["html"])[:262144]
+    return record
 
 
 def parse_metadata(msg: dict, keep: Iterable[str] | None = None) -> EmailRecord:
