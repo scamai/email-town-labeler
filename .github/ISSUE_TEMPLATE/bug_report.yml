@@ -5,16 +5,25 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Privacy first.** Do not paste real email content: no subjects, senders, addresses,
-        snippets, bodies, message ids from your mailbox, screenshots of your inbox, `token.json`
-        or `client_secret.json`. Describe the *shape* of a message instead
-        ("HTML-only newsletter with a List-Id header"). Security issues: security@scam.ai.
+        **This issue is public.** Anyone can read it, and search engines index it. Do not paste
+        real email content: no subjects, senders, addresses (your own account address
+        included), snippets, bodies, message ids from your mailbox, screenshots of your inbox,
+        `token.json` or `client_secret.json`. Describe the *shape* of a message instead
+        ("HTML-only newsletter with a List-Id header").
+
+        **A security or privacy problem goes to us privately, not here.** Use **Report a
+        vulnerability** on this repository's Security tab
+        (<https://github.com/scamai/email-town-labeler/security/advisories/new>), or email
+        contact@scam.ai with the subject line `[SECURITY][Email Town]`. For a bug you cannot
+        describe without private details, email contact@scam.ai with the subject line
+        `[Email Town]`. Even in private, never send real mail, `token.json` or
+        `client_secret.json`: we never look at the content of your mail.
   - type: checkboxes
     id: privacy
     attributes:
       label: Privacy check
       options:
-        - label: This report contains no real email content, addresses, tokens or client secrets.
+        - label: This report contains no real email content, addresses, message ids, tokens or client secrets.
           required: true
   - type: textarea
     id: what
@@ -32,8 +41,10 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: Output of `email-town-labeler --version` and `email-town-labeler doctor`
-      description: Read it before pasting.
+      label: Output of `email-town-labeler --version` and `email-town-labeler doctor --redact`
+      description: >-
+        `--redact` masks email addresses (your account address included) as `<email>` and your
+        home directory as `~`. Plain `doctor` prints both. Read the output before pasting.
       render: text
     validations:
       required: true
@@ -60,4 +71,8 @@ body:
     id: logs
     attributes:
       label: Relevant log lines
+      description: >-
+        Log lines carry Gmail message ids, and with `-vv` also tracebacks with file paths. Before
+        pasting, replace each message id with `<id>` and your home directory with `~`, and remove
+        anything else that points at your mailbox. Optional.
       render: text

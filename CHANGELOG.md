@@ -7,6 +7,30 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The README's privacy promises now match the code.** "It will never" said the only network
+  traffic was the Gmail API, a model download and the update check, and left out that the
+  `ollama_choice` backend sends each message's From, Subject and the start of its body (2,000
+  characters by default) to the Ollama server you configure, on this machine unless you opt in.
+  It said the local database holds only ids, label names and numbers, but it also keeps your own
+  account address and the addresses you have sent mail to (the contacts table), both since 0.1.0,
+  and when each message arrived, since 0.1.1. README, `docs/privacy.md`, `docs/architecture.md`,
+  `docs/design-spec.md`, `docs/models.md` and CONTRIBUTING.md now say so. Nothing in the code
+  changed.
+
+### Changed
+
+- **Private reporting.** Report security and privacy problems through GitHub private
+  vulnerability reporting (Security tab → Report a vulnerability) or to contact@scam.ai with the
+  subject line `[SECURITY][Email Town]`; security@scam.ai is no longer listed. SECURITY.md follows
+  Reality Inc.'s organization-wide policy: acknowledgment within 2 business days and an initial
+  assessment within 5 (it said 3 and 10), the same safe harbor, and no bug bounty.
+- The bug report form says that issues are public, asks for `doctor --redact` output instead of
+  plain `doctor` (which prints your account address and home paths), and asks you to replace
+  message ids in log lines. The issue chooser, CONTRIBUTING.md and CODE_OF_CONDUCT.md point at
+  the private channels.
+
 ## [0.1.1] - 2026-11-03
 
 ### Added

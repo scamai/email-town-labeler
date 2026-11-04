@@ -11,7 +11,7 @@ stored on disk. If the code ever disagrees with this page, that is a bug: please
 flowchart LR
   subgraph you["Your machine / container"]
     ij["email-town-labeler process"]
-    db[("state.sqlite<br/>ids, classes, probabilities,<br/>contacts (addresses you wrote to)")]
+    db[("state.sqlite<br/>ids, classes, probabilities,<br/>your account address,<br/>contacts (addresses you wrote to)")]
     tok[("token.json<br/>OAuth refresh token")]
     mdl[("models/<br/>weights")]
     ij --- db
@@ -32,7 +32,7 @@ flowchart LR
 |---|---|---|
 | email-town-labeler to Google (Gmail API, OAuth endpoints) | always | Google already has your mail; email-town-labeler reads it from Google and sends back label changes. |
 | email-town-labeler to GitHub releases, Hugging Face or a model URL | only when you run `model pull` or `setup` downloads a model, or the configured model is not on disk yet | No. A plain download of a model package, verified against sha256 hashes (for published models, the archive's hash is pinned in the code too). |
-| email-town-labeler to Ollama | only if you choose the `ollama_choice` backend | Yes: the rendered message text is sent to the Ollama URL in the model package. Only loopback hosts are allowed unless you opt in (see [Model endpoints](#model-endpoints)). |
+| email-town-labeler to Ollama | for every message it classifies, only if you choose the `ollama_choice` backend | Yes: the From and Subject headers, whether the message has mailing-list headers or a calendar invite, and the body text with its whitespace collapsed, cut to 2,000 characters unless the model package's `max_body_chars` sets another length (`features.py` `email_text`). It goes to the Ollama URL in the model package. Only loopback hosts are allowed unless you opt in (see [Model endpoints](#model-endpoints)). |
 | email-town-labeler to GitHub Releases (`latest.json`) | at most once a day, after `setup`, `status`, `doctor`, `model list` or `model pull` in a terminal; never from `run`, `once`, `backfill`, `--json` or a non-terminal (so not from the service or the Docker health check); off with `[updates] check = false` (see [Update check](#update-check)) | No. One HTTPS GET of a public file, with no mail data, account, install ID, version, cookie or query string. |
 | email-town-labeler to anyone else | never | There is no telemetry, analytics, crash reporting, install ID or "phone home". |
 
@@ -89,7 +89,9 @@ Classification happens on this machine, on your CPU (or GPU if you configure one
 email-town-labeler process or, for a large model under `run`, in a child process it starts
 (`models/worker.py`, so the model's memory can be given back when idle). Message text crosses an
 operating-system pipe between those two processes, never a file or a network socket. It is held
-in memory for the duration of one classification batch and is not written to disk.
+in memory for the duration of one classification batch and is not written to disk. The one
+exception is the `ollama_choice` backend: the model runs in your Ollama server, so the text in
+the table above goes to it over HTTP (a loopback connection unless you opted in to another host).
 
 ## What is stored on disk
 
@@ -98,7 +100,7 @@ in memory for the duration of one classification batch and is not written to dis
 | `config.toml` | your settings | No |
 | `client_secret.json` | your OAuth client id/secret from Google Cloud | No |
 | `token.json` | OAuth access + refresh token for your Gmail. Mode 0600 on macOS/Linux. | No, but it grants access to your mail: protect it like a password. |
-| `state.sqlite` | Gmail message ids, the model's class, probabilities and scores (log-probabilities over the seven classes) and the final class we labeled, eight yes/no facts per decision (known contact, mailing-list headers, Gmail tab, calendar invite), model id, whether a label was applied, your corrections (predicted class, corrected class), which class a Town label on a message we decided means (if you use Town), the last Gmail history id, setup and poll timestamps, your account address (shown by `status`), counters, and the **contacts** table: lower-cased addresses you have sent mail to, each with the time you first did (see [Contacts](#contacts)) | No subjects, senders, snippets or bodies. Addresses only in the contacts table. |
+| `state.sqlite` | Gmail message ids, the model's class, probabilities and scores (log-probabilities over the seven classes) and the final class we labeled, eight yes/no facts per decision (known contact, mailing-list headers, Gmail tab, calendar invite), model id, whether a label was applied, when each message arrived (Gmail's internal date) and when we decided it, your corrections (predicted class, corrected class), which class a Town label on a message we decided means (if you use Town), the last Gmail history id, setup, poll and learning timestamps, the error type of the last failed poll, your account address (shown by `status`), counters, and the **contacts** table: lower-cased addresses you have sent mail to, each with the time you first did (see [Contacts](#contacts)) | No subjects, senders, snippets or bodies. The only addresses are your own account address and the contacts table. |
 | `personal.json` | the personal head (a 7x16 weight matrix) and learned thresholds from `learn`, with signal counts and held-out scores | Numbers only, no ids or content, but derived from your mail: keep it private. Delete it (or `learn --reset`) to go back to the model as shipped. |
 | `models/` | model packages (`model.json` + weights) | Not from your mail, unless you ran `personalize` (the refitted head is derived from it). The published `town-modernbert` was trained on someone else's consenting inbox: see [below](#the-published-model-and-whose-mail-it-learned-from). |
 | `logs/` | operational logs | No. See below. |

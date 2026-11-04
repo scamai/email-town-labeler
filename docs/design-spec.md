@@ -13,12 +13,18 @@ Runs on macOS, Windows and Linux; Docker for servers.
 ## Non-negotiables
 
 1. **Privacy.** Never log, print or send email content (subject, sender, snippet, body, addresses)
-   anywhere. The only addresses stored are the contacts (lower-cased recipients of mail the user
-   sent); only `contacts list --yes-show-addresses` prints them. Logs carry message ids, classes, probabilities, counts. Tests use made-up mail only.
-   No telemetry. The only non-Google network calls are model downloads, only on request, and the
-   update check (`update_check.py`): one GET of a public `latest.json` from GitHub Releases, at
-   most daily, only from interactive commands in a terminal, never from `run`; it sends no
-   mail data, account, install ID or version, and `[updates] check = false` turns it off.
+   anywhere, except to the Ollama server the user chose for `ollama_choice` (below). The only
+   addresses stored are the contacts (lower-cased recipients of mail the user sent) and the
+   user's own account address (`kv` key `account_email`, shown by `status`); only
+   `contacts list --yes-show-addresses` prints the contacts. Logs carry message ids, classes, probabilities, counts. Tests use made-up mail only.
+   No telemetry. Apart from `ollama_choice` (below), the only non-Google network calls are model
+   downloads, only on request, and the update check (`update_check.py`): one GET of a public
+   `latest.json` from GitHub Releases, at most daily, only from interactive commands in a
+   terminal, never from `run`; it sends no mail data, account, install ID or version, and
+   `[updates] check = false` turns it off. `ollama_choice` is the one backend that sends
+   content, and only when the user picks it: it posts `features.email_text` (From, Subject,
+   list/calendar flags, the first `max_body_chars` characters of the body, default 2000) to the
+   package's Ollama URL, which must be loopback unless the user sets `allow_remote_endpoint`.
 2. **Never destructive.** The tool only ever adds/removes labels under its own prefix. It never
    archives, deletes, marks read, or touches other labels. `undo` removes only its own labels.
 3. **Model-agnostic.** The model is a plug-in (manifest + backend). The infrastructure must work
