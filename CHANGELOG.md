@@ -25,6 +25,8 @@ contain breaking changes; they are called out.
 
 ### Desktop mail operations
 
+- Keep the open preview's Unread badge in sync with mailbox state after read/unread actions
+  and background refreshes, matching the message list without reopening the message.
 - Compose, reply, reply all and forward from a selected account, attach/download files,
   and save private on-device drafts. Gmail and Graph use their APIs; IMAP accounts can configure TLS SMTP.
 - Explicit read/unread, star/unstar, archive, Trash and restore actions sync to the original mailboxes,

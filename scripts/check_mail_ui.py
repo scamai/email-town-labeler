@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import tempfile
 import threading
 import time
@@ -142,6 +143,7 @@ def main():
                 if readers:
                     for record in readers[-1].records:
                         record["folder"] = "inbox"
+                        record["label_ids"] = ["UNREAD"]
                     manager.folder = "inbox"
                     manager.messages.clear()
                     manager._refresh()
@@ -152,6 +154,22 @@ def main():
                 page.on("dialog", lambda dialog: dialog.accept())
                 page.goto(server.launch_url)
                 expect(page.locator(".message-row")).to_have_count(2)
+                # Observe the list AND the open preview after a real mailbox action.
+                row = page.locator(".message-row").filter(has_text="Fixture received")
+                row.locator(".row-open").click()
+                expect(page.locator("#previewUnread")).to_be_visible()
+                page.locator("#previewMore > summary").click()
+                page.locator("[data-single-action='read']").click()
+                expect(row).not_to_have_class(re.compile(r"\bis-unread\b"))
+                expect(page.locator("#previewUnread")).to_be_hidden()
+                expect(page.locator("[data-single-action='unread']")).to_be_enabled()
+                if not page.locator("#previewMore").evaluate("el => el.open"):
+                    page.locator("#previewMore > summary").click()
+                page.locator("[data-single-action='unread']").click()
+                expect(row).to_have_class(re.compile(r"\bis-unread\b"))
+                expect(page.locator("#previewUnread")).to_be_visible()
+                if width == 390:
+                    page.locator("#previewClose").click()
                 prior_drafts = len(manager.mail_store.drafts()["drafts"])
                 page.locator("#composeButton").click()
                 expect(page.locator("#composeDialog")).to_be_visible()
@@ -226,12 +244,15 @@ def main():
                 page.locator("#selectAll").check()
                 page.locator("[data-mail-action='trash']").click()
                 expect(page.locator("#toast")).to_contain_text("failed", timeout=8000)
+                expect(page.locator("#composeTo")).to_be_enabled()
                 page.locator("[data-mail-folder='trash']").click()
                 expect(page.locator(".message-row")).to_have_count(1, timeout=8000)
                 page.screenshot(path=str(out / f"{theme}-{width}-trash.png"))
                 page.locator("#selectAll").check()
                 page.locator("[data-mail-action='restore']").click()
                 expect(page.locator(".message-row")).to_have_count(0, timeout=8000)
+                # A background poll may remove the row before the action receipt arrives.
+                expect(page.locator("#composeTo")).to_be_enabled()
                 page.locator("[data-mail-folder='inbox']").click()
                 expect(page.locator(".message-row")).to_have_count(2, timeout=8000)
                 assert not errors, errors

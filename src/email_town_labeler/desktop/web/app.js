@@ -765,6 +765,7 @@
       reconcileMessageState();
       if (state.activeId) {
         const active = state.messages.find((m) => m.id === state.activeId);
+        els.previewUnread.hidden = !active.unread;
         els.previewDone.textContent = active.done ? "Reopen" : "Mark done";
         els.previewCategory.textContent =
           categoryById(active.category)?.name ||
