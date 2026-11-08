@@ -112,6 +112,13 @@ Its local drafts store message bodies and attachments; trash and send actions af
 
 You need Python 3.10+ (macOS, Linux or Windows) and a Gmail or Google Workspace account.
 
+> [!TIP]
+> **Want the mail workbench in its own window, without Python?** Download the Email Town app (macOS on
+> Apple Silicon, Windows, Linux) from [Releases](https://github.com/scamai/email-town-labeler/releases):
+> unzip and double-click. Releases after v0.1.1 carry it. It is not signed yet, so the first open needs one
+> extra click: [download and first-open steps](docs/desktop-workbench.en.md#download-the-app). The app is the
+> [desktop workbench](docs/desktop-workbench.en.md); the steps below install the Gmail labeling service.
+
 **1. Install**
 
 ```bash
@@ -150,7 +157,8 @@ Check on it any time with `email-town-labeler status`.
 - [pipx](https://pipx.pypa.io) keeps it in its own environment. In a virtualenv,
   `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"`
   works too, as does `uv tool install` with the same argument. Without `[onnx]` you get the
-  dependency-free `rules` model only.
+  dependency-free `rules` model only. The `[app]` extra adds `email-town`, the desktop workbench in a native
+  window; the [downloadable app](docs/desktop-workbench.en.md#download-the-app) needs no install at all.
 - Print the gcloud commands for the scriptable part of the Google Cloud setup, plus console links
   for the rest:
 
@@ -214,6 +222,7 @@ have logged in.
 | 🔴 | Outlook, IMAP, Fastmail | not planned yet |
 | 🔴 | Instant push instead of 60-second polling | not built |
 | 🟡 | Desktop workbench: explicit mail actions, drafts, folders and attachments | [workbench guide](docs/desktop-workbench.en.md) |
+| 🟡 | Email Town desktop app (no Python needed); unsigned for now, so first open warns | [download](docs/desktop-workbench.en.md#download-the-app) |
 
 ---
 

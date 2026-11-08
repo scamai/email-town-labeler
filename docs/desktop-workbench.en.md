@@ -4,14 +4,71 @@ English · [简体中文](desktop-workbench.md)
 
 # On-device unified mail workbench
 
-[Open](#open) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
+[Download the app](#download-the-app) · [Open from source](#open-from-source) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
 
 The workbench combines explicitly authorized mailboxes into one local list, with Inbox, Sent, Archive and
 Trash views, common categories, search and completion state. It supports explicit send/reply/forward,
 read/unread, starred, archive, trash/restore and attachment actions. Manual categories and completion remain local.
-This is locally runnable source and a browser UI, not a signed/notarized or app-store release.
+It runs as the Email Town desktop app (unsigned, not notarized, not in an app store) or from source in your browser.
 
-## Open
+## Download the app
+
+From the first release after v0.1.1 (v0.1.1 has none), each release page attaches a ready-to-run app; it
+needs no terminal, Python or uv. Unzip it and double-click.
+
+| File | Runs on |
+|---|---|
+| `Email-Town-<version>-macos-arm64.zip` | macOS 14 or later on Apple Silicon. Intel Macs: [open from source](#open-from-source) |
+| `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64 with the Microsoft Edge WebView2 Runtime (included in Windows 11) |
+| `Email-Town-<version>-linux-x64.zip` | Built on Ubuntu 24.04 (glibc 2.39 or newer). Needs the distribution's GTK 3 and WebKitGTK 4.1: `sudo apt install gir1.2-webkit2-4.1` on Debian/Ubuntu |
+
+**The app is not signed yet**, so the first open asks for one extra step. Only do this for a zip downloaded
+from this repository's Releases page:
+
+- **macOS:** the first double-click reports that Apple could not verify "Email Town". Open **System Settings →
+  Privacy & Security**, click **Open Anyway** next to the Email Town message and confirm. (On macOS 14 you can
+  instead Control-click the app and choose **Open**.) Move the app to Applications first.
+- **Windows:** SmartScreen shows "Windows protected your PC". Click **More info → Run anyway**.
+- **Linux:** run `email-town` in the unzipped `email-town` folder.
+
+The window shows the same workbench as the browser version. Links to the original message in Gmail or
+Outlook, the Microsoft sign-in page and Google sign-in open in your default browser; attachment downloads
+ask where to save. **Closing the window stops the workbench** and its model process. If
+`email-town-labeler desktop` already serves the same data folder, the app opens a window on it instead and
+leaves it running when you close the window.
+
+The app uses the same configuration and data folders as the CLI (`EMAIL_TOWN_LABELER_HOME` moves them, as
+for the CLI). The model is not inside the app: with no configuration it classifies with the built-in `rules`
+model; if your `config.toml` names a catalog model, the app downloads it, sha256-checked, the first time it
+classifies mail (`town-modernbert-int8`: 263 MB download, 382 MB on disk). Its log is
+`workbench/desktop.log` in the data folder (macOS `~/Library/Application Support/email-town-labeler/`,
+Windows `%LOCALAPPDATA%\email-town-labeler\`, Linux `~/.local/share/email-town-labeler/`); it contains no
+mail content. To check a download, run the binary with `--self-check`; it reports what the app can load
+without opening a window or touching your data:
+
+```sh
+"/Applications/Email Town.app/Contents/MacOS/Email Town" --self-check
+```
+
+The downloaded app replaces the source-checkout launcher below; delete `~/Applications/Email Town.app` if
+you made one, so that only one "Email Town" remains.
+
+**Build it yourself** (from this checkout, on the platform you build for):
+
+```sh
+uv run --extra app --group app-build python scripts/build_app.py --zip
+uv run --extra app --group app-build python scripts/smoke_app.py -- "dist/Email Town.app/Contents/MacOS/Email Town"
+```
+
+`build_app.py` writes `dist/Email Town.app` (macOS), `dist/Email Town/` (Windows) or `dist/email-town/`
+(Linux), and with `--zip` the release archive. On an Apple M4 Pro (macOS, Python 3.12) it reported the
+build at 11 s, the app at 136 MB and the zip at 49 MB. `smoke_app.py` runs the self-check, opens the app on a new temporary data folder,
+checks the server, a second start and a clean quit, and never touches your mail data. Linux also needs
+`pywebview[gtk]` (PyGObject) and the GTK development packages; the
+[Desktop app workflow](../.github/workflows/app.yml) lists them. That workflow builds and smoke-tests all
+three platforms; it runs only when started by hand or by a `v*` tag.
+
+## Open from source
 
 ```sh
 email-town-labeler desktop --background
@@ -36,6 +93,9 @@ email-town-labeler desktop --no-browser
 The launcher is `~/Applications/Email Town.app`; it references the installed CLI and adds no login item.
 Restart the process after backend source changes. The server binds only a random `127.0.0.1` port.
 The bare URL printed in the terminal has no authority; reopen through the launcher. Keep launch links private.
+
+To get the native window from source instead of a browser, install the `app` extra and run `email-town`
+(`uv tool install --editable '.[app]'`; on Linux also `pywebview[gtk]` or your distribution's PyGObject).
 
 ## Connect accounts
 
@@ -135,7 +195,7 @@ python3 scripts/install_macos_workbench.py
 ```
 
 The binary assets are included in the package; ordinary users do not need image tooling to open
-the app. This remains a local launcher, not a signed App Store application.
+the app. The same `app-icon.icns` is the [desktop app](#download-the-app)'s icon; neither is signed.
 
 ## Privacy
 
