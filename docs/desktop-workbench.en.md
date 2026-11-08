@@ -23,7 +23,7 @@ Windows and Linux unzip it and double-click.
 | `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64 with the Microsoft Edge WebView2 Runtime (included in Windows 11) |
 | `Email-Town-<version>-linux-x64.zip` | Built on Ubuntu 24.04 (glibc 2.39 or newer). Needs the distribution's GTK 3 and WebKitGTK 4.1: `sudo apt install gir1.2-webkit2-4.1` on Debian/Ubuntu |
 
-v0.1.2 has no Windows file: its Windows build failed the release checks, and it follows in a later release.
+v0.1.2 has no Windows file (its Windows build failed the release checks); v0.1.3 and later carry one.
 
 **The Windows and Linux apps are not signed yet**, so the first open asks for one extra step. Only do this for
 a zip downloaded from this repository's Releases page:

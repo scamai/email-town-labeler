@@ -15,7 +15,7 @@ from ...types import Prediction
 from ..base import ModelManifest
 
 # Not on PyPI yet (the name there belongs to an unrelated project): extras install from GitHub.
-SOURCE = "git+https://github.com/scamai/email-town-labeler@v0.1.2"
+SOURCE = "git+https://github.com/scamai/email-town-labeler@v0.1.3"
 EXTRAS = {
     "sentence_transformers": "embed",
     "torch": "embed",

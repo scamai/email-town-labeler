@@ -23,7 +23,7 @@
 | `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64，需要 Microsoft Edge WebView2 Runtime（Windows 11 自带） |
 | `Email-Town-<version>-linux-x64.zip` | 在 Ubuntu 24.04 上构建（需 glibc 2.39 或更新）。需要发行版自带的 GTK 3 和 WebKitGTK 4.1：Debian/Ubuntu 运行 `sudo apt install gir1.2-webkit2-4.1` |
 
-v0.1.2 没有 Windows 文件：它的 Windows 构建未通过发布检查，会在之后的版本提供。
+v0.1.2 没有 Windows 文件（它的 Windows 构建未通过发布检查）；v0.1.3 起提供。
 
 **Windows 和 Linux 版目前未签名**，第一次打开需要多一步。只对从本仓库 Releases 页面下载的 zip 这样做：
 
