@@ -248,6 +248,9 @@ button:disabled {
 .app-shell {
   height: 100dvh;
   min-height: 0;
+  /* The page itself never scrolls: only the panes do. Anything that escapes a pane is clipped here
+     instead of making the document taller, where a trackpad scroll would slide the whole app up. */
+  overflow: clip;
   display: grid;
   grid-template-rows: 64px minmax(0, 1fr) auto;
 }
@@ -666,6 +669,7 @@ input[type="checkbox"] {
   padding-bottom: 16px;
 }
 .message-row {
+  position: relative; /* keeps the row's screen-reader preview (.sr-only, absolute) inside the list */
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
   gap: 12px;
