@@ -1,0 +1,363 @@
+/* ─── Reading pane, laid out as in Gmail ───
+   Markup: index.html #previewContent. Behaviour: reader.js (body, quoted history, avatar, dates),
+   app.js loadPreview, mail.js renderDetail (recipients, attachments, reply buttons).
+   Tokens come from style.css; this file only places them. */
+
+.preview-content {
+  /* Body, attachments and replies line up with the sender's name: avatar 40 + gap 12. */
+  --reader-indent: 52px;
+  padding: 0 var(--pane-gutter) 32px;
+}
+
+/* ─── Toolbar: back (narrow layouts), icon actions, then "2 of 37" and newer/older ─── */
+.preview-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.preview-actions,
+.preview-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.preview-nav {
+  margin-left: auto;
+}
+.preview-position {
+  padding-inline: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition-property: background-color, color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease);
+}
+.icon-action:hover,
+.action-menu[open] > .icon-action {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.icon-action:active {
+  background: color-mix(in srgb, var(--text) 12%, var(--surface));
+}
+.icon-action-danger:hover {
+  color: var(--danger);
+}
+.icon-action:disabled,
+.icon-action:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+.action-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.action-icon-dots {
+  stroke-width: 3;
+}
+
+/* ─── Subject, with the category / account / unread chips after it ─── */
+.preview-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 24px 0 16px;
+}
+.preview-title h2 {
+  min-width: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Sender: avatar, name and address, "to me, …" fold, date on the right ─── */
+.preview-sender {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+}
+.sender-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: hsl(var(--avatar-hue, 210) var(--avatar-saturation) var(--avatar-lightness));
+  color: var(--on-avatar);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+.sender-lines {
+  min-width: 0;
+}
+.preview-byline {
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.sender-name {
+  font-weight: 600;
+}
+.sender-email {
+  color: var(--muted);
+  font-size: 12px;
+}
+.preview-sender .preview-date {
+  line-height: 20px;
+  white-space: nowrap;
+}
+.preview-headers {
+  color: var(--muted);
+  font-size: 12px;
+}
+.preview-headers > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin-left: -4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+.preview-headers > summary::-webkit-details-marker {
+  display: none;
+}
+.preview-headers > summary::after {
+  content: "";
+  flex-shrink: 0;
+  border-inline: 4px solid transparent;
+  border-top: 4px solid currentColor;
+}
+.preview-headers[open] > summary::after {
+  transform: rotate(180deg);
+}
+.preview-headers > summary:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.preview-headers dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  max-width: 560px;
+  margin: 8px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.preview-headers dt {
+  text-align: right;
+}
+.preview-headers dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+/* ─── Body: plain text with links, a dimmed signature, quoted history folded behind ••• ─── */
+.email-body {
+  max-width: calc(75ch + var(--reader-indent));
+  margin-top: 24px;
+  padding-left: var(--reader-indent);
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap; /* "Reading message…" and errors arrive as plain text */
+  overflow-wrap: anywhere;
+}
+.email-text,
+.email-signature {
+  white-space: pre-wrap;
+}
+.email-body a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.email-signature {
+  margin-top: 16px;
+  color: var(--muted);
+}
+.email-quoted {
+  margin-top: 16px;
+}
+.email-quoted > summary {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  list-style: none;
+}
+.email-quoted > summary::-webkit-details-marker {
+  display: none;
+}
+.email-quoted > summary:hover,
+.email-quoted[open] > summary {
+  color: var(--text);
+  border-color: var(--control-border);
+}
+.email-quoted > .email-text {
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.preview-content .preview-images {
+  padding-left: var(--reader-indent);
+}
+
+/* ─── Attachment cards ─── */
+.preview-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 16px 0 0 var(--reader-indent);
+  border-top: 1px solid var(--line);
+}
+.preview-attachments > strong {
+  flex-basis: 100%;
+  font-size: 13px;
+}
+.attachment-card {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  width: 224px;
+  max-width: 100%;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease);
+}
+.attachment-card:hover {
+  border-color: var(--control-border);
+  background: var(--surface-2);
+}
+.attachment-kind {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+.attachment-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.attachment-size {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ─── Reply / Reply all / Forward ─── */
+.reply-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 32px;
+  padding-left: var(--reader-indent);
+}
+.reply-actions:empty {
+  display: none;
+}
+.reply-button {
+  min-height: 36px;
+  padding: 0 16px 0 12px;
+  border-color: var(--control-border);
+  background: var(--surface);
+}
+.reply-button:hover {
+  background: var(--surface-2);
+}
+
+/* ─── Narrower layouts: the reading pane covers the list; no indent on phones ─── */
+@media (max-width: 767px) {
+  .preview-content {
+    --reader-indent: 0px;
+  }
+  .preview-title h2 {
+    font-size: 20px;
+  }
+  .preview-title {
+    padding-top: 16px;
+  }
+  .preview-header .button {
+    padding: 0 8px;
+  }
+}
+@media (max-width: 520px) {
+  .preview-position {
+    display: none;
+  }
+  .preview-sender {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+  .preview-sender .preview-date {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}

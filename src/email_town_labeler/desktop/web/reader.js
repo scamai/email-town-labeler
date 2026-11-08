@@ -36,35 +36,58 @@
     return lines.slice(i).some(quoted) ? i : -1;
   }
 
+  const isDelimiter = (line) => line === "-- " || line === "--"; // RFC 3676 signature separator
+
+  // Split a body into its own text, the signature and the trailing quoted history. The signature
+  // usually comes before the quote; some clients put it after, so both orders are recognised.
+  function parts(lines) {
+    let quote = trimmedStart(lines);
+    let quoteEnd = lines.length;
+    if (quote < 0) {
+      let last = lines.length - 1;
+      while (last >= 0 && !isDelimiter(lines[last])) last -= 1;
+      const before = last > 0 ? trimmedStart(lines.slice(0, last)) : -1;
+      // Only when the text above has no signature of its own; otherwise nothing is folded or dropped.
+      if (before >= 0 && !lines.slice(0, before).some(isDelimiter)) [quote, quoteEnd] = [before, last];
+    }
+    const own = quote < 0 ? lines : lines.slice(0, quote);
+    const signature = own.findIndex(isDelimiter);
+    return {
+      text: signature < 0 ? own : own.slice(0, signature),
+      signature: signature >= 0 ? own.slice(signature) : quoteEnd < lines.length ? lines.slice(quoteEnd) : [],
+      quote: quote < 0 ? [] : lines.slice(quote, quoteEnd),
+      signatureLast: quoteEnd < lines.length,
+    };
+  }
+
+  function block(className, lines) {
+    const element = document.createElement("div");
+    element.className = className;
+    linkify(element, lines.join("\n").trim());
+    return element;
+  }
+
   function renderBody(target, body) {
     target.replaceChildren();
     const lines = String(body ?? "").replace(/\r\n?/g, "\n").split("\n");
-    let tail = trimmedStart(lines);
-    let mainLines = tail < 0 ? lines : lines.slice(0, tail);
-    const signature = mainLines.findIndex((line) => line === "-- " || line === "--");
+    const { text, signature, quote, signatureLast } = parts(lines);
     const main = document.createElement("div");
     main.className = "email-text";
-    linkify(main, (signature < 0 ? mainLines : mainLines.slice(0, signature)).join("\n").trimEnd());
+    linkify(main, text.join("\n").trimEnd());
     target.append(main);
-    if (signature >= 0) {
-      const sig = document.createElement("div");
-      sig.className = "email-signature";
-      linkify(sig, mainLines.slice(signature).join("\n").trim());
-      target.append(sig);
-    }
-    if (tail >= 0) {
+    const sig = signature.length ? block("email-signature", signature) : null;
+    if (sig && !signatureLast) target.append(sig);
+    if (quote.length) {
       const fold = document.createElement("details");
       fold.className = "email-quoted";
       const summary = document.createElement("summary");
       summary.title = "Show trimmed content";
       summary.setAttribute("aria-label", "Show trimmed content");
       summary.textContent = "•••";
-      const history = document.createElement("div");
-      history.className = "email-text";
-      linkify(history, lines.slice(tail).join("\n").trim());
-      fold.append(summary, history);
+      fold.append(summary, block("email-text", quote));
       target.append(fold);
     }
+    if (sig && signatureLast) target.append(sig);
   }
 
   // "Name <addr>" -> {name, address}; a bare address has no name.

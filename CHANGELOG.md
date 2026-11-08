@@ -7,6 +7,20 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Reading pane, laid out as in Gmail
+
+- Icon toolbar (Archive, Trash, More) with "N of M" and newer/older arrows; the subject with its category,
+  account and unread chips; the sender as avatar, name and address, the date on the right, and the
+  recipients folded into "to me, Li and 12 others ▾" with the full From / To / Cc / Reply-To on demand.
+- The body is plain text with clickable links (new tab, no opener), a dimmed signature, and the quoted
+  history at the end folded behind "•••" — whether the signature comes before the quote or after it, and
+  without dropping text when a message has two signatures. Mail text is never parsed as HTML.
+- Attachments are cards (type, name on two lines at most, readable size) above Reply / Reply all /
+  Forward, all aligned with the sender's name; phones drop the indent and move the date under the sender.
+- Styles live in `reader.css`; the page markup no longer carries an inline style, which the app's
+  Content-Security-Policy refused. `scripts/check_reader_ui.py` checks all of the above in WebKit and
+  Chromium, and a unit test keeps inline styles out of the page.
+
 ### Fixed
 
 - The app no longer slides up and leaves an empty band below it. Each message row's screen-reader preview

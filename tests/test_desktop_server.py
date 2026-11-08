@@ -2,11 +2,14 @@
 
 import http.client
 import json
+import re
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from email_town_labeler.desktop import server as server_module
 from email_town_labeler.desktop.server import MAX_BODY, LocalServer
 
 
@@ -70,7 +73,7 @@ def test_host_origin_and_custom_header_boundaries(server):
 
 
 def test_assets_and_request_limits(server):
-    for asset in ["/", "/app.js", "/style.css", "/logo.svg"]:
+    for asset in ["/", "/app.js", "/style.css", "/reader.css", "/reader.js", "/logo.svg"]:
         status, headers, body = request(server, asset)
         assert status == 200 and body
         assert server.secret.encode() not in body and server.session.encode() not in body
@@ -124,3 +127,12 @@ def test_mark_read_route_passes_id_and_flag(server):
     assert status == 200 and json.loads(body) == {"ok": True, "changed": True}
     request(server, "/api/mark-read", method="POST", data={"id": "k2", "read": False}, auth=True)
     assert calls == [("k1", True), ("k2", False)]
+
+
+def test_page_markup_has_no_inline_styles():
+    """The CSP is style-src 'self': a style attribute or <style> in the page would be refused silently."""
+    web = Path(server_module.__file__).parent / "web"
+    page = (web / "index.html").read_text()
+    assert not re.search(r"<style\b|\sstyle\s*=", page), "inline style in index.html"
+    for script in web.glob("*.js"):
+        assert 'setAttribute("style"' not in script.read_text(), f"inline style set in {script.name}"
