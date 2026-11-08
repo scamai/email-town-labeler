@@ -166,6 +166,9 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 | <kbd>/</kbd> 或 <kbd>⌘F</kbd> | 搜索 |
 | <kbd>g</kbd> 再按 <kbd>i</kbd> / <kbd>s</kbd> / <kbd>a</kbd> / <kbd>t</kbd> | 收件箱、已发送、归档、废纸篓 |
 | <kbd>x</kbd> | 选中或取消选中打开的邮件 |
+| <kbd>Shift</kbd> 点击 · <kbd>⌘</kbd> 点击 | 选中一个范围（行或复选框）· 单独加选或取消一封且不打开它 |
+| <kbd>Shift j</kbd> / <kbd>Shift k</kbd> | 向下 / 向上扩展选择 |
+| <kbd>*</kbd> 再按 <kbd>a</kbd> / <kbd>n</kbd> / <kbd>r</kbd> / <kbd>u</kbd> | 全选、全不选、选已读、选未读（“Select all loaded”旁的 ▾ 菜单里也有，另含有星标、无星标） |
 | <kbd>e</kbd> | 归档（有选中时作用于选中项，否则作用于打开的邮件） |
 | <kbd>#</kbd> 或 <kbd>Delete</kbd> | 移到废纸篓（和按钮一样会先确认） |
 | <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> · <kbd>d</kbd> | 加/去星标 · 标为未读 · 标为已读 · 完成或重新打开 |

@@ -7,6 +7,17 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Selecting messages, as in Gmail and desktop mail clients
+
+- Shift-click selects a range from the last clicked message (rows or checkboxes, selecting or deselecting);
+  ⌘/Ctrl-click adds or removes one message without opening it.
+- A ▾ menu beside "Select all loaded" selects All, None, Read, Unread, Starred or Unstarred; Shift+j/k extends the
+  selection, `*` then a/n/r/u/s/t selects by state, Esc clears it. Ranges follow the list as shown and stop at the
+  500-message action limit.
+- Mail-action keys pressed while another action is still running are no longer dropped: they wait, run in the order
+  pressed, and act on the messages that were open or selected when each key was pressed ("s" toggles by the
+  message's state when it runs).
+
 ### Read and unread, as in Gmail
 
 - Opening a message marks it read in its mailbox: shown at once, written in the background, put back if the write

@@ -1173,7 +1173,12 @@
         above ? availableAbove : availableBelow,
       );
       panel.style.maxHeight = `${Math.max(48, height)}px`;
-      panel.style.left = `${Math.max(inset, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - inset))}px`;
+      // Menus open toward the content: right-aligned by default, from the left edge with data-align="start".
+      const preferred =
+        menu.dataset.align === "start"
+          ? anchor.left
+          : anchor.right - panel.offsetWidth;
+      panel.style.left = `${Math.max(inset, Math.min(preferred, window.innerWidth - panel.offsetWidth - inset))}px`;
       panel.style.top = `${above ? anchor.top - height - inset : anchor.bottom + inset}px`;
     });
   });

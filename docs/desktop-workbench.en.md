@@ -181,6 +181,9 @@ Apple Mail (Ctrl on Windows and Linux).
 | <kbd>/</kbd> or <kbd>⌘F</kbd> | Search |
 | <kbd>g</kbd> then <kbd>i</kbd> / <kbd>s</kbd> / <kbd>a</kbd> / <kbd>t</kbd> | Inbox, Sent, Archive, Trash |
 | <kbd>x</kbd> | Select or deselect the open message |
+| <kbd>Shift</kbd>-click · <kbd>⌘</kbd>-click | Select a range (rows or checkboxes) · add or remove one message without opening it |
+| <kbd>Shift j</kbd> / <kbd>Shift k</kbd> | Extend the selection down / up |
+| <kbd>*</kbd> then <kbd>a</kbd> / <kbd>n</kbd> / <kbd>r</kbd> / <kbd>u</kbd> | Select all, none, read, unread (also in the ▾ menu beside "Select all loaded", with Starred and Unstarred) |
 | <kbd>e</kbd> | Archive (the selection if there is one, else the open message) |
 | <kbd>#</kbd> or <kbd>Delete</kbd> | Move to Trash (asks first, as the button does) |
 | <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> · <kbd>d</kbd> | Star or unstar · mark unread · mark read · done or reopen |
