@@ -7,6 +7,14 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Per-category counts
+
+- Each category in the sidebar shows its loaded count with "N done · M wrong" under the name, and All
+  categories totals them. "Wrong" counts messages that classification (the local model or a mailbox label)
+  put in a category and you moved to another; moving one back clears it. Unchecked mail is not counted,
+  so it is a lower bound. The state snapshot carries `auto_category` for corrected messages.
+  `scripts/check_category_stats_ui.py` checks the page's immediate update and the server snapshot.
+
 ### Reading pane, laid out as in Gmail
 
 - Icon toolbar (Archive, Trash, More) with "N of M" and newer/older arrows; the subject with its category,

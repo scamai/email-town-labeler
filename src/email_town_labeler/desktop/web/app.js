@@ -319,6 +319,7 @@
       ? String(state.accounts.length)
       : "—";
     els.categoryFilters.replaceChildren();
+    const stats = categoryStats();
     [{ id: "all", name: "All categories" }, ...state.categories].forEach(
       (category) => {
         const button = document.createElement("button");
@@ -329,7 +330,33 @@
           "aria-pressed",
           String(state.filters.category === category.id),
         );
-        button.textContent = text(category.name);
+        // Per category, over the loaded messages: how many, how many done, how many the classifier
+        // put here that you moved elsewhere ("wrong"; mail you have not checked is not counted).
+        const { total, done, wrong } = stats.get(category.id) || { total: 0, done: 0, wrong: 0 };
+        const label = document.createElement("span");
+        label.className = "category-label";
+        const name = document.createElement("span");
+        name.textContent = text(category.name);
+        label.append(name);
+        if (total || wrong) {
+          const line = document.createElement("span");
+          line.className = "category-stats";
+          line.textContent = `${done} done`;
+          if (wrong || category.id === "all") {
+            const bad = document.createElement("span");
+            bad.className = wrong ? "category-wrong" : "";
+            bad.textContent = ` · ${wrong} wrong`;
+            line.append(bad);
+          }
+          label.append(line);
+        }
+        const count = document.createElement("span");
+        count.className = "count";
+        count.textContent = String(total);
+        button.append(label, count);
+        const summary = `${text(category.name)}: ${total} loaded, ${done} done, ${wrong} wrong`;
+        button.setAttribute("aria-label", summary);
+        button.title = `${summary}. Wrong: classified here, then moved by you to another category.`;
         els.categoryFilters.append(button);
       },
     );
@@ -339,6 +366,24 @@
     syncFilterButtons();
     restoreFocus(focus);
     if (window.EmailTownMailHost?.render) window.EmailTownMailHost.render();
+  }
+  // {category id → {total, done, wrong}} over the loaded messages, plus "all" for the totals.
+  function categoryStats() {
+    const stats = new Map();
+    const bump = (id, key) => {
+      const entry = stats.get(id) || { total: 0, done: 0, wrong: 0 };
+      entry[key] += 1;
+      stats.set(id, entry);
+    };
+    for (const message of state.messages) {
+      for (const id of [message.category || "unknown", "all"]) {
+        bump(id, "total");
+        if (message.done) bump(id, "done");
+      }
+      if (message.auto_category && message.auto_category !== message.category)
+        for (const id of [message.auto_category, "all"]) bump(id, "wrong");
+    }
+    return stats;
   }
   function renderCounts() {
     const today = localMidnight();
@@ -679,10 +724,17 @@
         if (message) {
           if (action === "done") message.done = true;
           if (action === "reopen") message.done = false;
-          if (action === "category") message.category = category;
+          if (action === "category") {
+            // As the next snapshot will say: keep what classification chose, for the "wrong" count.
+            if (["model", "mailbox"].includes(message.source))
+              message.auto_category = message.category;
+            message.category = category;
+            message.source = "manual";
+          }
         }
       });
       state.selected.clear();
+      renderFilters(); // the sidebar's per-category done / wrong counts
       renderCounts();
       renderList();
       if (state.activeId) {
