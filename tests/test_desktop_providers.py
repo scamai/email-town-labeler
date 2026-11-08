@@ -240,3 +240,40 @@ def test_gmail_cold_list_reports_rows_batch_by_batch():
     seen.clear()
     reader.list(total, progress=seen.append)
     assert seen == []  # nothing to read: no partial updates
+
+
+def test_gmail_consecutive_writes_on_one_message_and_fresh_rows_after():
+    """Mark read then unread (or trash then undo) before the next sync: both writes reach Gmail,
+    and the next list still re-reads the message, because history reports our own label changes."""
+    client = FakeGmailClient()
+    reader = p.GmailReader.__new__(p.GmailReader)
+    reader.client, reader.cfg = client, Config()
+    reader.address, reader.identity = "fixture@example.test", "identity"
+    reader.cache, reader.history_id, reader.folder_ids = {}, None, {}
+    reader.scopes = {"https://www.googleapis.com/auth/gmail.modify"}
+
+    def write(path, payload):  # the real write is a one-shot POST; apply it to the fake mailbox
+        _, mid, verb = path.split("/")
+        if verb == "modify":
+            client.modify(mid, add=payload.get("addLabelIds", []), remove=payload.get("removeLabelIds", []))
+        else:
+            client.modify(
+                mid, add=["TRASH"] if verb == "trash" else [], remove=[] if verb == "trash" else ["TRASH"]
+            )
+        return {}
+
+    reader.write = write
+    mid = client.add_message()
+    rows, _ = reader.list(10)
+    pid = rows[0]["provider_id"]
+    reader.mutate(pid, "read")
+    reader.mutate(pid, "unread")  # used to fail: "no longer in this account's current list"
+    reader.mutate(pid, "trash")
+    reader.mutate(pid, "restore")
+    assert [m[0] for m in client.modifies] == [mid] * 5
+    assert "UNREAD" in client.messages[mid]["label_ids"] and "TRASH" not in client.messages[mid]["label_ids"]
+    reader.mutate(pid, "read")
+    fetched = sum(1 for call in client.calls if call[0] == "get_metadata")
+    rows, _ = reader.list(10)
+    assert sum(1 for call in client.calls if call[0] == "get_metadata") == fetched + 1  # re-read via history
+    assert "UNREAD" not in rows[0]["label_ids"]

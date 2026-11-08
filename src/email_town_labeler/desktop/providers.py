@@ -293,7 +293,8 @@ class GmailReader:
                 raise ProviderError("Unsupported mail action")
             add, remove = labels[action]
             self.write("messages/" + mid + "/modify", {"addLabelIds": add, "removeLabelIds": remove})
-        self.cache.pop(self._mid(provider_id), None)
+        # The row stays cached so a second write (read then unread, trash then undo) still resolves.
+        # The next list() re-reads it anyway: history reports our own label changes too.
 
     def send(self, data, original=None):
         if not self.capabilities()["send"]:
