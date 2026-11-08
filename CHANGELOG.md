@@ -7,6 +7,8 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-08
+
 ### Row controls and auto-advance, as in Gmail
 
 - Hovering a row (or focusing into it) shows Archive / Trash (Restore in Trash) / Mark read-unread in place of the time,
@@ -382,7 +384,8 @@ First public version.
   after setup.
 - Not on PyPI yet: install from GitHub. The PyPI publish job is off until the name is decided.
 
-[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/scamai/email-town-labeler/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/scamai/email-town-labeler/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...v0.1.1
