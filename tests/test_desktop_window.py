@@ -306,3 +306,103 @@ def test_window_icon_is_passed_only_where_pywebview_takes_a_png(monkeypatch, pla
     assert (icon is not None) == has_icon
     if icon:
         assert icon.endswith(".png") and Path(icon).is_file()
+
+
+class _Item:
+    def __init__(self, title="", action=None, key=""):
+        self._title, self.action, self._key, self._sub = title, action, key, None
+
+    def initWithTitle_action_keyEquivalent_(self, title, action, key):
+        self.__init__(title, action, key)
+        return self
+
+    def title(self):
+        return self._title
+
+    def keyEquivalent(self):
+        return self._key
+
+    def submenu(self):
+        return self._sub
+
+    def setSubmenu_(self, menu):
+        self._sub = menu
+
+
+class _Menu:
+    def __init__(self, title="", items=()):
+        self._title, self.items = title, list(items)
+
+    def initWithTitle_(self, title):
+        self._title = title
+        return self
+
+    def title(self):
+        return self._title
+
+    def numberOfItems(self):
+        return len(self.items)
+
+    def itemAtIndex_(self, i):
+        return self.items[i]
+
+    def indexOfItemWithTitle_(self, title):
+        return next((i for i, item in enumerate(self.items) if item.title() == title), -1)
+
+    def insertItem_atIndex_(self, item, i):
+        self.items.insert(i, item)
+
+    def insertItemWithTitle_action_keyEquivalent_atIndex_(self, title, action, key, i):
+        self.items.insert(i, _Item(title, action, key))
+
+    def addItemWithTitle_action_keyEquivalent_(self, title, action, key):
+        self.items.append(_Item(title, action, key))
+
+    def addItem_(self, item):
+        self.items.append(item)
+
+
+def _fake_appkit():
+    edit = _Menu(
+        "Edit",
+        [
+            _Item(t, a, k)
+            for t, a, k in (("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"))
+        ],
+    )
+    app_item, edit_item = _Item("Email Town"), _Item("Edit")
+    app_item.setSubmenu_(_Menu("Email Town", [_Item("Quit Email Town", "terminate:", "q")]))
+    edit_item.setSubmenu_(edit)
+    main = _Menu("", [app_item, edit_item])
+    app = SimpleNamespace(mainMenu=lambda: main, windows=[], setWindowsMenu_=None)
+    app.setWindowsMenu_ = app.windows.append
+    return (
+        SimpleNamespace(
+            NSApplication=SimpleNamespace(sharedApplication=lambda: app),
+            NSMenu=SimpleNamespace(alloc=_Menu),
+            NSMenuItem=SimpleNamespace(alloc=_Item, separatorItem=_Item),
+        ),
+        main,
+        app,
+    )
+
+
+def test_mac_menus_add_undo_redo_and_window_minimize_once():
+    appkit, main, app = _fake_appkit()
+    first = window.complete_mac_menus(appkit)
+    second = window.complete_mac_menus(appkit)  # pywebview may rebuild nothing; we must not duplicate
+    edit = next(i.submenu() for i in main.items if i.submenu() and i.submenu().title() == "Edit")
+    assert [(i.title(), i.action, i.keyEquivalent()) for i in edit.items[:3]] == [
+        ("Undo", "undo:", "z"),
+        ("Redo", "redo:", "Z"),  # capital Z is ⇧⌘Z in AppKit
+        ("", None, ""),
+    ]
+    windows = [i.submenu() for i in main.items if i.submenu() and i.submenu().title() == "Window"]
+    assert len(windows) == 1 and app.windows == [windows[0]]
+    first_item = windows[0].items[0]
+    assert (first_item.title(), first_item.action, first_item.keyEquivalent()) == (
+        "Minimize",
+        "performMiniaturize:",
+        "m",
+    )
+    assert first == second and "Undo (z)" in first and "Minimize (m)" in first and "Cut (x)" in first

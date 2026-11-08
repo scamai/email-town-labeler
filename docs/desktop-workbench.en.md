@@ -4,7 +4,7 @@ English · [简体中文](desktop-workbench.md)
 
 # On-device unified mail workbench
 
-[Download the app](#download-the-app) · [Open from source](#open-from-source) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
+[Download the app](#download-the-app) · [Open from source](#open-from-source) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Keyboard shortcuts](#keyboard-shortcuts) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
 
 The workbench combines explicitly authorized mailboxes into one local list, with Inbox, Sent, Archive and
 Trash views, common categories, search and completion state. It supports explicit send/reply/forward,
@@ -163,6 +163,30 @@ actions separately. The preview keeps archive/trash at the top and reply/forward
 Below 1,200 CSS pixels, opening a message replaces the list; **Back** returns to the same message.
 Below 768 pixels, the menu button opens filters/accounts. Compose keeps **Send** and **Save draft** visible
 while its fields scroll. See the [layout decisions](design-spec.md#desktop-layout-and-alignment).
+
+## Keyboard shortcuts
+
+Press <kbd>?</kbd> in the app (or **Keyboard shortcuts** at the bottom right) for the list. Single keys follow
+Gmail and work when you are not typing in a field or composing with an input method; ⌘ combinations follow
+Apple Mail (Ctrl on Windows and Linux).
+
+| Keys | Action |
+|---|---|
+| <kbd>j</kbd> / <kbd>k</kbd> (or <kbd>↓</kbd> / <kbd>↑</kbd>) | Next (older) / previous (newer) message |
+| <kbd>/</kbd> or <kbd>⌘F</kbd> | Search |
+| <kbd>g</kbd> then <kbd>i</kbd> / <kbd>s</kbd> / <kbd>a</kbd> / <kbd>t</kbd> | Inbox, Sent, Archive, Trash |
+| <kbd>x</kbd> | Select or deselect the open message |
+| <kbd>e</kbd> | Archive (the selection if there is one, else the open message) |
+| <kbd>#</kbd> or <kbd>Delete</kbd> | Move to Trash (asks first, as the button does) |
+| <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> · <kbd>d</kbd> | Star or unstar · mark unread · mark read · done or reopen |
+| <kbd>c</kbd> or <kbd>⌘N</kbd> | New message |
+| <kbd>r</kbd> / <kbd>a</kbd> / <kbd>f</kbd> or <kbd>⌘R</kbd> / <kbd>⌘⇧R</kbd> / <kbd>⌘⇧F</kbd> | Reply / reply all / forward |
+| <kbd>⌘Enter</kbd> | Send the message you are writing |
+| <kbd>Esc</kbd> | Back to the list; close a menu or dialog |
+
+In the macOS app the menus also give <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> (undo, redo), <kbd>⌘X</kbd> <kbd>⌘C</kbd>
+<kbd>⌘V</kbd> <kbd>⌘A</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘H</kbd> (hide) and <kbd>⌘Q</kbd> (quit). The window has
+no right-click menu; use the keyboard to copy and paste.
 
 ## Appearance
 
