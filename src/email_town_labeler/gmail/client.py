@@ -4,7 +4,10 @@ Quota: Gmail meters every call in per-user quota units. `messages.get` (format=f
 quota-heavy call here; see docs/configuration.md for the current per-method costs. `history.list`,
 `messages.list`, `labels.list` and `getProfile` are cheap. `get_records` is paced by a token
 bucket (`max_gets_per_minute`) so a backfill never trips a 429 storm; `get_metadata` (headers only,
-cheaper) has its own, faster bucket (`max_metadata_per_minute`).
+cheaper) has its own, faster bucket (`max_metadata_per_minute`). An interactive caller can instead
+pass `units_per_minute`: a sliding 60-second window of quota units shared by both, matching how
+Gmail meters (per user, per minute). It may spend the whole budget at once, but never more than
+the budget in any 60 seconds, which a refilling bucket would allow (a burst plus a minute of refill).
 
 Logs carry ids, counts and statuses only, never message content.
 
@@ -24,6 +27,7 @@ import logging
 import random
 import re
 import time
+from collections import deque
 from collections.abc import Callable, Iterable
 
 from ..types import EmailRecord, HistoryEvent
@@ -38,6 +42,10 @@ API_DISABLED_REASONS = {"accessNotConfigured", "SERVICE_DISABLED"}  # errors[] /
 MAX_BATCH = 50  # Gmail accepts 100 per batch but throttles above ~50
 MAX_BACKOFF = 64.0
 TRANSPORT_RETRIES = 3  # fresh-connection retries after a transport error: about 0.5 s, 1 s, 2 s
+# Quota units per messages.get (Gmail usage limits, as of 2026-05-01): 60 for format=full/raw/html,
+# otherwise the base 20. https://developers.google.com/workspace/gmail/api/reference/quota
+FULL_GET_UNITS = 60
+METADATA_GET_UNITS = 20
 
 
 class HistoryExpired(Exception):
@@ -129,6 +137,38 @@ class _TokenBucket:
         self.tokens -= n
 
 
+class _UnitWindow:
+    """At most `budget` quota units in any 60 seconds; take(units) sleeps until they fit."""
+
+    def __init__(self, budget: float, clock: Callable[[], float], sleep: Callable[[float], None]):
+        self.budget, self.clock, self.sleep = budget, clock, sleep
+        self.spent: deque[tuple[float, float]] = deque()
+
+    def take(self, units: float) -> None:
+        units = min(float(units), self.budget)
+        while True:
+            now = self.clock()
+            while self.spent and self.spent[0][0] <= now - 60:
+                self.spent.popleft()
+            if sum(u for _, u in self.spent) + units <= self.budget:
+                self.spent.append((now, units))
+                return
+            wait = self.spent[0][0] + 60 - now
+            self.sleep(wait)
+            if self.clock() < now + wait:  # fake sleeps may not move the clock
+                self.spent.popleft()
+
+
+class _UnitCost:
+    """A view of the shared unit window that charges `units` per message."""
+
+    def __init__(self, window: _UnitWindow, units: int):
+        self.window, self.units = window, units
+
+    def take(self, n: int) -> None:
+        self.window.take(n * self.units)
+
+
 class GmailClient:
     """Retrying wrapper. Retries 429 / 5xx / 403 rate limits with exponential backoff + jitter, and
     transport errors on a fresh connection (`transport_retries` times, short waits).
@@ -149,6 +189,7 @@ class GmailClient:
         max_metadata_per_minute: float | None = 240,
         batch_size: int = MAX_BATCH,
         clock: Callable[[], float] = time.monotonic,
+        units_per_minute: float | None = None,
     ):
         self.service = service
         self.max_retries, self.transport_retries = max_retries, transport_retries
@@ -160,6 +201,10 @@ class GmailClient:
 
         self._bucket = bucket(max_gets_per_minute)
         self._meta_bucket = bucket(max_metadata_per_minute)
+        if units_per_minute:
+            shared = _UnitWindow(units_per_minute, clock, sleep)
+            self._bucket = _UnitCost(shared, FULL_GET_UNITS)
+            self._meta_bucket = _UnitCost(shared, METADATA_GET_UNITS)
 
     @classmethod
     def from_credentials(cls, creds, **kwargs) -> GmailClient:
@@ -283,7 +328,11 @@ class GmailClient:
         return [parse_metadata(got[m], names) for m in order if m in got]
 
     def _fetch_all(
-        self, ids: list[str], make: Callable[[str], object], bucket: _TokenBucket | None, what: str
+        self,
+        ids: list[str],
+        make: Callable[[str], object],
+        bucket: _TokenBucket | _UnitCost | None,
+        what: str,
     ) -> tuple[dict[str, dict], list[str]]:
         order = list(dict.fromkeys(ids))  # dedupe, keep order
         got: dict[str, dict] = {}
@@ -299,7 +348,7 @@ class GmailClient:
         chunk: list[str],
         got: dict[str, dict],
         make: Callable[[str], object],
-        bucket: _TokenBucket | None,
+        bucket: _TokenBucket | _UnitCost | None,
         what: str,
     ) -> None:
         pending = chunk

@@ -572,3 +572,24 @@ def test_label_colors_round_trip():
     with pytest.raises(HttpError) as ei:
         c.set_label_color(lb["id"], {"textColor": "#000000", "backgroundColor": "#123456"})
     assert ei.value.resp.status == 400
+
+
+def test_units_budget_spends_a_minute_at_once_but_never_more_in_any_60_seconds():
+    from email_town_labeler.gmail.client import FULL_GET_UNITS, METADATA_GET_UNITS
+
+    g = FakeGmail()
+    ids = fill(g, 200)
+    c, clock = make(g, units_per_minute=4800, batch_size=25)
+    window, log = c._meta_bucket.window, []
+    take = window.take
+    window.take = lambda units: (take(units), log.append((clock(), units)))
+    c.get_metadata(ids[:100], ["Subject"])  # 2,000 units: inside the minute, no waiting
+    c.get_records(ids[:40])  # 2,400 units more: still inside
+    assert clock.waits == [] and g.batches == [25] * 4 + [25, 15]
+    c.get_metadata(ids[100:125], ["Subject"])  # 500 units with 400 left: wait for the first spend to age out
+    assert clock.waits == [pytest.approx(60.0)]
+    c.get_metadata(ids[125:200], ["Subject"])
+    assert sum(u for _, u in log) == 200 * 20 + 40 * 60  # every spend was recorded
+    for t, _ in log:  # a refilling bucket would allow 2x the budget in the first minute; this must not
+        assert sum(u for s, u in log if t <= s < t + 60) <= 4800
+    assert (METADATA_GET_UNITS, FULL_GET_UNITS) == (20, 60)
