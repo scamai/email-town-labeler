@@ -118,6 +118,28 @@ class GmailReader:
         self.folder_ids: dict[str, list[str]] = {}
         self.history_id = None
 
+    # Header metadata fields kept across restarts (format=metadata has no snippet or body).
+    STATE_FIELDS = ("id", "thread_id", "label_ids", "internal_date", "history_id", "headers")
+
+    def export_state(self) -> dict:
+        """Resumable list state for the on-disk cache: metadata rows and the history cursor."""
+        return {
+            "identity": self.identity,
+            "history_id": self.history_id,
+            "folder_ids": self.folder_ids,
+            "cache": {
+                mid: {k: rec[k] for k in self.STATE_FIELDS if k in rec} for mid, rec in self.cache.items()
+            },
+        }
+
+    def restore_state(self, state: dict) -> None:
+        """Resume from export_state(); the next list re-reads only what Gmail history says changed."""
+        if not state or state.get("identity") != self.identity or not state.get("history_id"):
+            return  # another mailbox, or nothing to resume from: start cold
+        self.history_id = str(state["history_id"])
+        self.folder_ids = {f: list(ids) for f, ids in state.get("folder_ids", {}).items() if f in FOLDERS}
+        self.cache = {mid: dict(rec) for mid, rec in state.get("cache", {}).items()}
+
     def capabilities(self):
         write = bool(
             self.scopes & {"https://www.googleapis.com/auth/gmail.modify", "https://mail.google.com/"}

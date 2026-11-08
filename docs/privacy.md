@@ -31,11 +31,18 @@ arbitrary URLs. Other image schemes and inline SVG are not displayed.
 The process holds bounded previews in RAM (128 × at most 256 KiB of body text plus 50 image references),
 including the newest 10 bodies per Microsoft/IMAP account read ahead from the mailbox so they open without waiting.
 Inline previews are limited to 8 MiB per image and 32 MiB of Blob data per open message; switching messages
-or losing authentication cancels pending loads and revokes those URLs. It does not create a general mail-content
-cache, while explicitly saved drafts and their attachments are stored under `workbench/mail` as described below.
+or losing authentication cancels pending loads and revokes those URLs. Bodies are never written to disk.
+The list itself is cached on disk so a restart shows mail at once: `workbench/cache.sqlite` (mode 0600) holds the
+subject, sender, date, read/star state, category and IDs of the loaded window of each folder (at most 1,000 rows
+per account and folder), plus each Gmail account's header metadata (Subject/From/Date, labels) and history cursor.
+It holds no bodies, snippets or attachments, has no application-level encryption (rely on full-disk encryption),
+and is rewritten after every sync; rows of an account that is no longer connected are deleted on the next start.
+Deleting the file is safe and only costs one full reload. Explicitly saved drafts and their attachments are
+stored under `workbench/mail` as described below.
 Browser extensions, OS swap and screenshots are outside that guarantee.
 `workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
-`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions. Private
+`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions; `cache.sqlite`
+holds the list cache above. Private
 drafts, attachments and operation receipts are stored under `workbench/mail`; receipts retain IDs, digests
 and status, not sent bodies; partial SMTP delivery receipts also retain accepted/rejected recipient addresses so recovery can avoid duplicate delivery. Failed, unknown or partial sends retain the draft and are not automatically retried.
 OAuth tokens are mode-0600 local files; IMAP passwords require an approved OS keyring backend.
