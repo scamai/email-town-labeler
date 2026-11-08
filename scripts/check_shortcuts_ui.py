@@ -39,6 +39,7 @@ class FixtureReader:
         ]
         self.sent = []
         self.writes = []  # every provider write in order: proves queued keys run, and in sequence
+        self.delay = 0.0  # seconds per write: keeps an action in flight while a check presses more keys
 
     def capabilities(self):
         return {
@@ -78,6 +79,7 @@ class FixtureReader:
         return next(r for r in self.records if r["id"] == provider_id)
 
     def mutate(self, provider_id, action):
+        time.sleep(self.delay)
         self.writes.append((provider_id, action))
         r = self.record(provider_id)
         if action in ("archive", "trash"):

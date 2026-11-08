@@ -3,8 +3,8 @@
 Run: uv run --with playwright python scripts/check_selection_ui.py
 
 Shift-click ranges (rows and checkboxes, select and deselect), ⌘/Ctrl-click toggles, the select-by-state menu,
-Shift+j/k, "* a"/"* n", Esc, and a bulk action on a range landing in the fixture mailbox. WebKit (the macOS
-app's engine) and Chromium.
+Shift+j/k, "* a"/"* n", Esc, the selection surviving read/star actions (including one still in flight), and a
+bulk action on a range landing in the fixture mailbox. WebKit (the macOS app's engine) and Chromium.
 """
 
 from __future__ import annotations
@@ -127,6 +127,39 @@ def main() -> int:
                 page.keyboard.press("*")
                 page.keyboard.press("a")
                 expect(selected).to_have_count(7)
+                page.keyboard.press("*")
+                page.keyboard.press("n")
+                expect(selected).to_have_count(0)
+
+                # The selection outlives actions that leave messages in place, as in Gmail, even one still
+                # running when the selection was made: star the open message, Shift+J twice while that
+                # write is in flight, and all three stay selected afterwards, rows and count alike.
+                count = page.locator("#mailSelectionCount")
+                busy = lambda page=page: page.evaluate("window.EmailTownMailHost.mailBusy()")
+                idle = lambda page=page: not page.evaluate("window.EmailTownMailHost.mailBusy()")
+                rows.nth(0).locator(".row-open").click()
+                expect(subject).to_have_text("Fixture message 1")
+                mailbox.delay = 1.0
+                page.keyboard.press("s")
+                until(busy, "the star is in flight")
+                page.keyboard.press("Shift+J")
+                page.keyboard.press("Shift+J")
+                assert busy(), "the star must still be in flight, or this proves nothing"
+                until(idle, "the action finishes")
+                mailbox.delay = 0.0
+                assert "STARRED" in mailbox.record("m1")["labels"]
+                expect(selected).to_have_count(3)
+                expect(count).to_have_text("3 selected · loaded messages only")
+                # Opening m1..m3 read them; a bulk Mark unread (in the More menu) keeps the selection too.
+                page.locator("#bulkMore > summary").click()
+                page.locator("#bulkMore [data-mail-action='unread']").click()
+                until(
+                    lambda: all("UNREAD" in mailbox.record(f"m{i}")["labels"] for i in (1, 2, 3)),
+                    "bulk unread",
+                )
+                until(idle, "the action finishes")
+                expect(selected).to_have_count(3)
+                expect(count).to_have_text("3 selected · loaded messages only")
                 page.keyboard.press("*")
                 page.keyboard.press("n")
                 expect(selected).to_have_count(0)

@@ -528,6 +528,7 @@
       button.disabled = local.busy || !allowed(button.dataset.mailAction, ids);
     });
   }
+  const LEAVES_FOLDER = ["archive", "trash", "restore"];
   function nextAfter(id, leaving) {
     const ids = (host.filteredMessages?.() || host.state.messages).map((m) => m.id);
     const at = ids.indexOf(id);
@@ -554,7 +555,7 @@
     // wide layout; a narrow one returns to the list.
     const active = host.state.activeId;
     const advance =
-      ["archive", "trash", "restore"].includes(action) &&
+      LEAVES_FOLDER.includes(action) &&
       chosen.includes(active) &&
       window.innerWidth >= 1200
         ? nextAfter(active, chosen)
@@ -572,7 +573,10 @@
         }),
       });
       const job = await pollJob(result.job_id);
-      (job.succeeded || []).forEach((id) => host.state.selected.delete(id));
+      // As in Gmail, the selection outlives actions that leave messages in place (read, unread, star),
+      // including messages selected while this action ran; only messages that left the folder drop out.
+      if (LEAVES_FOLDER.includes(action))
+        (job.succeeded || []).forEach((id) => host.state.selected.delete(id));
       host.showToast(jobMessage(job));
       if (job.status !== "complete") alert(jobMessage(job));
       local.detailId = null;

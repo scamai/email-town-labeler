@@ -9,6 +9,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- The selection survives Mark read/unread and star, as in Gmail; only messages that leave the folder
+  (archive, Trash, restore) drop out. Before, finishing an action removed its messages from the selection,
+  including ones selected while it ran: Shift+J twice right after starring showed 3 rows highlighted but
+  "2 selected", and the next bulk action skipped one.
 - Gmail: a second action on the same message before the next sync (Mark unread right after opening it,
   or undoing a Trash) no longer fails with "Message is no longer in this account's current list". The
   message's row stays cached after a write; the next sync still re-reads it, because Gmail's history
