@@ -222,7 +222,7 @@ have logged in.
 | 🔴 | Outlook, IMAP, Fastmail | not planned yet |
 | 🔴 | Instant push instead of 60-second polling | not built |
 | 🟡 | Desktop workbench: explicit mail actions, drafts, folders and attachments | [workbench guide](docs/desktop-workbench.en.md) |
-| 🟡 | Email Town desktop app (no Python needed); unsigned for now, so first open warns | [download](docs/desktop-workbench.en.md#download-the-app) |
+| 🟡 | Email Town desktop app (no Python needed); macOS signed and notarized, Windows/Linux unsigned for now | [download](docs/desktop-workbench.en.md#download-the-app) |
 
 ---
 
