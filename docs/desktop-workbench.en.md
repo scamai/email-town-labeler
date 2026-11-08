@@ -38,9 +38,10 @@ ask where to save. **Closing the window stops the workbench** and its model proc
 leaves it running when you close the window.
 
 The app uses the same configuration and data folders as the CLI (`EMAIL_TOWN_LABELER_HOME` moves them, as
-for the CLI). The model is not inside the app: with no configuration it classifies with the built-in `rules`
-model; if your `config.toml` names a catalog model, the app downloads it, sha256-checked, the first time it
-classifies mail (`town-modernbert-int8`: 263 MB download, 382 MB on disk). Its log is
+for the CLI). The model is not inside the app: with no `config.toml` the workbench classifies with the published
+on-device model `town-modernbert-int8` and downloads it once, sha256-checked, the first time it classifies
+mail (263 MB download, 382 MB on disk); the list says so while it downloads and mail stays readable. A
+`config.toml` model, including the keyword-only `rules`, always takes precedence. Its log is
 `workbench/desktop.log` in the data folder (macOS `~/Library/Application Support/email-town-labeler/`,
 Windows `%LOCALAPPDATA%\email-town-labeler\`, Linux `~/.local/share/email-town-labeler/`); it contains no
 mail content. To check a download, run the binary with `--self-check`; it reports what the app can load
@@ -76,8 +77,8 @@ email-town-labeler desktop --background
 
 For a fresh install use `uv tool install 'email-town-labeler[onnx,desktop]'`; to use this source checkout,
 use `uv tool install --editable '.[onnx,desktop]'`. The desktop extra provides OS credential-vault support
-for IMAP. Classification uses the existing default model configuration. Missing weights may need a
-model download; mail content is not sent to a remote classifier. The desktop workbench is separate from
+for IMAP. Classification uses the model in `config.toml`, or `town-modernbert-int8` when there is none (downloaded
+once, 263 MB); mail content is not sent to a remote classifier. The desktop workbench is separate from
 the label-only CLI service.
 
 Repeated launches reopen the same process. Closing the browser does not stop it.

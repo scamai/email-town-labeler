@@ -7,6 +7,12 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop default model
+
+- With no `config.toml` (a fresh desktop app) the workbench classifies with the published on-device model
+  `town-modernbert-int8` instead of the CLI's keyword-only `rules`, downloading it once (263 MB, sha256-checked)
+  on first use. The list shows "Downloading the on-device classifier" meanwhile. A `config.toml` model always wins.
+
 ### Desktop app
 
 - Email Town as a double-click app, no terminal, Python or uv: `dist/Email Town.app` (macOS 14+, Apple
