@@ -251,7 +251,10 @@ def trust_store() -> None:
     import ssl
 
     defaults = ssl.get_default_verify_paths()  # cafile / capath are None when they do not exist
-    if defaults.cafile or defaults.capath:
+    if defaults.cafile:
+        return
+    # A CA directory only works with OpenSSL's hash links (<hash>.0); Fedora's /etc/ssl/certs has none.
+    if defaults.capath and any(Path(defaults.capath).glob("*.0")):
         return
     try:
         import certifi

@@ -244,6 +244,38 @@ def test_worker_model_spawns_through_command(monkeypatch):
         model.release()
 
 
+@pytest.mark.parametrize(
+    ("cafile", "links", "frozen", "want_certifi"),
+    [
+        (True, False, True, False),  # the build's CA file exists here: keep it
+        (False, True, True, False),  # a hashed CA directory (Debian/Ubuntu): keep it
+        (False, False, True, True),  # neither (a Fedora CA directory without hash links): certifi
+        (False, False, False, False),  # from source: never touched
+    ],
+)
+def test_frozen_app_falls_back_to_certifi_only_without_usable_system_cas(
+    tmp_path, monkeypatch, cafile, links, frozen, want_certifi
+):
+    import ssl
+
+    certifi = pytest.importorskip("certifi")
+    capath = tmp_path / "certs"
+    capath.mkdir()
+    (capath / "ca-bundle.crt").write_text("")
+    if links:
+        (capath / "abcd1234.0").write_text("")
+    defaults = ssl.DefaultVerifyPaths(
+        str(tmp_path / "cert.pem") if cafile else None, str(capath), "SSL_CERT_FILE", "", "SSL_CERT_DIR", ""
+    )
+    monkeypatch.setattr(ssl, "get_default_verify_paths", lambda: defaults)
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    # a private copy: what trust_store() sets must not leak into the rest of the test session
+    monkeypatch.setattr(os, "environ", {k: v for k, v in os.environ.items() if not k.startswith("SSL_CERT_")})
+    window.trust_store()
+    assert os.environ.get("SSL_CERT_FILE") == (certifi.where() if want_certifi else None)
+
+
 # ─── self-check ───
 
 
