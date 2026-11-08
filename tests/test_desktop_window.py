@@ -296,3 +296,13 @@ def test_self_check_reports_every_failure_and_exits_1(tmp_path, monkeypatch, cap
 
 def test_self_check_runs_the_model_worker():
     assert selfcheck._model_worker().endswith(": 1 prediction")
+
+
+@pytest.mark.parametrize(("platform", "has_icon"), [("win32", False), ("darwin", False), ("linux", True)])
+def test_window_icon_is_passed_only_where_pywebview_takes_a_png(monkeypatch, platform, has_icon):
+    # Windows WinForms accepts only .ico: a PNG crashed the app as its window opened (CI, 2026-11-08).
+    monkeypatch.setattr(window.sys, "platform", platform)
+    icon = window._icon()
+    assert (icon is not None) == has_icon
+    if icon:
+        assert icon.endswith(".png") and Path(icon).is_file()
