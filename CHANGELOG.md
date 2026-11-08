@@ -7,6 +7,13 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop app on Windows
+
+- Fix two defects that made the 0.1.2 Windows build fail its checks: the bundle dropped Gmail's discovery
+  document (a path filter compared Windows `\\` paths against `/`), and the window passed a PNG icon that
+  WinForms rejects, ending the app as its window opened. The app CI builds on macos-15 (macos-14 images are
+  retired) and keeps the smoke test's logs when it fails.
+
 ## [0.1.2] - 2026-11-08
 
 ### Desktop default model
