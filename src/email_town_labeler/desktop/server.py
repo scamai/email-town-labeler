@@ -116,7 +116,9 @@ class Handler(BaseHTTPRequestHandler):
             "/shortcuts.js": ("shortcuts.js", "text/javascript; charset=utf-8"),
             "/selection.js": ("selection.js", "text/javascript; charset=utf-8"),
             "/rowactions.js": ("rowactions.js", "text/javascript; charset=utf-8"),
+            "/reader.js": ("reader.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
+            "/reader.css": ("reader.css", "text/css; charset=utf-8"),
             "/logo.svg": ("logo.svg", "image/svg+xml"),
         }
         if parsed.path in assets:

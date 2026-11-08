@@ -681,6 +681,21 @@
       if (local.detailId === id) local.detailId = null;
     }
   }
+  const REPLY_ICONS = {
+    reply: "M9 14L4 9l5-5 M4 9h11a5 5 0 0 1 5 5v2",
+    "reply-all": "M7 14L2 9l5-5 M12 14L7 9l5-5 M7 9h9a5 5 0 0 1 5 5v2",
+    forward: "M15 14l5-5-5-5 M20 9H9a5 5 0 0 0-5 5v2",
+  };
+  function replyIcon(mode) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "action-icon");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", REPLY_ICONS[mode]);
+    svg.append(path);
+    return svg;
+  }
   function renderDetail(detail) {
     window.EmailTownImages?.render(detail);
     const actions = document.querySelector(".reply-actions");
@@ -692,39 +707,77 @@
     ].forEach(([mode, label]) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "button button-quiet button-small";
+      button.className = "button reply-button";
       button.dataset.composeMode = mode;
-      button.textContent = label;
+      button.append(replyIcon(mode), label);
       button.onclick = () => {
         if (host.state.activeId === detail.id) openCompose(mode, detail);
       };
       actions.append(button);
     });
-    const panel = document.createElement("dl");
+    // Gmail's "to me, Li and 10 others ▾": recipients folded under the sender, full list on demand.
+    const reader = window.EmailTownReader;
+    const own = text(accountFor(detail.account_id)?.address).toLowerCase();
+    const everyone = reader
+      ? [
+          ...reader.splitAddresses(detail.headers?.to),
+          ...reader.splitAddresses(detail.headers?.cc),
+        ]
+      : [];
+    const named = (who) =>
+      own && who.address.toLowerCase() === own ? "me" : reader.displayName(who);
+    const first = everyone.slice(0, 2).map(named);
+    const others = everyone.length - first.length;
+    const panel = document.createElement("details");
     panel.className = "preview-headers";
+    const summary = document.createElement("summary");
+    summary.textContent = everyone.length
+      ? `to ${first.join(", ")}${others > 0 ? ` and ${others} other${others > 1 ? "s" : ""}` : ""}`
+      : "to undisclosed recipients";
+    const list = document.createElement("dl");
     for (const [label, value] of [
+      ["From", detail.headers?.from],
       ["To", detail.headers?.to],
       ["Cc", detail.headers?.cc],
+      ["Reply-To", detail.headers?.["reply-to"]],
     ]) {
       if (!value) continue;
       const dt = document.createElement("dt");
       dt.textContent = label;
       const dd = document.createElement("dd");
       dd.textContent = value;
-      panel.append(dt, dd);
+      list.append(dt, dd);
     }
+    panel.append(summary, list);
     $("previewEnvelope").append(panel);
     if (detail.attachments?.length) {
       const list = document.createElement("div");
       list.className = "preview-attachments";
       const title = document.createElement("strong");
-      title.textContent = "Attachments";
+      const count = detail.attachments.length;
+      title.textContent = `${count} attachment${count > 1 ? "s" : ""}`;
       list.append(title);
       detail.attachments.forEach((attachment) => {
+        // Gmail-style card: type badge, name (two lines at most), readable size.
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "text-button";
-        button.textContent = `${attachment.name} (${Math.ceil(attachment.size / 1024)} KB)`;
+        button.className = "attachment-card";
+        const name = text(attachment.name) || "attachment";
+        button.title = `Download ${name}`;
+        const kind = document.createElement("span");
+        kind.className = "attachment-kind";
+        kind.textContent = name.includes(".")
+          ? name.split(".").pop().slice(0, 4).toUpperCase()
+          : "FILE";
+        const label = document.createElement("span");
+        label.className = "attachment-name";
+        label.textContent = name;
+        const size = document.createElement("span");
+        size.className = "attachment-size";
+        size.textContent = window.EmailTownReader
+          ? window.EmailTownReader.humanSize(attachment.size)
+          : `${Math.ceil(attachment.size / 1024)} KB`;
+        button.append(kind, label, size);
         button.onclick = async () => {
           button.disabled = true;
           try {
@@ -747,7 +800,10 @@
         };
         list.append(button);
       });
-      $("previewContent").append(list);
+      // Between the message and its reply buttons, as Gmail places them.
+      const replies = document.querySelector(".reply-actions");
+      if (replies) replies.before(list);
+      else $("previewContent").append(list);
     }
     updateControls();
   }

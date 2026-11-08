@@ -380,6 +380,7 @@
       return;
     }
     window.EmailTownMailHost?.render?.();
+    if (state.activeId) updatePreviewPosition();
     const focus = saveFocus();
     const messages = filteredMessages();
     const hasLoading = state.refreshing && !state.messages.length;
@@ -602,9 +603,26 @@
     els.previewCategory.dataset.category = message.category || "unknown";
     els.previewUnread.hidden = !message.unread;
     els.previewSubject.textContent = text(message.subject || "No subject");
-    els.previewByline.textContent = text(message.sender || "Unknown sender");
-    els.previewDate.textContent = formatDate(message.date);
+    const reader = window.EmailTownReader;
+    if (reader) {
+      // Gmail's header: avatar, bold name, grey address, the date on the right.
+      const who = reader.parseAddress(message.sender || "");
+      const name = document.createElement("strong");
+      name.className = "sender-name";
+      name.textContent = text(reader.displayName(who) || "Unknown sender");
+      const address = document.createElement("span");
+      address.className = "sender-email";
+      address.textContent = who.name ? `<${who.address}>` : "";
+      els.previewByline.replaceChildren(name, " ", address);
+      reader.avatar($("previewAvatar"), who);
+      els.previewDate.textContent = reader.longDate(message.date);
+    } else {
+      els.previewByline.textContent = text(message.sender || "Unknown sender");
+      els.previewDate.textContent = formatDate(message.date);
+    }
+    els.previewDate.title = formatDate(message.date);
     els.previewBody.textContent = "Reading message…";
+    updatePreviewPosition();
     els.previewDone.textContent = message.done ? "Reopen" : "Mark done";
     const setOriginalLink = (value) => {
       const knownUrl = safeOriginalUrl(value);
@@ -615,13 +633,29 @@
     try {
       const data = await api(`/api/message?id=${encodeURIComponent(id)}`);
       if (state.activeId === id) {
-        els.previewBody.textContent = text(data.body || "(No plain-text body)");
+        const body = text(data.body || "(No plain-text body)");
+        if (window.EmailTownReader) window.EmailTownReader.renderBody(els.previewBody, body);
+        else els.previewBody.textContent = body;
         setOriginalLink(data.url || message.url);
       }
     } catch (error) {
       if (state.activeId === id)
         els.previewBody.textContent = `Unable to read message: ${text(error.message)}`;
     }
+  }
+  // "2 of 37" and the newer/older arrows in the reading pane's toolbar, over the list as shown.
+  function updatePreviewPosition() {
+    const ids = filteredMessages().map((m) => m.id);
+    const at = ids.indexOf(state.activeId);
+    $("previewPosition").textContent =
+      at >= 0 ? `${at + 1} of ${ids.length}` : "";
+    $("previewNewer").disabled = at <= 0;
+    $("previewOlder").disabled = at < 0 || at >= ids.length - 1;
+  }
+  function stepPreview(step) {
+    const ids = filteredMessages().map((m) => m.id);
+    const next = ids[ids.indexOf(state.activeId) + step];
+    if (next) openMessage(next);
   }
   function toggleSelected(id, checked) {
     if (checked) state.selected.add(id);
@@ -1113,6 +1147,8 @@
       first.focus();
     }
   });
+  $("previewNewer").addEventListener("click", () => stepPreview(-1));
+  $("previewOlder").addEventListener("click", () => stepPreview(1));
   els.previewClose.addEventListener("click", () => {
     els.previewPane.classList.remove("is-open");
     restoreFocus({ key: "focusKey", value: `open-${state.activeId}` });
