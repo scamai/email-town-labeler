@@ -11,6 +11,15 @@ from pathlib import Path
 from ..config import Paths
 from ..gmail.auth import _write_private
 
+DEFAULT_NAME = "Gmail"
+# Names this app generated for the auto-enrolled default Gmail account; the user never typed them.
+# The UI shows the mailbox address instead ("当前 Gmail" and "Primary Gmail" came from earlier releases).
+GENERATED_NAMES = frozenset({DEFAULT_NAME, "Primary Gmail", "当前 Gmail"})
+
+
+def display_name(name: str, address: str) -> str:
+    return (address or DEFAULT_NAME) if name in GENERATED_NAMES else name
+
 
 class Accounts:
     def __init__(self, root: Path, default_paths: Paths):
@@ -27,7 +36,7 @@ class Accounts:
             self.rows = data["accounts"]
         elif default_paths.token.exists():
             self.add(
-                "Primary Gmail",
+                DEFAULT_NAME,
                 "gmail",
                 {
                     "config_dir": str(default_paths.config_dir.absolute()),

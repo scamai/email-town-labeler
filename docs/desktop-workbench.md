@@ -47,7 +47,7 @@ email-town-labeler desktop --no-browser
 
 ## 连接邮箱
 
-已有默认 Gmail 授权会自动纳入。其他账户从侧栏“Accounts → + Add”（添加账户）连接，并设置可辨认的名称。
+已有默认 Gmail 授权会自动纳入，并以邮箱地址显示。其他账户从侧栏“Accounts → + Add”（添加账户）连接，并设置可辨认的名称。
 应用不会读取 Outlook 或 Apple Mail 保存的登录凭据。
 
 | 邮箱 | 连接方式 | 前提 |

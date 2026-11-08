@@ -39,7 +39,7 @@ The bare URL printed in the terminal has no authority; reopen through the launch
 
 ## Connect accounts
 
-An existing default Gmail authorization is enrolled automatically. Use **Accounts → + Add** in the sidebar for other
+An existing default Gmail authorization is enrolled automatically and listed by its mailbox address. Use **Accounts → + Add** in the sidebar for other
 mailboxes, with recognizable display names. The app does not extract Outlook or Apple Mail credentials.
 
 | Provider | Connection | Prerequisite |
