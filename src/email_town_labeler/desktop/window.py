@@ -204,7 +204,13 @@ def show_error(webview: Any, message: str, log_path: Path) -> int:
 
 
 def _icon() -> str | None:
-    """The window icon where pywebview uses one (GTK/Qt); macOS and Windows take it from the app bundle."""
+    """The window icon where pywebview uses one (GTK/Qt); macOS and Windows take it from the app bundle.
+
+    Never on Windows: WinForms accepts only an .ico there, and a PNG raised an unhandled CLR exception
+    ("must be a picture that can be used as a Icon") that ended the process as its window opened.
+    """
+    if sys.platform in ("win32", "darwin"):
+        return None
     try:
         path = Path(str(files("email_town_labeler.desktop").joinpath("web", "app-icon.png")))
     except (ModuleNotFoundError, TypeError):

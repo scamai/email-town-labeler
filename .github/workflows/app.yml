@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-latest, ubuntu-latest]
+        os: [macos-15, windows-latest, ubuntu-latest]  # macos-14 images are retired (job cancelled, 2026-11-08)
     defaults:
       run:
         shell: bash
@@ -61,11 +61,21 @@ jobs:
       - name: Smoke test
         run: |
           case "$RUNNER_OS" in
-            macOS)   "$PY" scripts/smoke_app.py --network -- "dist/Email Town.app/Contents/MacOS/Email Town" ;;
-            Windows) "$PY" scripts/smoke_app.py --network -- "dist/Email Town/Email Town.exe" ;;
-            Linux)   xvfb-run -a "$PY" scripts/smoke_app.py --network -- dist/email-town/email-town ;;
+            macOS)   "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town.app/Contents/MacOS/Email Town" ;;
+            Windows) "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town/Email Town.exe" ;;
+            Linux)   xvfb-run -a "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- dist/email-town/email-town ;;
           esac
 
+      # The app's own log (desktop.log) and the smoke log explain a failed smoke test; no mail is in them.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-logs-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/smoke-home/**/*.log
+            ${{ runner.temp }}/smoke-home/**/*.txt
+          if-no-files-found: warn
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: email-town-${{ runner.os }}
