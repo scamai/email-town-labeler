@@ -19,7 +19,7 @@ Free and open source. The AI model runs on your own computer.
 
 <a href="https://github.com/scamai/email-town-labeler/releases/latest"><img src="docs/assets/download-mac.svg" alt="Download Email Town for Mac" width="232" height="52"></a><br>
 <sub>The Email Town mail workbench app · macOS 14+ · Apple Silicon · signed and notarized by Apple<br>
-Also for <a href="https://github.com/scamai/email-town-labeler/releases/latest">Windows and Linux</a> (preview, not signed yet) · <a href="docs/desktop-workbench.en.md#download-the-app">install notes</a></sub>
+Also for <a href="https://github.com/scamai/email-town-labeler/releases/latest">Linux</a> (preview) · Windows in a later release · <a href="docs/desktop-workbench.en.md#download-the-app">install notes</a></sub>
 
 </div>
 
@@ -121,8 +121,8 @@ You need Python 3.10+ (macOS, Linux or Windows) and a Gmail or Google Workspace 
 > [!TIP]
 > **Want the mail workbench in its own window, without Python?** [Download the Email Town app](https://github.com/scamai/email-town-labeler/releases/latest):
 > on a Mac open the `.dmg` and drag Email Town to Applications (signed and notarized, it opens without a
-> warning); on Windows or Linux unzip and double-click (not signed yet: one extra click on first open,
-> see [install notes](docs/desktop-workbench.en.md#download-the-app)). The app is the
+> warning); on Linux unzip and run `email-town` (preview). A Windows build follows in a later release; see
+> [install notes](docs/desktop-workbench.en.md#download-the-app). The app is the
 > [desktop workbench](docs/desktop-workbench.en.md); the steps below install the Gmail labeling service.
 
 **1. Install**
