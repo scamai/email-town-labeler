@@ -7,6 +7,13 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- Gmail: a second action on the same message before the next sync (Mark unread right after opening it,
+  or undoing a Trash) no longer fails with "Message is no longer in this account's current list". The
+  message's row stays cached after a write; the next sync still re-reads it, because Gmail's history
+  reports the app's own label changes.
+
 ## [0.1.4] - 2026-11-08
 
 ### Row controls and auto-advance, as in Gmail
