@@ -1,6 +1,7 @@
 """Account setup: provider presets, which Google client signs in, and optional account names."""
 
 import json
+import os
 import stat
 
 import pytest
@@ -44,7 +45,8 @@ def test_google_client_import_accepts_desktop_rejects_web_and_is_private(tmp_pat
         with pytest.raises(ValueError):
             setup.save_google_client(paths, bad)
     setup.save_google_client(paths, {"installed": {**DESKTOP["installed"], "extra": "dropped"}})
-    assert stat.S_IMODE(paths.client_secret.stat().st_mode) == 0o600
+    if os.name == "posix":  # Windows has no POSIX modes; the data folder is in the user's profile
+        assert stat.S_IMODE(paths.client_secret.stat().st_mode) == 0o600
     saved = json.loads(paths.client_secret.read_text())
     assert set(saved["installed"]) == {"client_id", "client_secret", "auth_uri", "token_uri", "redirect_uris"}
     assert setup.google_client_config(paths)[1] == "own"
