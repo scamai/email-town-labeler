@@ -7,6 +7,13 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### macOS release signing
+
+- `scripts/release_macos.py` signs the built app with the company Developer ID (hardened runtime, secure
+  timestamp, deepest first, never `--deep`), notarizes and staples both the app and its disk image, checks
+  Gatekeeper and writes a release receipt. It refuses to choose between several Developer ID identities.
+  Adapted from scamai/earlet; see docs/releasing.md.
+
 ### Desktop account setup
 
 - Typing an address for Other email fills IMAP/SMTP settings for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and
