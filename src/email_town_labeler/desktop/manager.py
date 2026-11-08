@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import threading
 import time
@@ -17,6 +18,7 @@ from ..models.worker import load_service_model
 from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
 from .accounts import Accounts, display_name, imap_settings, password_store
+from .cache import ListCache
 from .images import body_images, valid_image_bytes
 from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
@@ -29,6 +31,8 @@ from .providers import (
     save_microsoft_token,
 )
 from .state import LocalState, message_key
+
+log = logging.getLogger("email_town_labeler.desktop")
 
 CATEGORY_NAMES = {
     "action_needed": "Action needed",
@@ -69,6 +73,7 @@ class Workbench:
         self.root, self.paths = root, default_paths
         self.accounts = Accounts(root, default_paths)
         self.state = LocalState(root / "workflow.sqlite")
+        self.cache = ListCache(root / "cache.sqlite")
         self.mail_store = MailStore(root / "mail")
         self.mail_slots = threading.BoundedSemaphore(3)
         self.folder = "inbox"
@@ -80,6 +85,8 @@ class Workbench:
         # Woken on every visible change so a waiting /api/state answers at once.
         self.changed, self.version, self.seq = threading.Condition(self.lock), 0, 0
         self.reader_locks, self.previews_waiting = {}, {}
+        # Set once an account's first list of this process is in; previews of cached rows wait for it.
+        self.synced = {}
         self.folder_rows = {}
         self.readers, self.messages, self.account_status = {}, {}, {}
         self.predictions, self.bodies = {}, OrderedDict()
@@ -90,8 +97,45 @@ class Workbench:
         self.demo = False
 
     def start(self):
+        self._restore_cache()
         self.refresh()
         threading.Thread(target=self._poll, name="workbench-poll", daemon=True).start()
+
+    def _restore_cache(self):
+        """Show the last loaded lists at once; the refresh started next revalidates them."""
+        try:
+            cached = self.cache.load_rows({a["id"] for a in self.accounts.all()})
+        except Exception as e:  # noqa: BLE001 - a damaged cache only costs a cold load
+            log.warning("list cache not read (%s)", type(e).__name__)
+            return
+        with self.lock:
+            for (aid, folder), (saved_at, rows) in cached.items():
+                target = self.messages if folder == self.folder else self.folder_rows.setdefault(folder, {})
+                for row in rows:
+                    target[row["id"]] = {**row, "done": False}
+                    if row.get("source") == "model":
+                        self.predictions[row["id"]] = (row["category"], row.get("confidence"))
+                if folder == self.folder:
+                    self.account_status[aid] = {
+                        "status": "waiting",
+                        "error": None,
+                        "loaded": len(rows),
+                        "truncated": False,
+                        "last_sync": saved_at,
+                    }
+            self._touch()
+
+    def _save_cache(self, aid, folder, reader):
+        try:
+            with self.lock:
+                rows = [dict(v) for v in self.messages.values() if v["account_id"] == aid]
+                current = folder == self.folder
+            if current:
+                self.cache.save_rows(aid, folder, rows)
+            if hasattr(reader, "export_state"):
+                self.cache.save_reader(aid, reader.export_state())
+        except Exception as e:  # noqa: BLE001 - the cache is an accelerator; mail stays usable without it
+            log.warning("list cache not saved (%s)", type(e).__name__)
 
     def _poll(self):
         while not self.stop.wait(60):
@@ -250,6 +294,11 @@ class Workbench:
                 reader = self.readers.get(aid)
                 if reader is None:
                     reader = self.reader_factory(account)
+                    if hasattr(reader, "restore_state"):
+                        try:
+                            reader.restore_state(self.cache.load_reader(aid))
+                        except Exception as e:  # noqa: BLE001 - unusable saved state: read cold
+                            log.warning("saved list state not used (%s)", type(e).__name__)
                     self.readers[aid] = reader
                 kwargs = {} if folder == "inbox" else {"folder": folder}
                 if getattr(reader, "progressive", False):
@@ -275,6 +324,7 @@ class Workbench:
                     self.bodies.pop(key, None)
                 self.messages = {k: v for k, v in self.messages.items() if v["account_id"] != aid}
                 self.messages.update(incoming)
+                self.synced.setdefault(aid, threading.Event()).set()
                 self.account_status[aid].update(
                     status="classifying",
                     loaded=len(incoming),
@@ -284,6 +334,8 @@ class Workbench:
                 self._touch()
             saved = self.state.read(list(incoming))
             self._read_ahead(aid, account, reader, reader_lock, records, saved, folder, epoch)
+            with reader_lock:
+                self._save_cache(aid, folder, reader)
             with self.lock:
                 self.account_status[aid].update(
                     status="ready" if self.accounts.get(aid)["enabled"] else "paused", error=None
@@ -456,6 +508,12 @@ class Workbench:
             cached = self.bodies.get(key)
             reader = self.readers.get(item["account_id"])
             reader_lock = self.reader_locks.get(item["account_id"])
+        if cached is None and reader is None:
+            # A row restored from the disk cache: wait for this account's first list of the process.
+            with self.lock:
+                first = self.synced.setdefault(item["account_id"], threading.Event())
+            if first.wait(PREVIEW_WAIT):
+                return self.detail(key)
         if cached is None:
             if reader is None or reader_lock is None:
                 raise ProviderError("This account is offline. Refresh and try again.")

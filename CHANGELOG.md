@@ -7,6 +7,14 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop list cache
+
+- Cache each folder's loaded list on disk (`workbench/cache.sqlite`, mode 0600: subject, sender, date,
+  read/star state, category and IDs; Gmail header metadata and history cursor; never bodies or snippets).
+  A restart shows the last list at once, keeps local model categories, and Gmail re-reads only what its
+  history says changed instead of ~2,000 quota units per folder. docs/privacy.md is updated: this replaces
+  the earlier "no mail-content disk cache" statement for list fields.
+
 ### Desktop loading speed
 
 - Budget Gmail reads in quota units the way Gmail meters them (6,000 per user per minute, shared with the

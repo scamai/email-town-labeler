@@ -143,13 +143,15 @@ The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, s
 the **local browser's memory**. The process retains at most 128 previews (including the newest 10 per Microsoft/IMAP account read ahead), each with at most 256 KiB of body
 text plus up to 50 image references. Image blobs are released when switching messages or losing the session.
 External images load directly in the browser without a referrer or the workbench bearer token; the remote
-host sees the browser's IP and image URL, and its own cookie/cache policies apply. There is no
-general mail-content disk cache, telemetry or remote classification. Drafts saved explicitly or before
+host sees the browser's IP and image URL, and its own cookie/cache policies apply. Bodies are never
+written to disk. The list is: `cache.sqlite` keeps subject, sender, date, read/star state, category and IDs of
+each folder's loaded window (plus Gmail header metadata and history cursor) so a restart shows mail at once and
+Gmail re-reads only what changed. Delete it to clear it. There is no telemetry or remote classification. Drafts saved explicitly or before
 sending persist locally, including attachment bytes, without additional application-level encryption. OS swap, browser extensions
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, completion and revisions. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, completion and revisions, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 
