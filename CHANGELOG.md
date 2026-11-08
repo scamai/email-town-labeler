@@ -7,6 +7,8 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-08
+
 ### Desktop default model
 
 - With no `config.toml` (a fresh desktop app) the workbench classifies with the published on-device model
@@ -332,6 +334,7 @@ First public version.
   after setup.
 - Not on PyPI yet: install from GitHub. The PyPI publish job is off until the name is decided.
 
-[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0

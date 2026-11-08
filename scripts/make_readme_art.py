@@ -218,8 +218,25 @@ def chip_file(cls: str) -> str:
     )
 
 
+def download_button() -> str:
+    """The README's "Download for Mac" button (one file: a filled button reads in light and dark mode).
+
+    Colors are the desktop app's accent (web/style.css --accent); the arrow is drawn, not a glyph.
+    """
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="232" height="52" viewBox="0 0 232 52" role="img" aria-label="Download Email Town for Mac" font-family="{FONT}">
+<title>Download Email Town for Mac</title>
+<defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f7be0"/><stop offset="1" stop-color="#175fc1"/></linearGradient></defs>
+<rect x="0.5" y="0.5" width="231" height="51" rx="12" fill="url(#fill)" stroke="#0b2f63" stroke-opacity="0.35"/>
+<path d="M36 16v14M30 24.5l6 6 6-6M27 33.5v1a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="56" y="32.5" font-size="18" font-weight="700" fill="#ffffff">Download for Mac</text>
+</svg>
+'''
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / "download-mac.svg").write_text(download_button(), encoding="utf-8")
+    print("wrote docs/assets/download-mac.svg")
     for cls in DEFAULT_LABEL_COLORS:
         (OUT / f"chip-{cls.replace('_', '-')}.svg").write_text(chip_file(cls), encoding="utf-8")
         print(f"wrote docs/assets/chip-{cls.replace('_', '-')}.svg")
