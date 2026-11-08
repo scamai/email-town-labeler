@@ -59,7 +59,23 @@ def fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:24]
 
 
+# Gmail meters 6,000 quota units per user per minute, shared with the CLI service; a list row
+# (metadata) costs 20 and a body (full) 60. The CLI paces messages evenly (240 metadata a minute),
+# which made a cold 100-row list wait about 12.5 s for its second batch. A person at the screen is
+# better served by spending the minute's budget at once: 100 rows (2,000 units) arrive in a few
+# round trips, and only a fourth cold folder in the same minute waits for refill. 1,200 units a
+# minute stay free for the CLI service.
+GMAIL_BATCH = 25
+GMAIL_UNITS_PER_MINUTE = 4800
+GMAIL_RETRIES = 4
+
+
 class GmailReader:
+    # list() reports rows batch by batch, so a cold list shows its newest rows within a second.
+    progressive = True
+    # No read-ahead: a body costs 60 of the 6,000 units a minute, and opening one takes ~0.1 s anyway.
+    read_ahead = 0
+
     def __init__(self, settings: dict):
         import httplib2
         from google.auth.transport.requests import Request as GoogleRequest
@@ -88,11 +104,18 @@ class GmailReader:
         )
         self.credentials, self.token_path = credentials, paths.token
         self.scopes = set(credentials.granted_scopes or credentials.scopes or [])
-        self.client = GmailClient(service, max_retries=2, transport_retries=1)
+        self.client = GmailClient(
+            service,
+            max_retries=GMAIL_RETRIES,
+            transport_retries=1,
+            units_per_minute=GMAIL_UNITS_PER_MINUTE,
+            batch_size=GMAIL_BATCH,
+        )
         self.cfg = load_config(paths.config_file)
         self.address = self.client.profile()["emailAddress"]
         self.identity = fingerprint(self.address.casefold())
         self.cache: dict[str, dict] = {}
+        self.folder_ids: dict[str, list[str]] = {}
         self.history_id = None
 
     def capabilities(self):
@@ -108,7 +131,7 @@ class GmailReader:
             "reason": "" if write and send else "Reconnect and grant permission to send and manage mail",
         }
 
-    def list(self, limit: int, folder="inbox") -> tuple[list[dict], bool]:
+    def list(self, limit: int, folder="inbox", progress=None) -> tuple[list[dict], bool]:
         if folder not in FOLDERS:
             raise ProviderError("Unsupported folder")
         args = (
@@ -120,29 +143,37 @@ class GmailReader:
             args["include_spam_trash"] = True
         ids = self.client.list_message_ids(**args, max_results=limit + 1)
         chosen = ids[:limit]
-        dirty = set(chosen) - self.cache.keys()
         cursor = self.client.profile()["historyId"]
         if self.history_id:
             try:
                 events, cursor = self.client.history(self.history_id)
-                dirty.update(e.message_id for e in events if e.message_id in chosen)
+                # History is mailbox-wide, so this also keeps the other folders' rows current.
+                for event in events:
+                    self.cache.pop(event.message_id, None)
             except Exception:  # noqa: BLE001 - stale/failed cursor requires a complete metadata refresh
                 # No cursor advance on a failed fetch: re-read current metadata before retrying.
-                dirty.update(chosen)
+                self.cache.clear()
         labels = self.client.list_labels()
         expected = {f"{self.cfg.label_prefix}/{v}".casefold(): k for k, v in self.cfg.display_names().items()}
         classes = {
             lb["id"]: expected[lb["name"].casefold()] for lb in labels if lb["name"].casefold() in expected
         }
-        if dirty:
+        dirty = [mid for mid in chosen if mid not in self.cache]
+        for start in range(0, len(dirty), GMAIL_BATCH):
             records = self.client.get_metadata(
-                [mid for mid in chosen if mid in dirty], ["Subject", "From", "Date"]
+                dirty[start : start + GMAIL_BATCH], ["Subject", "From", "Date"]
             )
-            for mid in dirty:
-                self.cache.pop(mid, None)
             self.cache.update({r["id"]: r for r in records})
+            if progress and start + GMAIL_BATCH < len(dirty):
+                progress(self._rows(chosen, classes))
         self.history_id = cursor
-        self.cache = {mid: r for mid, r in self.cache.items() if mid in chosen}
+        # Keep every folder's last window, so switching back re-reads only what history changed.
+        self.folder_ids[folder] = chosen
+        keep = {mid for window in self.folder_ids.values() for mid in window}
+        self.cache = {mid: r for mid, r in self.cache.items() if mid in keep}
+        return self._rows(chosen, classes), len(ids) > limit
+
+    def _rows(self, chosen: list[str], classes: dict[str, str]) -> list[dict]:
         out = []
         for mid in chosen:
             rec = self.cache.get(mid)
@@ -151,17 +182,31 @@ class GmailReader:
             matching = {classes[x] for x in rec.get("label_ids", []) if x in classes}
             category = next((c for c in LABEL_CLASSES if c in matching), None)
             out.append({**rec, "provider_id": f"{self.identity}:{mid}", "category": category})
-        return out, len(ids) > limit
+        return out
 
     def detail(self, provider_id: str) -> dict:
         identity, mid = provider_id.split(":", 1)
         if identity != self.identity or mid not in self.cache:
             raise ProviderError("Message is no longer in the current list. Refresh")
-        rows = self.client.get_records([mid], include_html=True)
-        if not rows:
+        found = self.details([provider_id])
+        if provider_id not in found:
             raise ProviderError("Message was moved or deleted. Refresh")
+        return found[provider_id]
+
+    def details(self, provider_ids: list[str]) -> dict[str, dict]:
+        """Full messages in batched requests; ids that left the list or were deleted are omitted."""
+        wanted = {}
+        for provider_id in provider_ids:
+            identity, mid = provider_id.split(":", 1)
+            if identity == self.identity and mid in self.cache:
+                wanted[mid] = provider_id
+        rows = self.client.get_records(list(wanted), include_html=True) if wanted else []
+        return {wanted[row["id"]]: self._detail(row) for row in rows if row["id"] in wanted}
+
+    def _detail(self, row: dict) -> dict:
+        mid = row["id"]
         return {
-            **rows[0],
+            **row,
             "attachments": [
                 {
                     "id": a.get("id", ""),
@@ -170,7 +215,7 @@ class GmailReader:
                     "size": a.get("size", 0),
                     "content_id": a.get("content_id", ""),
                 }
-                for a in rows[0].get("attachments", [])
+                for a in row.get("attachments", [])
                 if a.get("id")
             ],
             "url": safe_link(
@@ -720,6 +765,29 @@ class ImapReader:
         }
 
     @staticmethod
+    def fetch_headers(conn, uids: list[bytes]) -> dict[bytes, tuple[bytes, bytes]]:
+        """Headers, flags and receipt time of many UIDs in one round trip per 200 UIDs."""
+        found = {}
+        for start in range(0, len(uids), 200):
+            status, data = conn.uid(
+                "fetch",
+                b",".join(uids[start : start + 200]),
+                "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])",
+            )
+            if status != "OK":
+                raise ProviderError("IMAP message list read failed")
+            for index, entry in enumerate(data or []):
+                if not isinstance(entry, tuple) or len(entry) < 2:
+                    continue
+                # Attributes after the header literal arrive as the following bytes element.
+                trailing = data[index + 1] if index + 1 < len(data) else b""
+                meta = entry[0] + (trailing if isinstance(trailing, bytes) else b"")
+                match = re.search(rb"\bUID (\d+)", meta)
+                if match:
+                    found[match[1]] = (meta, entry[1])
+        return found
+
+    @staticmethod
     def fetch(conn, uid: bytes, headers_only: bool):
         field = "BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)]" if headers_only else "BODY.PEEK[]<0.28311553>"
         status, data = conn.uid("fetch", uid, f"(UID FLAGS INTERNALDATE {field})")
@@ -741,16 +809,15 @@ class ImapReader:
                 raise ProviderError("IMAP message list read failed")
             ids = (response[0] or b"").split()
             chosen = list(reversed(ids[-limit:]))
-            result = []
-            for uid in chosen:
-                item = self.fetch(conn, uid, True)
-                if item:
-                    result.append(
-                        {
-                            **self.parse(item[1], uid.decode(), item[0]),
-                            "provider_id": f"{validity}:{uid.decode()}",
-                        }
-                    )
+            headers = self.fetch_headers(conn, chosen)
+            result = [
+                {
+                    **self.parse(headers[uid][1], uid.decode(), headers[uid][0]),
+                    "provider_id": f"{validity}:{uid.decode()}",
+                }
+                for uid in chosen
+                if uid in headers
+            ]
             self.validity, self.ids = validity, {u.decode() for u in chosen}
             return result, len(ids) > limit
         finally:
@@ -771,6 +838,31 @@ class ImapReader:
             if not item:
                 raise ProviderError("Message was moved or deleted. Refresh")
             return self.parse(item[1], uid, item[0])
+        finally:
+            try:
+                conn.logout()
+            except (OSError, imaplib.IMAP4.error):
+                pass  # Retrieval has finished; a disconnected logout must not discard its result.
+
+    def details(self, provider_ids: list[str]) -> dict[str, dict]:
+        """Full messages over one connection instead of one login per message."""
+        wanted = []
+        for provider_id in provider_ids:
+            validity, uid = provider_id.split(":", 1)
+            if validity == self.validity and uid in self.ids and uid.isdigit():
+                wanted.append((provider_id, uid))
+        if not wanted:
+            return {}
+        conn, current = self.connect()
+        try:
+            if current != self.validity:
+                raise ProviderError("The mailbox was rebuilt. Refresh and try again")
+            found = {}
+            for provider_id, uid in wanted:
+                item = self.fetch(conn, uid.encode(), False)
+                if item:
+                    found[provider_id] = self.parse(item[1], uid, item[0])
+            return found
         finally:
             try:
                 conn.logout()

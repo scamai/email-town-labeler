@@ -14,7 +14,7 @@ def test_gmail_metadata_history_and_full_detail_are_read_only():
     reader = p.GmailReader.__new__(p.GmailReader)
     reader.client, reader.cfg = client, Config()
     reader.address, reader.identity = "fixture@example.test", "identity"
-    reader.cache, reader.history_id = {}, None
+    reader.cache, reader.history_id, reader.folder_ids = {}, None, {}
     mid = client.add_message()
     name = f"{reader.cfg.label_prefix}/{reader.cfg.display_names()['orders']}"
     client.labels["orders-id"] = {"id": "orders-id", "name": name}
@@ -101,12 +101,17 @@ class FakeIMAP:
         if args[0] == "search":
             return "OK", [b"1 2"]
         assert "BODY.PEEK" in args[2] and "INTERNALDATE" in args[2]
-        return "OK", [
-            (
-                b'1 (FLAGS () INTERNALDATE "30-Oct-2026 12:00:00 +0000")',
-                b"Subject: Fixture\r\nFrom: sender@example.test\r\nDate: Thu, 1 Jan 1970 00:00:00 +0000\r\n\r\nhello",
-            )
-        ]
+        data = []
+        for seq, uid in enumerate(args[1].split(b","), 1):
+            # A real UID FETCH always reports UID; FLAGS may follow the literal.
+            data += [
+                (
+                    b'%d (UID %s INTERNALDATE "30-Oct-2026 12:00:00 +0000" BODY[] {99}' % (seq, uid),
+                    b"Subject: Fixture\r\nFrom: sender@example.test\r\nDate: Thu, 1 Jan 1970 00:00:00 +0000\r\n\r\nhello",
+                ),
+                b" FLAGS (\\Seen))" if uid == b"1" else b" FLAGS ())",
+            ]
+        return "OK", data
 
     def logout(self):
         self.calls.append(("logout",))
@@ -149,3 +154,89 @@ def test_microsoft_null_sender_is_a_valid_list_row():
         {"id": "fixture", "receivedDateTime": "2026-10-30T12:00:00Z", "from": None}
     )
     assert row["headers"]["from"] == ""
+
+
+def test_imap_list_reads_every_header_in_one_round_trip_and_bodies_on_one_login(monkeypatch):
+    reader = p.ImapReader({"id": "a", "settings": {}})
+    conn = FakeIMAP()
+    logins = []
+    monkeypatch.setattr(reader, "connect", lambda: (logins.append(1), (conn, conn.validity))[1])
+    rows, truncated = reader.list(10)
+    fetches = [c for c in conn.calls if c[0] == "fetch"]
+    assert len(fetches) == 1 and fetches[0][1] == b"2,1" and not truncated
+    unread = {row["provider_id"]: "UNREAD" in row["label_ids"] for row in rows}
+    assert unread == {"7:2": True, "7:1": False}  # FLAGS after the header literal are honoured
+    logins.clear()
+    found = reader.details(["7:2", "7:1", "7:99", "8:1"])
+    assert set(found) == {"7:2", "7:1"} and len(logins) == 1
+
+
+def test_gmail_cache_survives_folder_switch_and_history_rereads_only_changes():
+    client = FakeGmailClient()
+    reader = p.GmailReader.__new__(p.GmailReader)
+    reader.client, reader.cfg = client, Config()
+    reader.address, reader.identity = "fixture@example.test", "identity"
+    reader.cache, reader.history_id, reader.folder_ids = {}, None, {}
+    inbox = client.add_message()
+    sent = client.add_message(labels=("SENT",))
+
+    def metadata_reads():
+        return [call[1][0] for call in client.calls if call[0] == "get_metadata"]
+
+    reader.list(10)
+    reader.list(10, folder="sent")
+    reader.list(10)
+    assert metadata_reads() == [(inbox,), (sent,)]  # returning to Inbox re-read nothing
+    client.labels["star"] = {"id": "star", "name": "Starred"}
+    client.user_add_label(sent, "star")
+    reader.list(10)
+    rows, _ = reader.list(10, folder="sent")
+    assert metadata_reads()[-1] == (sent,) and "star" in rows[0]["label_ids"]
+    found = reader.details([f"identity:{inbox}", f"identity:{sent}", "identity:gone", "other:x"])
+    assert set(found) == {f"identity:{inbox}", f"identity:{sent}"}
+    assert [c[0] for c in client.calls].count("get_records") == 1
+
+
+def test_gmail_reader_uses_interactive_pacing_not_the_background_service_pace(monkeypatch, tmp_path):
+    from email_town_labeler.config import Paths
+
+    paths = Paths.default(tmp_path).ensure()
+    paths.token.write_text(
+        '{"token": "t", "refresh_token": "r", "client_id": "c", "client_secret": "s",'
+        ' "expiry": "2099-01-01T00:00:00Z", "scopes": ["https://www.googleapis.com/auth/gmail.modify"]}'
+    )
+    seen = {}
+
+    class Client:
+        def __init__(self, service, **kwargs):
+            seen.update(kwargs)
+
+        def profile(self):
+            return {"emailAddress": "fixture@example.test"}
+
+    monkeypatch.setattr(p, "GmailClient", Client)
+    reader = p.GmailReader({"config_dir": str(paths.config_dir), "data_dir": str(paths.data_dir)})
+    assert reader.read_ahead == 0  # bodies cost 60 units each; Gmail opens are fast enough without
+    assert seen["batch_size"] == p.GMAIL_BATCH
+    assert seen["max_retries"] == p.GMAIL_RETRIES >= 4  # a throttled batch must not fail the sync
+    # A cold 100-row list (20 units a row) fits in the burst; the CLI service keeps a fifth of 6,000.
+    assert 100 * 20 <= seen["units_per_minute"] <= 6000 * 0.8
+
+
+def test_gmail_cold_list_reports_rows_batch_by_batch():
+    client = FakeGmailClient()
+    reader = p.GmailReader.__new__(p.GmailReader)
+    reader.client, reader.cfg = client, Config()
+    reader.address, reader.identity = "fixture@example.test", "identity"
+    reader.cache, reader.history_id, reader.folder_ids = {}, None, {}
+    batch = p.GMAIL_BATCH
+    total = 2 * batch + batch // 2
+    newest_first = [client.add_message(age_days=total - i) for i in range(total)][::-1]
+    seen = []
+    rows, _ = reader.list(total, progress=lambda partial: seen.append([r["id"] for r in partial]))
+    # Newest rows first, one update per completed batch, never a duplicate of the final list.
+    assert seen == [newest_first[:batch], newest_first[: 2 * batch]]
+    assert [r["id"] for r in rows] == newest_first
+    seen.clear()
+    reader.list(total, progress=seen.append)
+    assert seen == []  # nothing to read: no partial updates

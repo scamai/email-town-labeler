@@ -73,7 +73,7 @@ draft and are never retried automatically. Gmail/SMTP sends are limited to 20 Mi
 downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding includes body only; attachments
 must be re-added explicitly.
 
-Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model.
+Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
 Local overrides take precedence and are independent of completion. They currently neither write back to the
 provider nor train the existing CLI feedback model. Images referenced by the HTML body appear below the
 plaintext body; the sender's HTML layout, scripts and styles are never rendered. CID-linked PNG, JPEG,
@@ -87,7 +87,9 @@ explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox 
 workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox.
 These changes synchronize to other clients using the same mailbox. Local category/completion changes
 stay on this device. Selecting all results selects only loaded, filtered messages, not the whole mailbox.
-Synchronization runs every 60 seconds, UI polling every 5 seconds. Failure in one account retains its last
+Synchronization runs every 60 seconds. The UI holds one request open (up to 10 seconds) and updates as soon as
+local state changes. A cold Gmail list shows rows in batches of 25 while the rest load; returning to a folder shows
+its last list at once and then revalidates it. The newest 10 bodies per Microsoft/IMAP account are read ahead so they open instantly. Failure in one account retains its last
 list with an error and leaves others usable. Completion survives restart; undo tokens live only in the current process.
 
 The top bar holds **Compose** and **Drafts**. The list shows sender/time, subject, then category/account.
@@ -138,7 +140,7 @@ the app. This remains a local launcher, not a signed App Store application.
 ## Privacy
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
-the **local browser's memory**. The process retains at most 64 previews, each with at most 256 KiB of body
+the **local browser's memory**. The process retains at most 128 previews (including the newest 10 per Microsoft/IMAP account read ahead), each with at most 256 KiB of body
 text plus up to 50 image references. Image blobs are released when switching messages or losing the session.
 External images load directly in the browser without a referrer or the workbench bearer token; the remote
 host sees the browser's IP and image URL, and its own cookie/cache policies apply. There is no

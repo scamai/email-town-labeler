@@ -40,7 +40,7 @@ def test_gmail_preview_retains_html_and_unnamed_cid_without_changing_classifier_
     reader = GmailReader.__new__(GmailReader)
     reader.client, reader.cfg = client, Config()
     reader.address, reader.identity = "owner@example.com", "fixture"
-    reader.cache, reader.history_id = {}, None
+    reader.cache, reader.history_id, reader.folder_ids = {}, None, {}
     rows, _ = reader.list(10)
     detail = reader.detail(rows[0]["provider_id"])
     assert "cid:photo" in detail["body_html"]

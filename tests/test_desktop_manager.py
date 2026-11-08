@@ -1,10 +1,11 @@
 import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from email_town_labeler.config import Paths
-from email_town_labeler.desktop.manager import Workbench
+from email_town_labeler.desktop.manager import BODY_CACHE, Workbench
 from email_town_labeler.desktop.state import message_key
 from email_town_labeler.models.base import ModelManifest
 from email_town_labeler.types import Prediction
@@ -73,8 +74,11 @@ def test_mailbox_category_skips_detail_and_model_and_local_actions_are_reversibl
     readers[first] = FakeReader([_record("mailbox", category="travel")])
     readers[second] = FakeReader([_record("unknown", category=None)])
     workbench._refresh()
-    assert readers[first].detail_calls == 0
     key = message_key(first, "mailbox")
+    # The body is read ahead for display only; a mailbox label never goes to the model.
+    row = next(item for item in workbench.snapshot()["messages"] if item["id"] == key)
+    assert (row["category"], row["source"]) == ("travel", "mailbox")
+    assert readers[first].detail_calls == 1 and key in workbench.bodies
     workbench.action({"ids": [key], "action": "category", "category": "orders"})
     row = next(item for item in workbench.snapshot()["messages"] if item["id"] == key)
     assert row["category"] == "orders" and row["source"] == "manual"
@@ -133,9 +137,9 @@ def test_two_unlabeled_accounts_share_one_model_and_body_cache_is_bounded(tmp_pa
     readers[second] = FakeReader([_record("two", category=None)])
     workbench._refresh()
     assert model.calls == 2
-    for index in range(70):
+    for index in range(BODY_CACHE + 6):
         workbench._cache_body(f"key-{index}", {"body_text": "x"})
-    assert len(workbench.bodies) == 64
+    assert len(workbench.bodies) == BODY_CACHE
     workbench.close()
 
 
@@ -143,16 +147,20 @@ def test_detail_does_not_return_stale_row_removed_during_provider_read(tmp_path)
     workbench, readers, first, _ = _workbench(tmp_path)
     started = threading.Event()
     release = threading.Event()
+    armed = threading.Event()
 
     class BlockingReader(FakeReader):
         def detail(self, provider_id):
-            started.set()
-            release.wait(2)
+            if armed.is_set():
+                started.set()
+                release.wait(2)
             return super().detail(provider_id)
 
     readers[first] = BlockingReader([_record("blocked")])
     workbench._refresh()
     key = message_key(first, "blocked")
+    workbench.bodies.clear()  # drop the read-ahead copy so the preview has to ask the provider
+    armed.set()
     thread_result = {}
 
     def load():
@@ -181,6 +189,176 @@ def test_action_rejects_unloaded_ids_and_oversized_batches(tmp_path):
     with pytest.raises(ValueError, match="1–500"):
         workbench.action({"ids": [message_key(first, "one")] * 501, "action": "done"})
     workbench.close()
+
+
+class BatchReader(FakeReader):
+    """Records how bodies are requested; accepts a folder like the real readers."""
+
+    def __init__(self, records, folders=None):
+        super().__init__(records)
+        self.folders = folders or {}
+        self.batches = []
+
+    def list(self, limit, folder="inbox"):
+        records = self.folders.get(folder, self.records)
+        return records[:limit], len(records) > limit
+
+    def details(self, provider_ids):
+        self.batches.append(list(provider_ids))
+        return {pid: {"body_text": "body " + pid} for pid in provider_ids}
+
+
+def test_read_ahead_batches_bodies_and_model_calls(tmp_path):
+    from email_town_labeler.desktop.manager import BODY_CHUNK, PREFETCH
+
+    workbench, readers, first, second = _workbench(tmp_path)
+    model = CountingModel()
+    workbench.model = model
+    labelled = [_record(f"l{i}") for i in range(PREFETCH + 5)]
+    unlabelled = [_record(f"u{i}", category=None) for i in range(BODY_CHUNK + 2)]
+    readers[first] = BatchReader(labelled + unlabelled)
+    readers[second] = BatchReader([])
+    workbench._refresh()
+    fetched = [pid for batch in readers[first].batches for pid in batch]
+    # Newest PREFETCH bodies for display plus every unlabelled one for the model, nothing else.
+    assert fetched == [r["provider_id"] for r in labelled[:PREFETCH] + unlabelled]
+    assert all(len(batch) <= BODY_CHUNK for batch in readers[first].batches)
+    assert model.calls == 2  # one model call per chunk that holds unlabelled mail
+    rows = {row["id"]: row for row in workbench.snapshot()["messages"]}
+    assert all(rows[message_key(first, r["provider_id"])]["source"] == "model" for r in unlabelled)
+    readers[first].detail_calls = 0
+    assert workbench.detail(message_key(first, "l0"))["body"] == "body l0"
+    assert readers[first].detail_calls == 0  # opened from the read-ahead copy
+    workbench.close()
+
+
+def test_preview_waits_for_a_busy_account_instead_of_failing(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    readers[first] = FakeReader([_record("one")])
+    readers[second] = FakeReader([])
+    workbench._refresh()
+    key = message_key(first, "one")
+    workbench.bodies.clear()
+    held = threading.Event()
+
+    def busy():  # a list read longer than the old 1 s preview timeout
+        with workbench.reader_locks[first]:
+            held.set()
+            time.sleep(1.5)
+
+    threading.Thread(target=busy).start()
+    assert held.wait(2)
+    assert workbench.detail(key)["body"] == "private body"
+    workbench.close()
+
+
+def test_folder_switch_shows_the_last_list_while_it_revalidates(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    gate = threading.Event()
+
+    class SlowInbox(BatchReader):
+        def list(self, limit, folder="inbox"):
+            if folder == "inbox" and self.batches:
+                gate.wait(2)
+            return super().list(limit, folder)
+
+    readers[first] = SlowInbox([_record("in")], {"sent": [_record("out")]})
+    readers[second] = BatchReader([])
+    workbench._refresh()
+    workbench.change_folder("sent")
+    deadline = time.monotonic() + 2
+    while workbench.snapshot()["refreshing"] and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert [r["id"] for r in workbench.snapshot()["messages"]] == [message_key(first, "out")]
+    workbench.change_folder("inbox")
+    # The revalidating read is still blocked, yet the Inbox rows are already there.
+    assert [r["id"] for r in workbench.snapshot()["messages"]] == [message_key(first, "in")]
+    gate.set()
+    workbench.close()
+
+
+def test_state_long_poll_answers_on_change_and_times_out_unchanged(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    readers[first] = FakeReader([_record("one")])
+    readers[second] = FakeReader([])
+    workbench._refresh()
+    etag = workbench.snapshot()["etag"]
+    assert workbench.wait_snapshot("stale")["etag"] == etag  # differs: immediate full answer
+    started = time.monotonic()
+    assert workbench.wait_snapshot(etag, timeout=0.3) == {
+        "unchanged": True,
+        "etag": etag,
+        "seq": workbench.seq,
+    }
+    assert time.monotonic() - started >= 0.3
+    key = message_key(first, "one")
+    threading.Timer(0.2, lambda: workbench.action({"ids": [key], "action": "done"})).start()
+    started = time.monotonic()
+    changed = workbench.wait_snapshot(etag, timeout=5)
+    assert changed["etag"] != etag and changed["messages"][0]["done"]
+    assert time.monotonic() - started < 1.5
+    workbench.close()
+
+
+def test_progressive_reader_rows_show_before_the_list_finishes(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    gate, partial_shown = threading.Event(), threading.Event()
+
+    class Progressive(BatchReader):
+        progressive = True
+
+        def list(self, limit, folder="inbox", progress=None):
+            progress(self.records[:1])
+            partial_shown.set()
+            gate.wait(2)
+            return self.records[:limit], False
+
+    readers[first] = Progressive([_record("newest"), _record("older")])
+    readers[second] = BatchReader([])
+    workbench.refresh()
+    assert partial_shown.wait(2)
+    assert [r["id"] for r in workbench.snapshot()["messages"]] == [message_key(first, "newest")]
+    gate.set()
+    deadline = time.monotonic() + 2
+    while len(workbench.snapshot()["messages"]) < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert len(workbench.snapshot()["messages"]) == 2
+    workbench.close()
+
+
+def test_reader_without_read_ahead_fetches_only_bodies_the_model_needs(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    workbench.model = CountingModel()
+
+    class QuotaReader(BatchReader):
+        read_ahead = 0  # like Gmail: a body costs quota and opening one is fast
+
+    readers[first] = QuotaReader([_record("labelled"), _record("unlabelled", category=None)])
+    readers[second] = BatchReader([])
+    workbench._refresh()
+    assert readers[first].batches == [["unlabelled"]]
+    workbench.close()
+
+
+def test_sent_mail_is_not_sent_to_the_model(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    model = CountingModel()
+    workbench.model = model
+    mine = [_record(f"s{i}", category=None) for i in range(3)]
+    readers[first] = BatchReader([], {"sent": mine})
+    readers[second] = BatchReader([])
+    workbench._refresh()
+    readers[first].batches.clear()
+    workbench.change_folder("sent")
+    deadline = time.monotonic() + 2
+    while (
+        workbench.snapshot()["refreshing"] or not workbench.snapshot()["messages"]
+    ) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    rows = workbench.snapshot()["messages"]
+    assert {(r["source"], r["category"]) for r in rows} == {("none", "unknown")} and len(rows) == 3
+    # Only the read-ahead for display; no body is read for, and nothing goes to, the model.
+    assert model.calls == 0
 
 
 def test_generated_default_account_name_shows_mailbox_address(tmp_path):

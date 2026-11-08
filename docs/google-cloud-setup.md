@@ -182,7 +182,7 @@ Costs of the calls email-town-labeler makes:
 | `history.list` | 2 | every poll (default every 60 s), per page |
 | `messages.get` (`format=full`) | 60 | once per new message to classify |
 | `messages.get` (`format=minimal`) | 20 | label checks (feedback, undo) |
-| `messages.get` (`format=metadata`) | see Google's table | To/Cc/Bcc of sent mail for contacts: once at setup (at most `contacts_scan_limit`, default 5,000), then per message you send; paced at 240 a minute |
+| `messages.get` (`format=metadata`) | 20 (the base cost; Google lists 60 only for `full`, `raw` and `html`) | To/Cc/Bcc of sent mail for contacts: once at setup (at most `contacts_scan_limit`, default 5,000), then per message you send; paced at 240 a minute. Desktop workbench list rows |
 | `messages.list` | 5 | backfill and history-expired recovery, per page |
 | `messages.modify` | 5 | once per labeled message |
 | `labels.list` / `labels.create` | 1 / 5 | startup / first use of a label |
@@ -193,6 +193,9 @@ What that means:
 - **Steady state is far below the limit.** An idle poll costs 2 units a minute. A message
   costs about 65 units (fetch + label). The per-user limit allows roughly 90 new messages a
   minute before email-town-labeler has to back off.
+- **The desktop workbench spends at most 4,800 units a minute** and may spend them at once: a
+  cold 100-row folder is about 2,000 units, a body 60. The remaining 1,200 a minute stay with the
+  CLI service; both share the one per-user limit, so a backfill running at the same time slows both.
 - **Backfill is quota-bound at roughly 90 messages a minute (about 5,000 an hour).**
   Batching requests saves HTTP round trips but not quota units. email-town-labeler retries
   `429` / `rateLimitExceeded` / `userRateLimitExceeded` with exponential backoff, so a large

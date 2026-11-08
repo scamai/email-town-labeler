@@ -232,17 +232,17 @@ def main() -> int:
                     def fixture_state(route, request, snapshot=snapshot):
                         route.fulfill(json=snapshot)
 
-                    page.route("**/api/state", fixture_state)
+                    page.route("**/api/state*", fixture_state)
                     page.reload()
                     expect(page.locator(selector)).to_be_visible()
                     assert_no_overflow(page, name)
                     page.screenshot(path=str(out / f"{theme}-320-{name}.png"))
-                    page.unroute("**/api/state", fixture_state)
+                    page.unroute("**/api/state*", fixture_state)
 
                 def expired_session(route):
                     route.fulfill(status=401, json={"error": "fixture session expired"})
 
-                page.route("**/api/state", expired_session)
+                page.route("**/api/state*", expired_session)
                 page.reload()
                 expect(page.locator("#restartButton")).to_be_visible()
                 expect(page.locator(".error-state h3")).to_have_text("Session expired")
