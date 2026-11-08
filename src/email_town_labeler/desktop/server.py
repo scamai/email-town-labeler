@@ -115,6 +115,7 @@ class Handler(BaseHTTPRequestHandler):
             "/images.js": ("images.js", "text/javascript; charset=utf-8"),
             "/shortcuts.js": ("shortcuts.js", "text/javascript; charset=utf-8"),
             "/selection.js": ("selection.js", "text/javascript; charset=utf-8"),
+            "/rowactions.js": ("rowactions.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
             "/logo.svg": ("logo.svg", "image/svg+xml"),
         }

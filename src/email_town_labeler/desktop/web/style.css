@@ -687,6 +687,64 @@ input[type="checkbox"] {
 .row-check {
   align-self: start;
   margin-top: 4px !important;
+  grid-column: 1;
+  grid-row: 1;
+}
+.message-row > .row-content {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+/* Gmail's row controls: a star under the checkbox; Archive / Trash / read-unread replace the time
+   on hover or keyboard focus, on devices that can hover. */
+.row-star,
+.row-action {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+.row-star {
+  grid-column: 1;
+  grid-row: 2;
+  margin-left: -6px;
+}
+.row-star svg,
+.row-action svg {
+  width: 18px;
+  height: 18px;
+}
+.row-star.is-starred {
+  color: #e0a100;
+}
+.row-star:hover,
+.row-action:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.row-star:focus-visible,
+.row-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.row-actions {
+  display: none;
+  gap: 4px;
+  margin: -4px 0;
+}
+@media (hover: hover) {
+  .message-row:hover .row-actions,
+  .message-row:focus-within .row-actions {
+    display: inline-flex;
+  }
+  .message-row:hover .row-title time,
+  .message-row:focus-within .row-title time {
+    display: none;
+  }
 }
 .row-content {
   min-width: 0;

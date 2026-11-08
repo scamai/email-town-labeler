@@ -528,6 +528,12 @@
       button.disabled = local.busy || !allowed(button.dataset.mailAction, ids);
     });
   }
+  function nextAfter(id, leaving) {
+    const ids = (host.filteredMessages?.() || host.state.messages).map((m) => m.id);
+    const at = ids.indexOf(id);
+    const stays = (other) => !leaving.includes(other);
+    return ids.slice(at + 1).find(stays) || ids.slice(0, at).reverse().find(stays) || null;
+  }
   async function mailAction(action, chosen = selectedIds()) {
     if (local.busy || !allowed(action, chosen)) return;
     const names = unique(
@@ -544,6 +550,15 @@
       )
     )
       return;
+    // Gmail's auto-advance: archiving or trashing the open message opens the next (older) one in a
+    // wide layout; a narrow one returns to the list.
+    const active = host.state.activeId;
+    const advance =
+      ["archive", "trash", "restore"].includes(action) &&
+      chosen.includes(active) &&
+      window.innerWidth >= 1200
+        ? nextAfter(active, chosen)
+        : null;
     local.busy = true;
     renderSelection();
     updateControls();
@@ -562,6 +577,8 @@
       if (job.status !== "complete") alert(jobMessage(job));
       local.detailId = null;
       await host.loadState();
+      if (advance && host.state.messages.some((m) => m.id === advance))
+        host.openMessage(advance);
     } catch (error) {
       host.showToast(`${error.message} Refresh the mailbox before retrying.`);
     } finally {
@@ -570,8 +587,15 @@
       updateControls();
     }
   }
+  // A folder chosen while another switch (or a mail action) is still running is not dropped: the
+  // last one chosen is opened when the current work finishes.
   async function changeFolder(folder) {
-    if (local.folderBusy || local.busy) return;
+    if (local.folderBusy || local.busy) {
+      local.pendingFolder = folder;
+      setTimeout(flushFolder, 100);
+      return;
+    }
+    local.pendingFolder = null;
     local.folderBusy = true;
     try {
       await host.api("/api/folder", {
@@ -591,6 +615,17 @@
     } finally {
       local.folderBusy = false;
     }
+    flushFolder();
+  }
+  function flushFolder() {
+    const next = local.pendingFolder;
+    if (!next) return;
+    if (local.folderBusy || local.busy) {
+      setTimeout(flushFolder, 100);
+      return;
+    }
+    local.pendingFolder = null;
+    if (next !== host.state.folder) changeFolder(next);
   }
   function clearDetail() {
     window.EmailTownImages?.clear();
