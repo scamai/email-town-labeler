@@ -174,7 +174,9 @@ def run(root: Path, paths: Paths, webview: Any) -> int:
         window.events.closing += host.stop
         host.on_exit = window.destroy  # `desktop --stop` ended the server: close the window it served
     try:
-        webview.start(private_mode=True, icon=_icon())
+        # macOS: complete pywebview's default menus once the GUI loop runs (func runs on its own thread).
+        mac = sys.platform == "darwin"
+        webview.start(private_mode=True, icon=_icon(), func=_mac_menus if mac else None)
     finally:
         if host is not None:
             host.stop()
@@ -201,6 +203,63 @@ def show_error(webview: Any, message: str, log_path: Path) -> int:
     webview.create_window(TITLE, html=page, width=560, height=280, background_color="#ffffff")
     webview.start(private_mode=True)
     return 1
+
+
+def _mac_menus() -> None:
+    """Add what pywebview's default macOS menus lack: Edit > Undo ⌘Z / Redo ⇧⌘Z, Window > Minimize ⌘M / Zoom.
+
+    Cut, copy, paste, select all, hide and quit come from pywebview. Logs the resulting menus, so a run
+    shows that the items exist (desktop.log: "macOS menus: ...").
+    """
+    try:
+        import AppKit
+        from PyObjCTools import AppHelper
+    except ImportError:
+        return
+    AppHelper.callAfter(complete_mac_menus, AppKit)
+
+
+def complete_mac_menus(appkit: Any) -> str:
+    """Insert the missing items into the running app's main menu (idempotent); return a summary."""
+    app = appkit.NSApplication.sharedApplication()
+    main = app.mainMenu()
+    if main is None:
+        log.warning("macOS menus: no main menu to complete")
+        return ""
+
+    def submenu(title):
+        for i in range(main.numberOfItems()):
+            sub = main.itemAtIndex_(i).submenu()
+            if sub is not None and sub.title() == title:
+                return sub
+        return None
+
+    edit = submenu("Edit")
+    if edit is not None and edit.indexOfItemWithTitle_("Undo") < 0:
+        edit.insertItem_atIndex_(appkit.NSMenuItem.separatorItem(), 0)
+        edit.insertItemWithTitle_action_keyEquivalent_atIndex_("Redo", "redo:", "Z", 0)  # capital Z: ⇧⌘Z
+        edit.insertItemWithTitle_action_keyEquivalent_atIndex_("Undo", "undo:", "z", 0)
+    if submenu("Window") is None:
+        window = appkit.NSMenu.alloc().initWithTitle_("Window")
+        window.addItemWithTitle_action_keyEquivalent_("Minimize", "performMiniaturize:", "m")
+        window.addItemWithTitle_action_keyEquivalent_("Zoom", "performZoom:", "")
+        item = appkit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Window", None, "")
+        item.setSubmenu_(window)
+        main.addItem_(item)
+        app.setWindowsMenu_(window)
+    summary = "; ".join(
+        f"{sub.title()}: "
+        + ", ".join(
+            sub.itemAtIndex_(j).title()
+            + (f" ({sub.itemAtIndex_(j).keyEquivalent()})" if sub.itemAtIndex_(j).keyEquivalent() else "")
+            for j in range(sub.numberOfItems())
+            if sub.itemAtIndex_(j).title()
+        )
+        for i in range(main.numberOfItems())
+        if (sub := main.itemAtIndex_(i).submenu()) is not None and sub.title() in ("Edit", "Window")
+    )
+    log.info("macOS menus: %s", summary)
+    return summary
 
 
 def _icon() -> str | None:
