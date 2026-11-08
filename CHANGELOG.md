@@ -7,6 +7,8 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-08
+
 ### Keyboard shortcuts
 
 - Gmail-style single keys (j/k, e, #, s, Shift U/I, x, c, r, a, f, /, g then i/s/a/t, ?) and Apple Mail ⌘
@@ -352,7 +354,8 @@ First public version.
   after setup.
 - Not on PyPI yet: install from GitHub. The PyPI publish job is off until the name is decided.
 
-[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/scamai/email-town-labeler/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/scamai/email-town-labeler/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/scamai/email-town-labeler/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/scamai/email-town-labeler/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/scamai/email-town-labeler/releases/tag/v0.1.0

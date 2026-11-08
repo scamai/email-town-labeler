@@ -19,7 +19,7 @@ Free and open source. The AI model runs on your own computer.
 
 <a href="https://github.com/scamai/email-town-labeler/releases/latest"><img src="docs/assets/download-mac.svg" alt="Download Email Town for Mac" width="232" height="52"></a><br>
 <sub>The Email Town mail workbench app · macOS 14+ · Apple Silicon · signed and notarized by Apple<br>
-Also for <a href="https://github.com/scamai/email-town-labeler/releases/latest">Linux</a> (preview) · Windows in a later release · <a href="docs/desktop-workbench.en.md#download-the-app">install notes</a></sub>
+Also for <a href="https://github.com/scamai/email-town-labeler/releases/latest">Windows and Linux</a> (preview, not signed yet) · <a href="docs/desktop-workbench.en.md#download-the-app">install notes</a></sub>
 
 </div>
 
@@ -121,14 +121,14 @@ You need Python 3.10+ (macOS, Linux or Windows) and a Gmail or Google Workspace 
 > [!TIP]
 > **Want the mail workbench in its own window, without Python?** [Download the Email Town app](https://github.com/scamai/email-town-labeler/releases/latest):
 > on a Mac open the `.dmg` and drag Email Town to Applications (signed and notarized, it opens without a
-> warning); on Linux unzip and run `email-town` (preview). A Windows build follows in a later release; see
-> [install notes](docs/desktop-workbench.en.md#download-the-app). The app is the
+> warning); on Windows or Linux unzip and double-click (preview, not signed yet: one extra click on first
+> open, see [install notes](docs/desktop-workbench.en.md#download-the-app)). The app is the
 > [desktop workbench](docs/desktop-workbench.en.md); the steps below install the Gmail labeling service.
 
 **1. Install**
 
 ```bash
-pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"
+pipx install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"
 ```
 
 **2. Create your own Google sign-in** (one time, about 10 minutes, free). This is what keeps
@@ -161,7 +161,7 @@ Check on it any time with `email-town-labeler status`.
 <summary><b>More install options</b> (pip, uv, gcloud helper, personal-Gmail note)</summary>
 
 - [pipx](https://pipx.pypa.io) keeps it in its own environment. In a virtualenv,
-  `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"`
+  `pip install "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"`
   works too, as does `uv tool install` with the same argument. Without `[onnx]` you get the
   dependency-free `rules` model only. The `[app]` extra adds `email-town`, the desktop workbench in a native
   window; the [downloadable app](docs/desktop-workbench.en.md#download-the-app) needs no install at all.
@@ -371,10 +371,10 @@ the built-in backends.
 | Backend | Install | Notes |
 |---|---|---|
 | `rules` | included | Heuristics over Gmail's categories and mail headers. No ML dependencies, no download. The fallback when the `[onnx]` extra is missing. |
-| `embedding_probe` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"` | Sentence-transformers embedder + small linear head. Personalizable. |
-| `onnx_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"` | ONNX encoder + linear head, no torch. Personalizable. |
-| `hf_sequence_classifier` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"` | A fine-tuned transformers classifier (BERT, ModernBERT, ...) shipped inside the package (`town-modernbert-torch`). |
-| `onnx_sequence_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"` | The same classifier as one ONNX graph, no torch (`town-modernbert`). |
+| `embedding_probe` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"` | Sentence-transformers embedder + small linear head. Personalizable. |
+| `onnx_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"` | ONNX encoder + linear head, no torch. Personalizable. |
+| `hf_sequence_classifier` | `pipx install --force "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"` | A fine-tuned transformers classifier (BERT, ModernBERT, ...) shipped inside the package (`town-modernbert-torch`). |
+| `onnx_sequence_classifier` | `pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.3"` | The same classifier as one ONNX graph, no torch (`town-modernbert`). |
 | `ollama_choice` | a running [Ollama](https://ollama.com) | Asks a local LLM. No training needed; slower. |
 
 ```bash
