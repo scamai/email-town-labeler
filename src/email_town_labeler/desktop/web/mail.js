@@ -183,7 +183,7 @@
       host.state.accounts.forEach((a) => {
         const option = document.createElement("option");
         option.value = a.id;
-        option.textContent = `${a.name}${a.address ? ` · ${a.address}` : ""}`;
+        option.textContent = `${a.name}${a.address && a.address !== a.name ? ` · ${a.address}` : ""}`;
         els.account.append(option);
       });
       if (accountFor(current)) els.account.value = current;

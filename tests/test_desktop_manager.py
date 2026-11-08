@@ -181,3 +181,20 @@ def test_action_rejects_unloaded_ids_and_oversized_batches(tmp_path):
     with pytest.raises(ValueError, match="1–500"):
         workbench.action({"ids": [message_key(first, "one")] * 501, "action": "done"})
     workbench.close()
+
+
+def test_generated_default_account_name_shows_mailbox_address(tmp_path):
+    workbench, readers, first, second = _workbench(tmp_path)
+    legacy = workbench.accounts.add(
+        "当前 Gmail", "imap", {"host": "three.example", "username": "u", "port": 993}
+    )
+    assert {a["name"] for a in workbench.snapshot()["accounts"]} == {"One", "Two", "Gmail"}
+    for aid in (first, second, legacy["id"]):
+        readers[aid] = FakeReader([])
+        readers[aid].address = "owner@example.test"
+    workbench._refresh()
+    names = {a["id"]: a["name"] for a in workbench.snapshot()["accounts"]}
+    # Only the app-generated name is replaced; names the user chose stay exactly as typed.
+    assert names == {first: "One", second: "Two", legacy["id"]: "owner@example.test"}
+    assert workbench.accounts.get(legacy["id"])["name"] == "当前 Gmail"  # display only, address not persisted
+    workbench.close()
