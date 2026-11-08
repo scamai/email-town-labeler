@@ -436,7 +436,8 @@ replying, using the existing quiet surfaces and category hues. This is the Stand
 recompose existing controls, keep provider behavior and original-mail safety contracts unchanged.
 
 - Platform: responsive browser UI launched locally on macOS; mouse, keyboard and touch layouts.
-  This is not a new native window system. No public-web SEO or signature animation is applicable.
+  This is not a new native window system: the desktop app shows the same UI in a native web view
+  (pywebview, minimum window 800 x 560), with no layout of its own. No public-web SEO or signature animation is applicable.
 - Profile: `clade.design-direction/v1`, variant `V2`, mode `evolve`, preset `product-quiet`,
   family `email-town-existing`, composition 2, motion 1, density 3, appearance `system`, signature none.
 - Design system: existing `desktop/web/style.css` tokens and supplied house/envelope logo.

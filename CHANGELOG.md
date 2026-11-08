@@ -14,6 +14,30 @@ contain breaking changes; they are called out.
   Gatekeeper and writes a release receipt. It refuses to choose between several Developer ID identities.
   Adapted from scamai/earlet; see docs/releasing.md.
 
+### Desktop app
+
+- Email Town as a double-click app, no terminal, Python or uv: `dist/Email Town.app` (macOS 14+, Apple
+  Silicon), a Windows folder with `Email Town.exe`, and a Linux folder (system GTK 3 and WebKitGTK 4.1).
+  The workbench opens in a native window (pywebview: WKWebView, WebView2, WebKitGTK) instead of a browser
+  tab; closing the window stops the workbench. If `desktop` already serves the same data folder, the app
+  opens a window on it and leaves it running. Original-message links and sign-in pages open in the
+  default browser; attachment downloads ask where to save.
+- Windows and Linux builds are unsigned: SmartScreen asks for one extra confirmation on first open. The macOS
+  release is a disk image signed with the company Developer ID and notarized (see macOS release signing); the
+  CI-built macOS zip is a test artifact only ([steps](docs/desktop-workbench.en.md#download-the-app)). The model is not
+  bundled; a configured catalog model is downloaded on first use, as before.
+- `email-town` (the `[app]` extra) opens the same window from source. `scripts/build_app.py` builds the app
+  with PyInstaller (`app-build` dependency group); on an Apple M4 Pro it reported 11 s, 136 MB, a 49 MB zip.
+  `scripts/smoke_app.py` checks a build on a new temporary data folder: bundle self-check, server, second
+  start, quit, no process left.
+- The model worker now also starts inside the frozen app, where `sys.executable` is the app binary: the
+  app re-enters itself with `--email-town-model-worker` instead of `python -m`.
+- A frozen app whose built-in OpenSSL CA path does not exist on the machine (e.g. a bundle built on Ubuntu,
+  run on Fedora) uses its bundled certifi CAs; it never overrides a CA file the system has.
+- New workflow `Desktop app` builds and smoke-tests macOS, Windows and Linux. It runs only by hand or on
+  a `v*` tag (never on push or pull request: hosted minutes are a cost decision), and attaches the Windows
+  and Linux zips to the tag's GitHub release; the macOS asset is the notarized disk image.
+
 ### Desktop account setup
 
 - Typing an address for Other email fills IMAP/SMTP settings for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and
