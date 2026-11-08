@@ -146,7 +146,7 @@ tests that skip without the extra, and documentation in `docs/models.md`.
    `git grep -nE 'git\+https://github\.com/scamai/email-town-labeler(@v[0-9]+\.[0-9]+\.[0-9]+)?"' -- ':!CONTRIBUTING.md'`
    lists them, pinned or not (README.md, docs/, the `SOURCE` constant behind the CLI's install
    hints, and the test that checks that hint); set or replace the `@vX.Y.Z` suffix before the
-   closing quote. Unpinned, they install `main`, which after step 3 is a
+   closing quote. Unpinned, they install `main`, which after step 4 is a
    development version, and a development version never runs the update check.
 2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` checks the tag matches the
    version, publishes to PyPI via trusted publishing, pushes images to GHCR, and creates a
@@ -154,6 +154,9 @@ tests that skip without the extra, and documentation in `docs/models.md`.
    check fetches), then checks that `releases/latest` serves it. A tag that is not `vX.Y.Z` gets
    no `latest.json` and is published as a pre-release, so `releases/latest` stays on the last
    `X.Y.Z` (the same check confirms it).
-3. Right after the release, set `__version__` on `main` to the next patch version with `.dev0`
+3. Build, sign and notarize the macOS app on a Mac with the company Developer ID and attach the image to the
+   release (`docs/releasing.md`); the tag's `Desktop app` workflow attaches the Windows and Linux zips. Give the
+   release a title and notes from the CHANGELOG section, as `gh release edit vX.Y.Z --title ... --notes-file ...`.
+4. Right after the release, set `__version__` on `main` to the next patch version with `.dev0`
    (`X.Y.(Z+1).dev0`): installs from `main` are then development versions, which never run the
    update check, and a release is the only thing that reports a plain `X.Y.Z`.

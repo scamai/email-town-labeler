@@ -163,7 +163,7 @@ so it requires a model version bump.
 | `ollama_choice` | none (talks to a local [Ollama](https://ollama.com)) | Asks a local LLM a lettered 7-way multiple-choice question; probabilities from the answer token's logprobs when available. | Experiments with no training data. Slower; quality depends on the LLM. |
 
 A missing extra produces a clear error that names it, for example
-`pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.1"` (email-town-labeler is not
+`pip install "email-town-labeler[embed] @ git+https://github.com/scamai/email-town-labeler@v0.1.2"` (email-town-labeler is not
 on PyPI yet).
 
 Third-party backends can register through the `email_town_labeler.backends` entry-point group
