@@ -117,6 +117,25 @@ def assert_account(page, capture: Path) -> None:
     assert abs(server["y"] - port["y"]) <= 1, (server, port)
     assert_no_overflow(page, "account")
     page.screenshot(path=str(capture))
+    # A known address fills the server settings and folds them away; only the app password remains.
+    page.locator("#imapEmail").fill("fixture@icloud.com")
+    expect(page.locator("#imapHost")).to_have_value("imap.mail.me.com")
+    expect(page.locator("#smtpHost")).to_have_value("smtp.mail.me.com")
+    expect(page.locator("#imapUsername")).to_have_value("fixture@icloud.com")
+    expect(page.locator("#imapPresetHelp")).to_be_visible()
+    expect(page.locator("#imapServerDetails")).not_to_have_attribute("open", "")
+    expect(page.locator("#imapPassword")).to_be_visible()
+    assert_no_overflow(page, "account preset")
+    page.wait_for_timeout(300)  # let the disclosure chevron finish turning before the capture
+    page.screenshot(path=str(capture.with_name(capture.stem + "-preset.png")))
+    # Outlook.com addresses are routed to Microsoft sign-in instead of an app password.
+    page.locator("#imapEmail").fill("fixture@outlook.com")
+    page.locator("#useMicrosoftButton").click()
+    expect(page.locator("#providerSelect")).to_have_value("microsoft")
+    expect(page.locator("#microsoftHelp")).to_be_visible()
+    page.locator("#providerSelect").select_option("gmail")
+    expect(page.locator("#googleStatus")).not_to_be_empty()
+    page.screenshot(path=str(capture.with_name(capture.stem + "-google.png")))
     page.keyboard.press("Escape")
     expect(page.locator("#accountDialog")).to_be_hidden()
 

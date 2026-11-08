@@ -214,8 +214,9 @@ def main():
             expect(page.locator("#providerSelect")).to_be_disabled()
             expect(page.locator("#imapUsername")).to_have_value("fixture")
             page.keyboard.press("Escape")
-            # Add-account dialog has no hidden required fields blocking Gmail.
+            # Add-account dialog has no hidden required fields blocking Gmail; the name is optional.
             page.locator("#addAccountButton").click()
+            assert page.locator("#accountForm").evaluate("form => form.checkValidity()")
             page.locator("#accountForm input[name=name]").fill("Fixture")
             assert page.locator("#accountForm").evaluate("form => form.checkValidity()")
             page.keyboard.press("Escape")

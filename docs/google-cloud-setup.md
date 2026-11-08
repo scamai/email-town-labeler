@@ -149,6 +149,10 @@ private anyway: anyone with it can show your consent screen under your app's nam
 
 ### 7. Hand it to email-town-labeler
 
+In the desktop workbench: **Accounts → + Add → Google / Gmail → Google OAuth client file**, choose the
+downloaded JSON, then **Connect**. The app checks it is a Desktop client and stores it privately as
+`<config dir>/client_secret.json`. For the CLI service:
+
 ```bash
 email-town-labeler setup
 ```

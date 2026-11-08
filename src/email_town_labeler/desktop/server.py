@@ -19,6 +19,7 @@ from ..lock import InstanceLock
 from .mail import filename
 from .manager import Workbench
 from .providers import ProviderError
+from .setup import save_google_client, setup_info
 
 MAX_BODY = 65536
 
@@ -149,6 +150,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._response(
                     200, self.server.manager.mail_store.receipt(parse_qs(parsed.query).get("id", [""])[0])
                 )
+            elif parsed.path == "/api/setup":
+                self._response(200, setup_info(self.server.manager.paths))
             elif parsed.path == "/api/drafts":
                 self._response(200, self.server.manager.mail_store.drafts())
             elif parsed.path == "/api/draft":
@@ -242,6 +245,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.undo(data.get("token", ""))
             elif path == "/api/account":
                 result = manager.connect(data)
+            elif path == "/api/google-client":
+                result = save_google_client(manager.paths, data.get("client"))
             elif path == "/api/account-action":
                 result = manager.enable(data.get("id", ""), data.get("enabled"))
             else:

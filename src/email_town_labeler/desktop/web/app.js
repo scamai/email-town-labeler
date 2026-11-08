@@ -15,6 +15,17 @@
     imapFields: $("imapFields"),
     microsoftHelp: $("microsoftHelp"),
     clientIdFields: $("clientIdFields"),
+    gmailFields: $("gmailFields"),
+    googleStatus: $("googleStatus"),
+    googleClientImport: $("googleClientImport"),
+    googleClientFile: $("googleClientFile"),
+    imapEmail: $("imapEmail"),
+    imapUsername: $("imapUsername"),
+    imapPresetHelp: $("imapPresetHelp"),
+    imapPresetText: $("imapPresetText"),
+    imapPresetLink: $("imapPresetLink"),
+    imapServerDetails: $("imapServerDetails"),
+    useMicrosoft: $("useMicrosoftButton"),
     accountError: $("accountFormError"),
     submitAccount: $("submitAccountButton"),
     accountFilters: $("accountFilters"),
@@ -86,6 +97,7 @@
     seq: 0,
     toastTimer: null,
     snapshot: "",
+    setup: null,
   };
   const text = (value) => String(value ?? "");
   const formatDate = (epoch) => {
@@ -849,12 +861,94 @@
     }
   }
 
+  // What this copy can sign in with, and suggested server settings per address domain.
+  async function loadSetup(force = false) {
+    if (state.setup && !force) return state.setup;
+    try {
+      state.setup = await api("/api/setup");
+    } catch (_) {
+      state.setup = { google_signin: true, microsoft_default: false, presets: [] };
+    }
+    return state.setup;
+  }
+  function presetFor(email) {
+    const domain = text(email).trim().toLowerCase().split("@")[1] || "";
+    return (state.setup?.presets || []).find((preset) =>
+      (preset.domains || []).includes(domain),
+    );
+  }
+  function applyPreset() {
+    const email = els.imapEmail.value.trim();
+    if (!email) return;
+    if (!els.imapUsername.value || els.imapUsername.dataset.auto === "1") {
+      els.imapUsername.value = email;
+      els.imapUsername.dataset.auto = "1";
+    }
+    const preset = presetFor(email);
+    els.useMicrosoft.hidden = preset?.use !== "microsoft";
+    els.imapPresetHelp.hidden = !preset;
+    els.imapPresetText.textContent = preset ? text(preset.help) : "";
+    const link = text(preset?.help_url);
+    els.imapPresetLink.hidden = !link.startsWith("https://");
+    if (link.startsWith("https://")) els.imapPresetLink.href = link;
+    if (preset && !preset.use) {
+      for (const [field, key] of [
+        ["imapHost", "host"],
+        ["imapPort", "port"],
+        ["smtpHost", "smtp_host"],
+        ["smtpPort", "smtp_port"],
+        ["smtpSecurity", "smtp_security"],
+      ])
+        $(field).value = preset[key];
+      els.imapServerDetails.open = false;
+    } else if (!preset) {
+      els.imapServerDetails.open = true;
+    }
+  }
+  async function importGoogleClient() {
+    const file = els.googleClientFile.files?.[0];
+    if (!file) return;
+    els.accountError.hidden = true;
+    try {
+      if (file.size > 16384) throw new Error("This is not a Google OAuth client file");
+      let client;
+      try {
+        client = JSON.parse(await file.text());
+      } catch (_) {
+        throw new Error("Choose the JSON file you downloaded for a Google OAuth client");
+      }
+      await api("/api/google-client", {
+        method: "POST",
+        body: JSON.stringify({ client }),
+      });
+      await loadSetup(true);
+      showToast("Google sign-in is ready");
+    } catch (error) {
+      els.accountError.textContent = error.message;
+      els.accountError.hidden = false;
+    } finally {
+      els.googleClientFile.value = "";
+      setProviderFields();
+    }
+  }
   function setProviderFields() {
     const provider = els.provider.value;
+    const setup = state.setup || {};
     els.existingFields.hidden = provider !== "gmail-existing";
     els.imapFields.hidden = provider !== "imap";
+    els.gmailFields.hidden = provider !== "gmail";
+    els.googleStatus.textContent = setup.google_signin
+      ? setup.google_source === "own"
+        ? "A browser window opens to sign in with Google, using your own Google Cloud client."
+        : "A browser window opens to sign in with Google."
+      : "Google sign-in isn't set up in this copy yet. Import a Google OAuth client file, or choose Other email to use a Gmail app password.";
+    els.googleClientImport.hidden = Boolean(setup.google_signin);
     els.microsoftHelp.hidden = provider !== "microsoft";
+    els.microsoftHelp.textContent = setup.microsoft_default
+      ? "You'll get a short code to enter at microsoft.com/devicelogin, then grant access to read, send and manage mail."
+      : "Microsoft sign-in needs an app registration with public-client (device code) flow enabled. Paste its Application (client) ID.";
     els.clientIdFields.hidden = provider !== "microsoft";
+    if (provider === "microsoft" && !setup.microsoft_default) els.clientIdFields.open = true;
     els.existingFields.querySelectorAll("input").forEach((input) => {
       input.disabled = provider !== "gmail-existing";
     });
@@ -879,11 +973,6 @@
     const payload = { provider, name: text(form.get("name")).trim() };
     if (els.accountForm.dataset.reconnectId)
       payload.reconnect_id = els.accountForm.dataset.reconnectId;
-    if (!payload.name) {
-      els.accountError.textContent = "Enter a display name.";
-      els.accountError.hidden = false;
-      return;
-    }
     if (provider === "gmail-existing")
       payload.home = text(form.get("home")).trim();
     if (provider === "imap")
@@ -1094,8 +1183,13 @@
   });
   els.refresh.addEventListener("click", refresh);
   els.restart.addEventListener("click", () => window.location.reload());
-  function openAccountForm(account = null) {
+  async function openAccountForm(account = null) {
+    await loadSetup();
     els.accountForm.reset();
+    delete els.imapUsername.dataset.auto;
+    els.imapPresetHelp.hidden = true;
+    els.useMicrosoft.hidden = true;
+    els.imapServerDetails.open = true;
     els.accountError.hidden = true;
     els.accountForm.dataset.reconnectId = account?.id || "";
     els.provider.disabled = Boolean(account);
@@ -1154,6 +1248,15 @@
   });
   els.addAccount.addEventListener("click", () => openAccountForm());
   els.provider.addEventListener("change", setProviderFields);
+  els.imapEmail.addEventListener("input", applyPreset);
+  els.imapUsername.addEventListener("input", () => {
+    delete els.imapUsername.dataset.auto;
+  });
+  els.googleClientFile.addEventListener("change", importGoogleClient);
+  els.useMicrosoft.addEventListener("click", () => {
+    els.provider.value = "microsoft";
+    setProviderFields();
+  });
   els.accountForm.addEventListener("submit", submitAccount);
   els.search.addEventListener("input", () => {
     state.filters.search = els.search.value;

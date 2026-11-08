@@ -7,6 +7,16 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop account setup
+
+- Typing an address for Other email fills IMAP/SMTP settings for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and
+  QQ Mail and links to where the app password is created; Outlook.com addresses are routed to Microsoft sign-in.
+- Import your own Google Desktop OAuth client file in the Add account dialog instead of copying it into the
+  configuration directory; the dialog says up front whether Google sign-in is available.
+- Support a Google sign-in client and Microsoft app ID shipped with the app (empty in this release); a user's own
+  client file still takes precedence.
+- The display name is optional; unnamed accounts are listed by their mailbox address.
+
 ### Desktop list cache
 
 - Cache each folder's loaded list on disk (`workbench/cache.sqlite`, mode 0600: subject, sender, date,
