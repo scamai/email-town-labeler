@@ -7,6 +7,15 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Row controls and auto-advance, as in Gmail
+
+- Hovering a row (or focusing into it) shows Archive / Trash (Restore in Trash) / Mark read-unread in place of the time,
+  and every row has a star toggle; they act without opening the message and run the toolbar's own action path.
+  Touch screens show only the star; read-only or paused accounts show neither.
+- Archiving or trashing the open message opens the next, older one in a wide window; a narrow one returns to the list.
+- Choosing a folder while another switch or mail action is still running is no longer dropped: the last folder
+  chosen opens when it finishes.
+
 ### Selecting messages, as in Gmail and desktop mail clients
 
 - Shift-click selects a range from the last clicked message (rows or checkboxes, selecting or deselecting);

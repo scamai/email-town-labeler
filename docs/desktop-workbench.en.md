@@ -152,6 +152,11 @@ write follows in the background (a failed write puts the row back). **Mark unrea
 again. Accounts without mail-management permission, or paused, are left unchanged. The open folder's tab shows its
 unread count.
 
+As in Gmail, hovering a row (or reaching it with the keyboard) shows Archive, Trash and Mark read/unread in place of
+the time, and every row has a star; they act without opening the message. Archiving or trashing the open message
+opens the next, older one in a wide window and returns to the list in a narrow one. Touch screens show the star
+only; read-only accounts show neither.
+
 Inbox, Sent, Archive and Trash are separate views. Counts cover loaded messages only; truncation is
 explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox while preserving local
 workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox.

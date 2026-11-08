@@ -271,9 +271,13 @@ def main() -> int:
                         "Move 1 selected messages to Trash?"
                     ), confirms
                     expect(page.locator(".message-row")).to_have_count(2)
+                    # Gmail's auto-advance: trashing the open message opened the next one.
+                    expect(page.locator("#previewContent")).to_be_visible()
+                    trashed = next(r["subject"] for r in mailbox.records if r["folder"] == "trash")
+                    expect(subject).not_to_have_text(trashed)
 
                     # Selection: x selects the open message, then e archives the selection.
-                    page.keyboard.press("j")
+                    page.locator(".message-row .row-open").first.click()
                     chosen = subject.inner_text()
                     page.keyboard.press("x")
                     expect(page.locator(".message-row.is-selected")).to_have_count(1)
@@ -299,7 +303,18 @@ def main() -> int:
                     expect(page.locator(".message-row")).to_have_count(2)
                     page.keyboard.press("g")
                     page.keyboard.press("i")
-                    expect(page.locator(".message-row")).to_have_count(1)
+                    until(
+                        lambda page=page: page.locator(".message-row").count() == 1,
+                        "g i shows the Inbox without the archived messages",
+                        show=lambda page=page: (
+                            page.locator(".message-row").count(),
+                            manager.folder,
+                            len(manager.snapshot()["messages"]),
+                            page.evaluate(
+                                "[window.EmailTownMailHost.state.folder, window.EmailTownMailHost.state.messages.length, window.EmailTownMailHost.state.seq]"
+                            ),
+                        ),
+                    )
 
                     # Write: r replies to the open message; Ctrl/⌘+Enter sends; c opens a new message.
                     page.keyboard.press("j")
