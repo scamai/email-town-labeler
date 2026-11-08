@@ -9,25 +9,23 @@ English · [简体中文](desktop-workbench.md)
 The workbench combines explicitly authorized mailboxes into one local list, with Inbox, Sent, Archive and
 Trash views, common categories, search and completion state. It supports explicit send/reply/forward,
 read/unread, starred, archive, trash/restore and attachment actions. Manual categories and completion remain local.
-It runs as the Email Town desktop app (unsigned, not notarized, not in an app store) or from source in your browser.
+It runs as the Email Town desktop app (macOS: signed and notarized; Windows/Linux: unsigned; not in an app store) or from source in your browser.
 
 ## Download the app
 
 From the first release after v0.1.1 (v0.1.1 has none), each release page attaches a ready-to-run app; it
-needs no terminal, Python or uv. Unzip it and double-click.
+needs no terminal, Python or uv. On macOS open the disk image and drag Email Town to Applications; on
+Windows and Linux unzip it and double-click.
 
 | File | Runs on |
 |---|---|
-| `Email-Town-<version>-macos-arm64.zip` | macOS 14 or later on Apple Silicon. Intel Macs: [open from source](#open-from-source) |
+| `Email-Town-<version>-macos-arm64.dmg` | macOS 14 or later on Apple Silicon. Signed by Reality Inc. and notarized by Apple: it opens without a warning. Intel Macs: [open from source](#open-from-source) |
 | `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64 with the Microsoft Edge WebView2 Runtime (included in Windows 11) |
 | `Email-Town-<version>-linux-x64.zip` | Built on Ubuntu 24.04 (glibc 2.39 or newer). Needs the distribution's GTK 3 and WebKitGTK 4.1: `sudo apt install gir1.2-webkit2-4.1` on Debian/Ubuntu |
 
-**The app is not signed yet**, so the first open asks for one extra step. Only do this for a zip downloaded
-from this repository's Releases page:
+**The Windows and Linux apps are not signed yet**, so the first open asks for one extra step. Only do this for
+a zip downloaded from this repository's Releases page:
 
-- **macOS:** the first double-click reports that Apple could not verify "Email Town". Open **System Settings →
-  Privacy & Security**, click **Open Anyway** next to the Email Town message and confirm. (On macOS 14 you can
-  instead Control-click the app and choose **Open**.) Move the app to Applications first.
 - **Windows:** SmartScreen shows "Windows protected your PC". Click **More info → Run anyway**.
 - **Linux:** run `email-town` in the unzipped `email-town` folder.
 

@@ -38,9 +38,9 @@ The user requested implementation through a usable local app, not a sequence of 
 - [ ] Account disconnect/revocation/removal policy, without erasing other accounts or silently discarding workflow state.
 - [ ] Multi-account resource measurements and consented Chinese-language quality evaluation; historical one-mailbox
   model results do not prove new-user recall or false-positive rates.
-- [ ] Public distribution: OAuth verification/public client strategy, signing and notarization of the desktop app
-  (it ships unsigned: Gatekeeper/SmartScreen warn on first open), update/rollback/uninstall.
-  Neither the local launcher nor the unsigned app is a complete replacement for an email client.
+- [ ] Public distribution: OAuth verification/public client strategy, Windows code signing (macOS releases are
+  signed and notarized: docs/releasing.md), update/rollback/uninstall.
+  Neither the local launcher nor the app is a complete replacement for an email client yet.
 - [ ] Desktop app: run the `Desktop app` workflow once and fix what the Windows and Linux builds report; only the
   macOS build has been run (locally). Intel Mac build; GUI checks of attachment save, file picker and
   external links in the native window.

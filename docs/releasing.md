@@ -27,7 +27,12 @@ Sign with the company identity. A Mac that also holds a personal Developer ID ce
 lists both; the script then refuses to choose and asks for `EMAIL_TOWN_SIGN_IDENTITY`, so a release is never
 signed with a person's name by accident.
 
-Publishing the image (for example to a GitHub release) is a separate, deliberate step.
+Publishing is a separate, deliberate step. A `v*` tag makes `.github/workflows/app.yml` attach the Windows and
+Linux zips; attach the notarized image to the same release yourself:
+
+```bash
+gh release upload v<version> dist/release/Email-Town-<version>-macos-arm64.dmg
+```
 
 ## What the script checks
 
