@@ -701,7 +701,7 @@ def test_setup_yes_falls_back_to_rules_without_the_extra(app):
     assert rc == 0, out
     assert load_config(app.paths.config_file).model_ref == "rules"
     assert (
-        'pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.4"'
+        'pipx install --force "email-town-labeler[onnx] @ git+https://github.com/scamai/email-town-labeler@v0.1.5"'
         in out
     )
 
