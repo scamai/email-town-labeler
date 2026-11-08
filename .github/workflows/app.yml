@@ -4,7 +4,7 @@ name: Desktop app
 # the build (scripts/smoke_app.py: bundle self-check, a window on a fresh temporary home, clean quit, no
 # process left) and uploads the zips. Never on push or pull_request: hosted minutes are a cost decision
 # (a macOS job bills at 10x). Run it from Actions > Desktop app > Run workflow, or push a v* tag, which
-# also attaches the zips to that GitHub release. The same two scripts run locally on your own machine.
+# also attaches the Windows and Linux zips to that GitHub release. The same two scripts run locally on your own machine.
 
 on:
   workflow_dispatch:
@@ -81,10 +81,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Windows and Linux only. The macOS release asset is the disk image signed with the company Developer ID
+      # and notarized on a maintainer's Mac (scripts/release_macos.py, docs/releasing.md); the CI-built macOS
+      # zip is unsigned and stays a test artifact, so a release never offers a build that Gatekeeper blocks.
       - uses: actions/download-artifact@v4
         with:
-          pattern: email-town-*
-          merge-multiple: true
+          name: email-town-Windows
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: email-town-Linux
           path: dist
       # release.yml creates the same release (wheels, latest.json); whichever workflow gets there second
       # uploads into it. If this one is first it creates the release by release.yml's rule: a tag that is

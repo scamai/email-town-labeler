@@ -89,7 +89,7 @@ exe = EXE(  # noqa: F821
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,  # the build machine's: arm64 on Apple Silicon
-    codesign_identity=None,  # unsigned (ad hoc on macOS); signing and notarization are a later step
+    codesign_identity=None,  # ad hoc here; scripts/release_macos.py signs and notarizes the release copy
     entitlements_file=None,
     icon=str(WEB / ("app-icon.icns" if MAC else "app-icon.png")),  # Windows: PNG -> ICO through Pillow
 )

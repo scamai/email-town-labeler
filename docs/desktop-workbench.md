@@ -10,24 +10,21 @@
 它也支持明确操作的读/未读、星标、归档、垃圾箱、恢复以及纯文本收发、回复、转发和附件。
 手动分类与完成状态保存在本机；外部邮箱变更只在用户明确操作时发生。
 
-它可以作为 Email Town 桌面应用运行（尚未签名、未经公证、不在应用商店），也可以从源码在浏览器中运行。
+它可以作为 Email Town 桌面应用运行（macOS 版已签名并经 Apple 公证；Windows/Linux 版尚未签名；不在应用商店），也可以从源码在浏览器中运行。
 
 ## 下载应用
 
 从 v0.1.1 之后的第一个版本起（v0.1.1 没有），每个 Release 页面都附带可直接运行的应用，
-不需要终端、Python 或 uv。解压后双击即可。
+不需要终端、Python 或 uv。macOS 打开磁盘映像，把 Email Town 拖进“应用程序”；Windows 和 Linux 解压后双击即可。
 
 | 文件 | 适用系统 |
 |---|---|
-| `Email-Town-<version>-macos-arm64.zip` | Apple 芯片的 macOS 14 或更新版本。Intel Mac 请[从源码打开](#从源码打开) |
+| `Email-Town-<version>-macos-arm64.dmg` | Apple 芯片的 macOS 14 或更新版本。由 Reality Inc. 签名并经 Apple 公证，打开时不会有警告。Intel Mac 请[从源码打开](#从源码打开) |
 | `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64，需要 Microsoft Edge WebView2 Runtime（Windows 11 自带） |
 | `Email-Town-<version>-linux-x64.zip` | 在 Ubuntu 24.04 上构建（需 glibc 2.39 或更新）。需要发行版自带的 GTK 3 和 WebKitGTK 4.1：Debian/Ubuntu 运行 `sudo apt install gir1.2-webkit2-4.1` |
 
-**应用目前未签名**，第一次打开需要多一步。只对从本仓库 Releases 页面下载的 zip 这样做：
+**Windows 和 Linux 版目前未签名**，第一次打开需要多一步。只对从本仓库 Releases 页面下载的 zip 这样做：
 
-- **macOS：** 第一次双击会提示 Apple 无法验证“Email Town”。打开**系统设置 → 隐私与安全性**，
-  点击 Email Town 提示旁的**仍要打开**并确认。（macOS 14 也可以按住 Control 点按应用并选择**打开**。）
-  请先把应用移到“应用程序”文件夹。
 - **Windows：** SmartScreen 显示“Windows 已保护你的电脑”。点击**更多信息 → 仍要运行**。
 - **Linux：** 在解压出的 `email-town` 文件夹中运行 `email-town`。
 
@@ -162,7 +159,7 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 订单为紫色、推广为玫红、旅行为青蓝、更新为金色、未分类为灰色。明暗主题分别调整亮度；
 选中状态同时显示勾号和边线，文字名称始终保留。颜色修改只影响工作台显示。
 
-新的信封小屋 Logo 同时用于页面、浏览器图标、Mac 启动器和[桌面应用](#下载应用)（两者均未签名）。可在 macOS 从矢量源文件重建图标：
+新的信封小屋 Logo 同时用于页面、浏览器图标、Mac 启动器和[桌面应用](#下载应用)（启动器未签名；macOS 桌面应用的发布版已签名并公证）。可在 macOS 从矢量源文件重建图标：
 
 ```sh
 uv run --with playwright python scripts/build_desktop_brand.py

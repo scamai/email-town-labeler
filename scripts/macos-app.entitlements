@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the Email Town executable, which is a bundled Python interpreter (PyInstaller).
+  Under the hardened runtime, Python's ctypes/libffi callbacks (pywebview's PyObjC bridge) need writable
+  executable memory, and onnxruntime and other extension modules are loaded as libraries. Same set as
+  scamai/earlet's EarletWorker.entitlements, which ships a bundled interpreter notarized the same way.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>
