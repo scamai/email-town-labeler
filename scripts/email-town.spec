@@ -53,8 +53,11 @@ a = Analysis(  # noqa: F821
 
 # hooks-contrib's googleapiclient hook ships every API's discovery document; the app builds Gmail only.
 DOCS = "googleapiclient/discovery_cache/documents/"
+# Compare with "/" on every OS: Windows paths use "\\", and testing the raw path there dropped gmail.v1.json too.
 a.datas = [
-    d for d in a.datas if not d[0].replace("\\", "/").startswith(DOCS) or d[0].endswith("/gmail.v1.json")
+    d
+    for d in a.datas
+    if not (doc := d[0].replace("\\", "/")).startswith(DOCS) or doc.endswith("/gmail.v1.json")
 ]
 
 if not (MAC or WINDOWS):

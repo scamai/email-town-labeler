@@ -156,13 +156,17 @@ def main() -> int:
     parser.add_argument("--screenshot", type=Path, help="macOS: save a capture of the window here")
     parser.add_argument("--network", action="store_true", help="self-check: also test HTTPS to the model")
     parser.add_argument("--timeout", type=float, default=60.0, help="seconds to wait for the server")
+    parser.add_argument(
+        "--home", type=Path, help="use this (new, empty) folder as the temporary home, e.g. to keep its logs"
+    )
     parser.add_argument("app", nargs=argparse.REMAINDER, help="-- then the command that opens the window")
     args = parser.parse_args()
     args.app = args.app[1:] if args.app[:1] == ["--"] else args.app
     if not args.app:
         parser.error("give the app command after --")
 
-    home = Path(tempfile.mkdtemp(prefix="email-town-smoke-"))
+    home = args.home or Path(tempfile.mkdtemp(prefix="email-town-smoke-"))
+    home.mkdir(parents=True, exist_ok=True)
     root = Paths.default(home).data_dir / "workbench"
     env = {**os.environ, "EMAIL_TOWN_LABELER_HOME": str(home), "EMAIL_TOWN_LABELER_NO_UPDATE_CHECK": "1"}
     log = home / "smoke.log"
