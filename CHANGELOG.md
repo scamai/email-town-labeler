@@ -7,6 +7,11 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop accounts
+
+- Show the auto-enrolled default Gmail account by its mailbox address instead of a generated name
+  ("当前 Gmail" / "Primary Gmail"); names the user typed are unchanged and nothing new is stored.
+
 ### Desktop startup
 
 - Bind the local workbench directly to numeric loopback without reverse DNS, so an unavailable
