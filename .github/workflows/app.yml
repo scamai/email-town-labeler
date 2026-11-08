@@ -1,0 +1,104 @@
+name: Desktop app
+
+# Builds the double-click Email Town app (scripts/build_app.py, PyInstaller) on each platform, smoke-tests
+# the build (scripts/smoke_app.py: bundle self-check, a window on a fresh temporary home, clean quit, no
+# process left) and uploads the zips. Never on push or pull_request: hosted minutes are a cost decision
+# (a macOS job bills at 10x). Run it from Actions > Desktop app > Run workflow, or push a v* tag, which
+# also attaches the zips to that GitHub release. The same two scripts run locally on your own machine.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      EMAIL_TOWN_LABELER_NO_UPDATE_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # uv's managed CPython, as in a local `uv` build: its OpenSSL reads macOS's /etc/ssl/cert.pem.
+      - uses: astral-sh/setup-uv@v6
+
+      - name: GTK 3 and WebKitGTK 4.1 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gir1.2-gtk-3.0 gir1.2-webkit2-4.1 libgirepository1.0-dev libcairo2-dev pkg-config xvfb xauth
+
+      - name: Install the app extra and the build tools
+        run: |
+          uv venv --python 3.12 .venv
+          # relative to the checkout, where every step runs (no MSYS path translation on Windows)
+          if [ "$RUNNER_OS" = Windows ]; then PY=.venv/Scripts/python.exe; else PY=.venv/bin/python; fi
+          echo "PY=$PY" >> "$GITHUB_ENV"
+          uv pip install --python "$PY" ".[app]" --group app-build
+          # pywebview's GTK backend needs PyGObject, built against the packages above
+          if [ "$RUNNER_OS" = Linux ]; then uv pip install --python "$PY" "pywebview[gtk]"; fi
+
+      - name: Build
+        run: '"$PY" scripts/build_app.py --zip'
+
+      - name: Smoke test
+        run: |
+          case "$RUNNER_OS" in
+            macOS)   "$PY" scripts/smoke_app.py --network -- "dist/Email Town.app/Contents/MacOS/Email Town" ;;
+            Windows) "$PY" scripts/smoke_app.py --network -- "dist/Email Town/Email Town.exe" ;;
+            Linux)   xvfb-run -a "$PY" scripts/smoke_app.py --network -- dist/email-town/email-town ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: email-town-${{ runner.os }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: attach to the GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: email-town-*
+          merge-multiple: true
+          path: dist
+      # release.yml creates the same release (wheels, latest.json); whichever workflow gets there second
+      # uploads into it. If this one is first it creates the release by release.yml's rule: a tag that is
+      # not vX.Y.Z is a pre-release and never releases/latest. latest.json arrives with release.yml.
+      - name: Attach the app zips
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -la dist
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+          else
+            PRE=()
+            [[ "${GITHUB_REF_NAME#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || PRE=(--prerelease --latest=false)
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md." "${PRE[@]}"
+          fi

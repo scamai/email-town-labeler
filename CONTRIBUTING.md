@@ -65,6 +65,10 @@ Optional ML backends: add `embed` and/or `onnx` to the extras (`-e ".[dev,embed]
 install CPU torch first to avoid multi-GB CUDA wheels:
 `pip install --index-url https://download.pytorch.org/whl/cpu torch`.
 
+Desktop app: the `app` extra adds the native window (`email-town`), and the `app-build` dependency group
+adds PyInstaller. Build and check it with `scripts/build_app.py` and `scripts/smoke_app.py`
+([steps](docs/desktop-workbench.en.md#download-the-app)). The tests fake pywebview, so `.[dev]` runs them.
+
 ## Running tests
 
 ```bash

@@ -4,15 +4,64 @@
 
 # 本机统一邮件工作台
 
-[打开工作台](#打开工作台) · [连接邮箱](#连接邮箱) · [统一处理](#统一处理) · [语言与颜色](#语言与颜色) · [数据与隐私](#数据与隐私) · [恢复与验证](#恢复与验证)
+[下载应用](#下载应用) · [从源码打开](#从源码打开) · [连接邮箱](#连接邮箱) · [统一处理](#统一处理) · [语言与颜色](#语言与颜色) · [数据与隐私](#数据与隐私) · [恢复与验证](#恢复与验证)
 
 工作台把已授权账户的邮件放进同一列表，支持收件箱、已发送、归档和垃圾箱视图、分类、搜索和完成状态。
 它也支持明确操作的读/未读、星标、归档、垃圾箱、恢复以及纯文本收发、回复、转发和附件。
 手动分类与完成状态保存在本机；外部邮箱变更只在用户明确操作时发生。
 
-这是本地运行的软件源码和浏览器界面，尚不是已签名、公证或在应用商店发布的产品。
+它可以作为 Email Town 桌面应用运行（尚未签名、未经公证、不在应用商店），也可以从源码在浏览器中运行。
 
-## 打开工作台
+## 下载应用
+
+从 v0.1.1 之后的第一个版本起（v0.1.1 没有），每个 Release 页面都附带可直接运行的应用，
+不需要终端、Python 或 uv。解压后双击即可。
+
+| 文件 | 适用系统 |
+|---|---|
+| `Email-Town-<version>-macos-arm64.zip` | Apple 芯片的 macOS 14 或更新版本。Intel Mac 请[从源码打开](#从源码打开) |
+| `Email-Town-<version>-windows-x64.zip` | Windows 10/11 x64，需要 Microsoft Edge WebView2 Runtime（Windows 11 自带） |
+| `Email-Town-<version>-linux-x64.zip` | 在 Ubuntu 24.04 上构建（需 glibc 2.39 或更新）。需要发行版自带的 GTK 3 和 WebKitGTK 4.1：Debian/Ubuntu 运行 `sudo apt install gir1.2-webkit2-4.1` |
+
+**应用目前未签名**，第一次打开需要多一步。只对从本仓库 Releases 页面下载的 zip 这样做：
+
+- **macOS：** 第一次双击会提示 Apple 无法验证“Email Town”。打开**系统设置 → 隐私与安全性**，
+  点击 Email Town 提示旁的**仍要打开**并确认。（macOS 14 也可以按住 Control 点按应用并选择**打开**。）
+  请先把应用移到“应用程序”文件夹。
+- **Windows：** SmartScreen 显示“Windows 已保护你的电脑”。点击**更多信息 → 仍要运行**。
+- **Linux：** 在解压出的 `email-town` 文件夹中运行 `email-town`。
+
+窗口里显示的工作台和浏览器版相同。跳到 Gmail/Outlook 原邮件的链接、Microsoft 登录页面和 Google
+登录会在默认浏览器中打开；下载附件时会询问保存位置。**关闭窗口会停止工作台**及其模型进程。
+如果 `email-town-labeler desktop` 已经在同一个数据目录运行，应用会在它上面打开窗口，关闭窗口后它继续运行。
+
+应用与 CLI 使用相同的配置和数据目录（`EMAIL_TOWN_LABELER_HOME` 同样可以改变位置）。模型不在应用里：
+没有配置时使用内置的 `rules` 模型；如果 `config.toml` 指定了目录中的模型，应用会在第一次分类邮件时下载它并校验
+sha256（`town-modernbert-int8`：下载 263 MB，解压后 382 MB）。日志是数据目录中的 `workbench/desktop.log`
+（macOS `~/Library/Application Support/email-town-labeler/`，Windows `%LOCALAPPDATA%\email-town-labeler\`，
+Linux `~/.local/share/email-town-labeler/`），不包含邮件内容。要检查下载的应用，用 `--self-check` 运行它；
+它报告应用能加载哪些组件，不打开窗口，也不读写你的数据：
+
+```sh
+"/Applications/Email Town.app/Contents/MacOS/Email Town" --self-check
+```
+
+下载的应用取代下面的源码启动器；如果生成过 `~/Applications/Email Town.app`，请删除它，只保留一个“Email Town”。
+
+**自己构建**（在本仓库检出中，在目标平台上运行）：
+
+```sh
+uv run --extra app --group app-build python scripts/build_app.py --zip
+uv run --extra app --group app-build python scripts/smoke_app.py -- "dist/Email Town.app/Contents/MacOS/Email Town"
+```
+
+`build_app.py` 生成 `dist/Email Town.app`（macOS）、`dist/Email Town/`（Windows）或 `dist/email-town/`（Linux），
+加 `--zip` 时还生成发布用的压缩包。在 Apple M4 Pro（macOS，Python 3.12）上它报告构建用时 11 秒、应用 136 MB、
+zip 49 MB。`smoke_app.py` 运行自检，在新的临时数据目录上打开应用，检查服务、第二次启动和干净退出，从不接触你的邮件数据。
+Linux 还需要 `pywebview[gtk]`（PyGObject）和 GTK 开发包，[Desktop app 工作流](../.github/workflows/app.yml)
+列出了它们。该工作流在三个平台上构建并冒烟测试，只在手动启动或推送 `v*` 标签时运行。
+
+## 从源码打开
 
 已安装 CLI 的电脑：
 
@@ -44,6 +93,9 @@ email-town-labeler desktop --no-browser
 
 界面只绑定 `127.0.0.1` 的随机端口。终端显示的裸地址没有登录权限，使用启动器打开。
 不要把本机私密启动链接发给别人。
+
+想从源码使用原生窗口而不是浏览器：安装 `app` extra 后运行 `email-town`
+（`uv tool install --editable '.[app]'`；Linux 另需 `pywebview[gtk]` 或发行版的 PyGObject）。
 
 ## 连接邮箱
 
@@ -110,7 +162,7 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 订单为紫色、推广为玫红、旅行为青蓝、更新为金色、未分类为灰色。明暗主题分别调整亮度；
 选中状态同时显示勾号和边线，文字名称始终保留。颜色修改只影响工作台显示。
 
-新的信封小屋 Logo 同时用于页面、浏览器图标和 Mac 启动器。可在 macOS 从矢量源文件重建图标：
+新的信封小屋 Logo 同时用于页面、浏览器图标、Mac 启动器和[桌面应用](#下载应用)（两者均未签名）。可在 macOS 从矢量源文件重建图标：
 
 ```sh
 uv run --with playwright python scripts/build_desktop_brand.py
