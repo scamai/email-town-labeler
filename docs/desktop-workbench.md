@@ -47,15 +47,18 @@ email-town-labeler desktop --no-browser
 
 ## 连接邮箱
 
-已有默认 Gmail 授权会自动纳入，并以邮箱地址显示。其他账户从侧栏“Accounts → + Add”（添加账户）连接，并设置可辨认的名称。
+已有默认 Gmail 授权会自动纳入，并以邮箱地址显示。其他账户从侧栏“Accounts → + Add”（添加账户）连接；显示名称可不填，留空时以邮箱地址显示。
 应用不会读取 Outlook 或 Apple Mail 保存的登录凭据。
 
-| 邮箱 | 连接方式 | 前提 |
+| 邮箱 | 连接方式 | 需要准备 |
 |---|---|---|
-| Gmail / Google Workspace | Google 浏览器授权，Gmail modify 读信、发信和管理权限 | 默认配置目录中已有 Google Desktop OAuth 客户端文件；首次配置见 [Google 设置](google-cloud-setup.md) |
-| 已用 CLI 配置的其他 Gmail | 填写该账户的 `--home` 绝对目录 | 该目录包含自己的有效 Gmail 授权 |
-| Microsoft 365 / Outlook.com | Microsoft 设备代码登录，读取、发送和管理邮件 | 自己注册的公共客户端应用 ID，启用 device flow；租户可能要求管理员同意 |
-| iCloud / 其他 IMAP | TLS IMAP 服务器、用户名、应用专用密码 | 服务商支持 IMAP；系统钥匙串可用 |
+| Google / Gmail | 浏览器登录 Google，Gmail modify 读信、发信和管理权限 | 软件自带的 Google 登录客户端，或在对话框中导入自己的 Desktop OAuth 客户端文件（[Google 设置](google-cloud-setup.md)）；两者都没有时，可在“Other email”中用应用专用密码添加 Gmail |
+| Microsoft / Outlook | Microsoft 设备代码登录 | 软件自带 Microsoft 应用 ID 时无需准备；否则在“Use your own Microsoft app registration”中填写自己的公共客户端应用 ID；租户可能要求管理员同意 |
+| 其他邮箱（iCloud、Yahoo、QQ…） | TLS IMAP/SMTP + 应用专用密码 | 输入邮箱地址后，常见服务商会自动填好服务器设置并给出生成应用专用密码的链接；其他服务商需填写服务器 |
+| 已有 Email Town 目录 | 填写该账户的 `--home` 绝对目录 | 该目录包含自己的有效 Gmail 授权 |
+
+已内置 Gmail、iCloud、Yahoo、AOL、Fastmail、Zoho、QQ 邮箱的建议设置，可在“Server settings”中修改。Outlook.com、Hotmail、Live
+地址会引导到 Microsoft 登录，因为 Outlook.com 已不再接受应用专用密码。网易 163/126 需要 IMAP ID 握手，目前尚未支持。
 
 新建 Microsoft 账户需支持你的账户类型，使用 delegated `Mail.ReadWrite` / `Mail.Send` / `User.Read` 与
 `offline_access`；已有只读授权需重新授权，绝不静默扩大权限。参考 [Microsoft 设备授权文档](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code)。

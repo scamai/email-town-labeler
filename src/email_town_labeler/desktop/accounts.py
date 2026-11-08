@@ -12,13 +12,16 @@ from ..config import Paths
 from ..gmail.auth import _write_private
 
 DEFAULT_NAME = "Gmail"
-# Names this app generated for the auto-enrolled default Gmail account; the user never typed them.
-# The UI shows the mailbox address instead ("当前 Gmail" and "Primary Gmail" came from earlier releases).
-GENERATED_NAMES = frozenset({DEFAULT_NAME, "Primary Gmail", "当前 Gmail"})
+# Names this app generates (auto-enrolled default Gmail, or an account added with the name left empty);
+# the user never typed them. The UI shows the mailbox address instead ("当前 Gmail" and
+# "Primary Gmail" came from earlier releases).
+GENERATED_NAMES = frozenset({DEFAULT_NAME, "Microsoft", "Primary Gmail", "当前 Gmail"})
 
 
 def display_name(name: str, address: str) -> str:
-    return (address or DEFAULT_NAME) if name in GENERATED_NAMES else name
+    if name not in GENERATED_NAMES:
+        return name
+    return address or (name if name == "Microsoft" else DEFAULT_NAME)
 
 
 class Accounts:

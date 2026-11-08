@@ -30,9 +30,12 @@ from .providers import (
     request_json,
     save_microsoft_token,
 )
+from .setup import MICROSOFT_CLIENT_ID, google_client_config
 from .state import LocalState, message_key
 
 log = logging.getLogger("email_town_labeler.desktop")
+
+ACCOUNT_DEFAULT_NAMES = {"gmail": "Gmail", "gmail-existing": "Gmail", "microsoft": "Microsoft"}
 
 CATEGORY_NAMES = {
     "action_needed": "Action needed",
@@ -815,10 +818,12 @@ class Workbench:
         return {"ok": True}
 
     def connect(self, data: dict):
-        name = Accounts.name(data.get("name"))
         provider = data.get("provider")
         if provider not in ("gmail", "gmail-existing", "imap", "microsoft"):
             raise ValueError("Choose an email provider")
+        # The name is optional: generated names are shown as the mailbox address once it connects.
+        default = data.get("username") if provider == "imap" else ACCOUNT_DEFAULT_NAMES[provider]
+        name = Accounts.name(str(data.get("name") or "").strip() or default)
         reconnect_id = data.get("reconnect_id")
         if reconnect_id:
             existing = self.accounts.get(reconnect_id)
@@ -888,14 +893,15 @@ class Workbench:
             elif provider == "gmail":
                 from google_auth_oauthlib.flow import InstalledAppFlow
 
-                secret = self.paths.client_secret
-                if not secret.is_file():
+                client = google_client_config(self.paths)
+                if client is None:
                     raise ValueError(
-                        "Configure a Google Desktop OAuth client on this device first, or connect an existing Gmail configuration"
+                        "Google sign-in is not set up in this copy. Import a Google OAuth client file,"
+                        " or add Gmail as Other email with an app password"
                     )
                 paths = Paths.default(self.root / "accounts" / uuid.uuid4().hex).ensure()
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(secret), ["https://www.googleapis.com/auth/gmail.modify"]
+                flow = InstalledAppFlow.from_client_config(
+                    client[0], ["https://www.googleapis.com/auth/gmail.modify"]
                 )
                 credentials = flow.run_local_server(
                     port=0,
@@ -914,7 +920,9 @@ class Workbench:
                 )
             elif provider == "microsoft":
                 client_id = str(
-                    data.get("client_id") or (existing or {}).get("settings", {}).get("client_id", "")
+                    data.get("client_id")
+                    or (existing or {}).get("settings", {}).get("client_id", "")
+                    or MICROSOFT_CLIENT_ID
                 ).strip()
                 flow = microsoft_device(client_id)
                 verification_url = flow.get("verification_uri", "")

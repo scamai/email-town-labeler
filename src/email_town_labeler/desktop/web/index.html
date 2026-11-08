@@ -435,22 +435,35 @@
           Connect your inbox. Classification and organization run on this
           device.
         </p>
-        <label class="field-label" for="accountName"
-          >Display name <span class="required">Required</span></label
-        ><input
-          class="text-input"
-          id="accountName"
-          name="name"
-          required
-          maxlength="80"
-          placeholder="e.g. Work"
-        /><label class="field-label" for="providerSelect">Connection</label
+        <label class="field-label" for="providerSelect">Email provider</label
         ><select class="text-input" id="providerSelect" name="provider">
-          <option value="gmail">Gmail (browser authorization)</option>
-          <option value="gmail-existing">Existing Email Town directory</option>
-          <option value="imap">IMAP (TLS)</option>
-          <option value="microsoft">Microsoft (device login)</option>
+          <option value="gmail">Google / Gmail</option>
+          <option value="microsoft">Microsoft / Outlook</option>
+          <option value="imap">Other email (iCloud, Yahoo, QQ…)</option>
+          <option value="gmail-existing">Existing Email Town folder</option>
         </select>
+        <div id="gmailFields" hidden>
+          <p class="field-help" id="googleStatus"></p>
+          <div id="googleClientImport" hidden>
+            <label class="field-label" for="googleClientFile"
+              >Google OAuth client file (optional)</label
+            ><input
+              class="text-input"
+              id="googleClientFile"
+              type="file"
+              accept="application/json,.json"
+            />
+            <p class="field-help">
+              Created in Google Cloud as a Desktop app client.
+              <a
+                href="https://github.com/scamai/email-town-labeler/blob/main/docs/google-cloud-setup.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Step-by-step guide</a
+              >
+            </p>
+          </div>
+        </div>
         <div id="existingFields" hidden>
           <label class="field-label" for="homeDirectory"
             >Email Town directory</label
@@ -466,6 +479,45 @@
           </p>
         </div>
         <div id="imapFields" hidden>
+          <label class="field-label" for="imapEmail">Email address</label
+          ><input
+            class="text-input"
+            id="imapEmail"
+            type="email"
+            autocomplete="email"
+            placeholder="you@icloud.com"
+          />
+          <p class="field-help" id="imapPresetHelp" hidden>
+            <span id="imapPresetText"></span>
+            <a
+              id="imapPresetLink"
+              target="_blank"
+              rel="noopener noreferrer"
+              hidden
+              >Open settings</a
+            >
+          </p>
+          <button
+            class="button button-quiet"
+            id="useMicrosoftButton"
+            type="button"
+            hidden
+          >
+            Use Microsoft sign-in
+          </button>
+          <label class="field-label" for="imapPassword">App password</label
+          ><input
+            class="text-input"
+            id="imapPassword"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+          />
+          <p class="field-help">
+            Saved in your system credential vault, never in Email Town's files.
+          </p>
+          <details id="imapServerDetails" class="setup-details" open>
+            <summary>Server settings</summary>
           <div class="field-grid">
             <div>
               <label class="field-label" for="imapHost">Server</label
@@ -495,18 +547,7 @@
             id="imapUsername"
             name="username"
             autocomplete="username"
-          /><label class="field-label" for="imapPassword">App password</label
-          ><input
-            class="text-input"
-            id="imapPassword"
-            name="password"
-            type="password"
-            autocomplete="new-password"
           />
-          <p class="field-help">
-            Used to sign in to your IMAP and SMTP provider and saved in your
-            system credential vault. SMTP is never guessed.
-          </p>
           <div class="field-grid smtp-fields">
             <div>
               <label class="field-label" for="smtpHost">SMTP server</label
@@ -539,20 +580,28 @@
           <p class="field-help">
             Add SMTP settings to send and reply from this account.
           </p>
+          </details>
         </div>
-        <div id="microsoftHelp" class="info-callout" hidden>
-          Microsoft accounts require a registered public-client app with device
-          login enabled.
-        </div>
-        <div id="clientIdFields" hidden>
-          <label class="field-label" for="clientId">Client ID</label
+        <div id="microsoftHelp" class="info-callout" hidden></div>
+        <details id="clientIdFields" class="setup-details" hidden>
+          <summary>Use your own Microsoft app registration</summary>
+          <label class="field-label" for="clientId">Application (client) ID</label
           ><input
             class="text-input"
             id="clientId"
             name="client_id"
             autocomplete="off"
           />
-        </div>
+        </details>
+        <label class="field-label" for="accountName"
+          >Display name <span class="optional">Optional</span></label
+        ><input
+          class="text-input"
+          id="accountName"
+          name="name"
+          maxlength="80"
+          placeholder="Defaults to the email address"
+        />
         <p class="form-error" id="accountFormError" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-quiet" type="button" data-close-dialog>

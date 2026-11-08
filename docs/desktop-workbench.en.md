@@ -40,14 +40,18 @@ The bare URL printed in the terminal has no authority; reopen through the launch
 ## Connect accounts
 
 An existing default Gmail authorization is enrolled automatically and listed by its mailbox address. Use **Accounts → + Add** in the sidebar for other
-mailboxes, with recognizable display names. The app does not extract Outlook or Apple Mail credentials.
+mailboxes. The display name is optional: left empty, the account is listed by its address. The app does not extract Outlook or Apple Mail credentials.
 
-| Provider | Connection | Prerequisite |
+| Provider | Connection | What you need |
 |---|---|---|
-| Gmail / Workspace | Browser OAuth, Gmail modify (read/send/manage) | Google Desktop OAuth client file in default configuration; [setup guide](google-cloud-setup.md) |
-| Another existing Gmail CLI home | Explicit absolute `--home` directory | Its own valid Gmail token |
-| Microsoft 365 / Outlook.com | Device code OAuth | Your public-client application ID with device flow enabled; tenant approval may be required |
-| iCloud / other IMAP | Verified TLS, username, app-specific password | IMAP enabled and OS credential vault available |
+| Google / Gmail | Browser sign-in, Gmail modify (read/send/manage) | A Google sign-in client: one shipped with your copy, or your own Desktop OAuth client file imported in the dialog ([setup guide](google-cloud-setup.md)). Without either, add Gmail as Other email with an app password. |
+| Microsoft / Outlook | Device code sign-in | Nothing when your copy ships a Microsoft app ID; otherwise your own public-client application ID (under **Use your own Microsoft app registration**). Tenant approval may be required. |
+| Other email (iCloud, Yahoo, QQ…) | Verified TLS IMAP/SMTP with an app password | Type the address: known providers fill the server settings and link to where the app password is created. Others need the server names. |
+| Existing Email Town folder | Explicit absolute `--home` directory | Its own valid Gmail token |
+
+Suggested settings exist for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and QQ Mail; they stay editable under
+**Server settings**. Outlook.com, Hotmail and Live addresses are routed to Microsoft sign-in, because Outlook.com
+no longer accepts app passwords. NetEase (163/126) needs an IMAP ID handshake that is not implemented yet.
 
 Microsoft new accounts require delegated `Mail.ReadWrite`, `Mail.Send`, `User.Read`, and `offline_access`;
 existing read-only grants require reauthorization and are never silently expanded. See the [official device

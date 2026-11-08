@@ -956,10 +956,46 @@ dialog::backdrop {
   font-weight: 600;
   margin-top: 8px;
 }
-.required {
+.required,
+.optional {
   color: var(--muted);
   font-weight: 400;
   font-size: 12px;
+}
+.setup-details {
+  margin-top: 8px;
+}
+.setup-details > summary {
+  min-height: var(--control);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.setup-details > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin: 0 12px 0 4px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 160ms ease-out;
+}
+.setup-details[open] > summary::before {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .setup-details > summary::before {
+    transition: none;
+  }
+}
+.setup-details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .text-input {
   width: 100%;
