@@ -90,6 +90,8 @@ def check_palette(page, categories):
 def main():
     out = Path(tempfile.mkdtemp(prefix="email-town-ui-"))
     paths = Paths.default(out / "home").ensure()
+    # Offline and deterministic: keyword rules, never the desktop default model's 263 MB download.
+    paths.config_file.write_text('[model]\nref = "rules"\n')
     manager = Workbench(out / "workbench", paths, reader_factory=FixtureReader)
     manager.demo = True
     for name in ("Work · fixture", "Personal · fixture"):

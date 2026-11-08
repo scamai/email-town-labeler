@@ -33,8 +33,8 @@
 如果 `email-town-labeler desktop` 已经在同一个数据目录运行，应用会在它上面打开窗口，关闭窗口后它继续运行。
 
 应用与 CLI 使用相同的配置和数据目录（`EMAIL_TOWN_LABELER_HOME` 同样可以改变位置）。模型不在应用里：
-没有配置时使用内置的 `rules` 模型；如果 `config.toml` 指定了目录中的模型，应用会在第一次分类邮件时下载它并校验
-sha256（`town-modernbert-int8`：下载 263 MB，解压后 382 MB）。日志是数据目录中的 `workbench/desktop.log`
+没有 `config.toml` 时，工作台使用已发布的本机模型 `town-modernbert-int8`，在第一次分类邮件时下载一次并校验
+sha256（下载 263 MB，解压后 382 MB）；下载期间列表上方会提示，邮件照常可读。`config.toml` 中指定的模型（包括纯关键词的 `rules`）始终优先。日志是数据目录中的 `workbench/desktop.log`
 （macOS `~/Library/Application Support/email-town-labeler/`，Windows `%LOCALAPPDATA%\email-town-labeler\`，
 Linux `~/.local/share/email-town-labeler/`），不包含邮件内容。要检查下载的应用，用 `--self-check` 运行它；
 它报告应用能加载哪些组件，不打开窗口，也不读写你的数据：
@@ -68,7 +68,7 @@ email-town-labeler desktop --background
 
 首次安装可使用 `uv tool install 'email-town-labeler[onnx,desktop]'`；使用本分支源码时运行
 `uv tool install --editable '.[onnx,desktop]'`。`desktop` extra 为 IMAP 提供系统钥匙串支持。
-本地模型使用现有默认配置；未安装的模型仍需下载模型文件，分类内容不上传。桌面工作台的收发功能
+分类使用 `config.toml` 中的模型；没有配置时使用 `town-modernbert-int8`（首次下载 263 MB）。分类内容不上传。桌面工作台的收发功能
 与只负责标签的 CLI 服务分开。
 
 命令会打开浏览器里的本机界面。重复执行会打开同一个运行实例；关闭浏览器不会停止后台进程。

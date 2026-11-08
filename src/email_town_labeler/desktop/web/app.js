@@ -77,6 +77,7 @@
     refreshing: false,
     stale: false,
     modelError: "",
+    modelStatus: null,
     lastRefresh: null,
     demo: false,
     filters: {
@@ -415,7 +416,9 @@
       : "";
     els.listStatus.textContent = state.modelError
       ? `Classifier: ${text(state.modelError)}`
-      : state.stale
+      : state.modelStatus?.state === "downloading"
+        ? `Downloading the on-device classifier (${text(state.modelStatus.size)}, once). Mail is readable meanwhile.`
+        : state.stale
         ? "Sync failed; showing the last loaded data."
         : state.refreshing && state.messages.length
           ? "Syncing latest changes…"
@@ -812,6 +815,7 @@
       demo: Boolean(data.demo),
       limit: Number(data.limit) || 100,
       modelError: data.model_error || "",
+      modelStatus: data.model_status || null,
     };
     const snapshot = JSON.stringify(next);
     const changed = snapshot !== state.snapshot;

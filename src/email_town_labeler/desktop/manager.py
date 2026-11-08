@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..config import Paths, load_config
 from ..gmail.auth import save_credentials
+from ..models import catalog
 from ..models.worker import load_service_model
 from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
@@ -34,6 +35,10 @@ from .setup import MICROSOFT_CLIENT_ID, google_client_config
 from .state import LocalState, message_key
 
 log = logging.getLogger("email_town_labeler.desktop")
+
+# With no config.toml (a fresh desktop app), classify with the published on-device model instead of the
+# CLI's keyword-only `rules` default. It is downloaded once on first use; a config file's model always wins.
+DESKTOP_MODEL = "town-modernbert-int8"
 
 ACCOUNT_DEFAULT_NAMES = {"gmail": "Gmail", "gmail-existing": "Gmail", "microsoft": "Microsoft"}
 
@@ -84,6 +89,8 @@ class Workbench:
         self.refresh_again = False
         self.reader_factory, self.model = reader_factory, classifier
         self.cfg = load_config(default_paths.config_file)
+        self.model_ref = self.cfg.model_ref if default_paths.config_file.is_file() else DESKTOP_MODEL
+        self.model_status = None  # {"state": "downloading", "size": ...} while the model is fetched
         self.lock, self.model_lock = threading.RLock(), threading.RLock()
         # Woken on every visible change so a waiting /api/state answers at once.
         self.changed, self.version, self.seq = threading.Condition(self.lock), 0, 0
@@ -217,6 +224,7 @@ class Workbench:
                 "jobs": list(self.jobs.values()),
                 "demo": self.demo,
                 "model_error": self.model_error,
+                "model_status": self.model_status,
                 "limit": self.limit,
                 "folder": self.folder,
             }
@@ -453,13 +461,23 @@ class Workbench:
             return
         with self.model_lock:
             if self.model is None:
-                self.model = load_service_model(
-                    self.cfg.model_ref,
-                    models_dir=self.paths.models_dir,
-                    device=self.cfg.device,
-                    allow_remote_endpoint=False,
-                    keep_loaded_minutes=self.cfg.keep_loaded_minutes,
-                )
+                entry = catalog.get(self.model_ref)
+                if entry is not None and catalog.installed(entry, self.paths.models_dir) is None:
+                    with self.lock:  # tell the UI why categories wait: a one-time download
+                        self.model_status = {"state": "downloading", "size": catalog.human_size(entry.size)}
+                        self._touch()
+                try:
+                    self.model = load_service_model(
+                        self.model_ref,
+                        models_dir=self.paths.models_dir,
+                        device=self.cfg.device,
+                        allow_remote_endpoint=False,
+                        keep_loaded_minutes=self.cfg.keep_loaded_minutes,
+                    )
+                finally:
+                    with self.lock:
+                        self.model_status = None
+                        self._touch()
             predictions = self.model.predict([full for _key, full in items])
             # Never infer new-sender/contact knowledge across unrelated accounts.
             results = [

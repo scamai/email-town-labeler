@@ -84,7 +84,10 @@ def main():
         readers.append(reader)
         return reader
 
-    manager = Workbench(out / "workbench", Paths.default(out / "home").ensure(), reader_factory=factory)
+    paths = Paths.default(out / "home").ensure()
+    # Offline and deterministic: keyword rules, never the desktop default model's 263 MB download.
+    paths.config_file.write_text('[model]\nref = "rules"\n')
+    manager = Workbench(out / "workbench", paths, reader_factory=factory)
     manager.demo = True
     manager.accounts.add(
         "Fixture", "imap", {"host": "fixture", "username": "fixture@example.com", "port": 993}
