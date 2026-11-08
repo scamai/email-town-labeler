@@ -73,7 +73,7 @@ draft and are never retried automatically. Gmail/SMTP sends are limited to 20 Mi
 downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding includes body only; attachments
 must be re-added explicitly.
 
-Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model.
+Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
 Local overrides take precedence and are independent of completion. They currently neither write back to the
 provider nor train the existing CLI feedback model. Images referenced by the HTML body appear below the
 plaintext body; the sender's HTML layout, scripts and styles are never rendered. CID-linked PNG, JPEG,
