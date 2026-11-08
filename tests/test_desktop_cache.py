@@ -1,6 +1,7 @@
 """On-disk list cache: instant restart, list fields only, Gmail resumes from its history cursor."""
 
 import json
+import os
 import stat
 import threading
 
@@ -63,7 +64,8 @@ def test_cache_file_holds_list_fields_only_and_is_private(tmp_path):
     raw = path.read_bytes()
     assert b"Fixture subject" in raw and b"fixture@example.test" in raw
     assert b"body " not in raw and b"private body" not in raw  # read-ahead bodies stay in RAM
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":  # Windows has no POSIX modes; the data folder is in the user's profile
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     cache = ListCache(path)
     cache.save_rows("a", "inbox", [{"id": "k", "subject": "s", "body": "x", "snippet": "y", "headers": {}}])
     assert cache.load_rows({"a"})[("a", "inbox")][1] == [{"id": "k", "subject": "s"}]

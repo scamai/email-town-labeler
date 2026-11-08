@@ -132,7 +132,8 @@ def test_mark_read_route_passes_id_and_flag(server):
 def test_page_markup_has_no_inline_styles():
     """The CSP is style-src 'self': a style attribute or <style> in the page would be refused silently."""
     web = Path(server_module.__file__).parent / "web"
-    page = (web / "index.html").read_text()
+    page = (web / "index.html").read_text(encoding="utf-8")
     assert not re.search(r"<style\b|\sstyle\s*=", page), "inline style in index.html"
     for script in web.glob("*.js"):
-        assert 'setAttribute("style"' not in script.read_text(), f"inline style set in {script.name}"
+        text = script.read_text(encoding="utf-8")
+        assert 'setAttribute("style"' not in text, f"inline style set in {script.name}"
