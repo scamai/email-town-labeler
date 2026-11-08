@@ -530,8 +530,9 @@
         meta.append(star);
       }
       if (message.unread) {
+        // Unread reads as weight and a dot, as in Gmail; the word stays for screen readers.
         const unread = document.createElement("span");
-        unread.className = "unread-badge";
+        unread.className = "sr-only";
         unread.textContent = "Unread";
         meta.append(unread);
       }
@@ -1347,6 +1348,8 @@
     showToast,
     openMessage,
     accountById,
+    renderList,
+    filteredMessages,
     render: null,
   };
   setProviderFields();

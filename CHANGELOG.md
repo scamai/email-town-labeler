@@ -7,6 +7,14 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Read and unread, as in Gmail
+
+- Opening a message marks it read in its mailbox: shown at once, written in the background, put back if the write
+  fails. A list read that is older than the write no longer flips it back. "Mark unread" keeps the open message
+  unread until it is opened again. Accounts without write permission, or paused, are left unchanged.
+- Unread rows read as bold sender, subject and time with a blue dot (the "Unread" chip is gone from rows); the open
+  folder's tab and the window title show the unread count.
+
 ## [0.1.3] - 2026-11-08
 
 ### Keyboard shortcuts

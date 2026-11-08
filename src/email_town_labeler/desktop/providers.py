@@ -1,4 +1,4 @@
-"""Account-bound mail adapters. Reads never mark mail read; writes require explicit app actions."""
+"""Account-bound mail adapters. Reads never mark mail read; writes follow app actions (opening a message is one)."""
 
 from __future__ import annotations
 

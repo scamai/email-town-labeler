@@ -209,10 +209,12 @@ def main() -> int:
                     # Act: star (from inside the closed More menu), read state, done, archive, trash.
                     page.keyboard.press("s")
                     until(lambda: "STARRED" in mailbox.record("m2")["labels"], "s stars the open message")
-                    page.keyboard.press("Shift+I")
-                    until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "Shift+I marks read")
+                    # Opening m2 already read it (open-to-read), so unread first, then read again.
+                    until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "opening marks read")
                     page.keyboard.press("Shift+U")
                     until(lambda: "UNREAD" in mailbox.record("m2")["labels"], "Shift+U marks unread")
+                    page.keyboard.press("Shift+I")
+                    until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "Shift+I marks read")
                     before = manager.snapshot()["messages"][1]["done"]  # local state persists across passes
                     page.keyboard.press("d")
                     until(

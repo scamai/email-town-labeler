@@ -159,12 +159,25 @@ def main():
                 # Observe the list AND the open preview after a real mailbox action.
                 row = page.locator(".message-row").filter(has_text="Fixture received")
                 row.locator(".row-open").click()
-                expect(page.locator("#previewUnread")).to_be_visible()
-                page.locator("#previewMore > summary").click()
-                page.locator("[data-single-action='read']").click()
+                # Opening reads it, as in Gmail: row and preview lose Unread and the mailbox gets the write.
                 expect(row).not_to_have_class(re.compile(r"\bis-unread\b"))
                 expect(page.locator("#previewUnread")).to_be_hidden()
+                ok_record = next(r for r in readers[-1].records if r["provider_id"] == "ok")
+                deadline = time.monotonic() + 5
+                while "UNREAD" in ok_record["label_ids"] and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                assert "UNREAD" not in ok_record["label_ids"], "opening did not mark the message read"
                 expect(page.locator("[data-single-action='unread']")).to_be_enabled()
+                page.locator("#previewMore > summary").click()
+                page.locator("[data-single-action='unread']").click()
+                expect(row).to_have_class(re.compile(r"\bis-unread\b"))
+                expect(page.locator("#previewUnread")).to_be_visible()
+                page.wait_for_timeout(1500)  # marked unread while open: it stays unread until opened again
+                expect(row).to_have_class(re.compile(r"\bis-unread\b"))
+                if not page.locator("#previewMore").evaluate("el => el.open"):
+                    page.locator("#previewMore > summary").click()
+                page.locator("[data-single-action='read']").click()
+                expect(row).not_to_have_class(re.compile(r"\bis-unread\b"))
                 if not page.locator("#previewMore").evaluate("el => el.open"):
                     page.locator("#previewMore > summary").click()
                 page.locator("[data-single-action='unread']").click()
