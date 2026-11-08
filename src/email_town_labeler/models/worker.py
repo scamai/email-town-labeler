@@ -4,7 +4,8 @@ A large model (town-modernbert: about 3 GB resident) would otherwise stay in mem
 polls find no new mail. Dropping the onnxruntime / torch session in-process is not enough: the allocator
 keeps about half of it. A child process gives all of it back when it exits.
 
-`WorkerModel.predict` starts `python -m email_town_labeler.models.worker` on first use, sends it the
+`WorkerModel.predict` starts `python -m email_town_labeler.models.worker` (in the frozen desktop app:
+the app binary with `--email-town-model-worker`, see `command()`) on first use, sends it the
 manifest, then batches of records, over the child's stdin / stdout (pickle; nothing touches disk or the
 network). `release_if_idle()`, called by Engine.run_forever after each poll, ends the child once it has
 classified nothing for `idle_seconds`; the next mail starts a new one. The child ignores SIGINT and exits
@@ -149,10 +150,22 @@ class WorkerModel:
         return value
 
 
+# In the frozen desktop app (PyInstaller) sys.executable is the app binary, which has no `-m`: the app's
+# entry point (desktop/window.py main) hands this flag to main() below before it loads anything else.
+FROZEN_FLAG = "--email-town-model-worker"
+
+
+def command() -> list[str]:
+    """The argv that starts a worker: `python -m ...` from source, `<app> --email-town-model-worker` frozen."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, FROZEN_FLAG]
+    return [sys.executable, "-m", "email_town_labeler.models.worker"]
+
+
 def _spawn() -> subprocess.Popen:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     return subprocess.Popen(
-        [sys.executable, "-m", "email_town_labeler.models.worker"],
+        command(),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         creationflags=flags,
