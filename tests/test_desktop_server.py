@@ -115,3 +115,12 @@ def test_state_wait_param_long_polls_only_with_a_wellformed_etag(server):
         assert status == 200 and json.loads(body) == {"messages": [{"subject": "fixture only"}]}
     assert calls == [etag]
     assert request(server, "/api/state?wait=" + etag)[0] == 401  # the long-poll is behind the same session
+
+
+def test_mark_read_route_passes_id_and_flag(server):
+    calls = []
+    server.manager.mark_read = lambda key, read: calls.append((key, read)) or {"ok": True, "changed": True}
+    status, _, body = request(server, "/api/mark-read", method="POST", data={"id": "k1"}, auth=True)
+    assert status == 200 and json.loads(body) == {"ok": True, "changed": True}
+    request(server, "/api/mark-read", method="POST", data={"id": "k2", "read": False}, auth=True)
+    assert calls == [("k1", True), ("k2", False)]

@@ -601,6 +601,32 @@
       )
       .forEach((node) => node.remove());
   }
+  // As in Gmail: a message you open is read. Shown at once, written to the mailbox in the background.
+  // Once per open: a detail reload after another action (e.g. "Mark unread") must not read it again;
+  // only opening a different message and coming back does.
+  async function markReadOnOpen(id) {
+    if (local.autoRead === id) return;
+    local.autoRead = id;
+    const message = host.state.messages.find((m) => m.id === id);
+    if (!message?.unread || !accountFor(message.account_id)?.capabilities?.write)
+      return;
+    const show = (unread) => {
+      message.unread = unread;
+      if (host.state.activeId === id) $("previewUnread").hidden = !unread;
+      host.renderList?.();
+      render();
+    };
+    show(false);
+    try {
+      const result = await host.api("/api/mark-read", {
+        method: "POST",
+        body: JSON.stringify({ id, read: true }),
+      });
+      if (!result.ok) show(true);
+    } catch (_) {
+      show(true);
+    }
+  }
   async function loadDetail(id) {
     local.detailId = id;
     clearDetail();
@@ -611,6 +637,7 @@
       if (host.state.activeId !== id || local.detailId !== id) return;
       local.detail = detail;
       renderDetail(detail);
+      markReadOnOpen(id);
     } catch (_) {
       if (local.detailId === id) local.detailId = null;
     }
@@ -793,16 +820,40 @@
     renderAccounts();
     renderSelection();
     const id = host.state.activeId;
+    if (id !== local.opened) {
+      local.opened = id; // a new open: allow one open-to-read for it
+      local.autoRead = null;
+    }
     if (id && id !== local.detailId) loadDetail(id);
     if (!id) {
       local.detailId = null;
       clearDetail();
     }
+    // Unread count on the open folder and in the title, as Gmail shows "Inbox (3)". Loaded mail only.
+    const unread = host.state.messages.filter((m) => m.unread).length;
     document.querySelectorAll("[data-mail-folder]").forEach((button) => {
       const active = button.dataset.mailFolder === host.state.folder;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
+      let badge = button.querySelector(".folder-count");
+      if (active && unread && !badge) {
+        badge = document.createElement("span");
+        badge.className = "folder-count";
+        button.append(badge);
+      }
+      if (badge) {
+        badge.hidden = !(active && unread);
+        badge.textContent = active && unread ? String(unread) : "";
+        badge.title = active && unread ? `${unread} unread loaded` : "";
+      }
     });
+    const folder =
+      { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
+        host.state.folder
+      ] || "Mail";
+    document.title = unread
+      ? `${folder} (${unread}) · Email Town`
+      : `${folder} · Email Town`;
   }
   host.render = render;
   window.EmailTownMail = { render };

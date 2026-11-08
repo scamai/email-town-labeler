@@ -528,6 +528,17 @@ kbd {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.folder-count {
+  display: inline-block;
+  min-width: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 20px;
+}
 .pane-header {
   display: grid;
   gap: 16px;
@@ -721,6 +732,21 @@ input[type="checkbox"] {
 }
 .message-row.is-unread .row-subject {
   font-weight: 700;
+}
+.message-row.is-unread .row-sender,
+.message-row.is-unread .row-title time {
+  color: var(--text);
+  font-weight: 700;
+}
+.message-row.is-unread .row-sender::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
 }
 .row-meta {
   display: flex;
