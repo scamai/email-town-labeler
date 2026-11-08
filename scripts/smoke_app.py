@@ -122,8 +122,8 @@ def processes(marker: str) -> list[str]:
     return [line.strip() for line in out.splitlines() if marker in line and "smoke_app.py" not in line]
 
 
-def window_of(pid: int) -> tuple[int, int, int] | None:
-    """(window id, width, height) of pid's on-screen window: macOS, Quartz (a pywebview dependency).
+def window_of(pid: int) -> tuple[int, int, int, str] | None:
+    """(window id, width, height, owner) of pid's on-screen window: macOS, Quartz (a pywebview dependency).
     Window ids and bounds need no Screen Recording permission; capturing the pixels does."""
     try:
         import Quartz
@@ -140,7 +140,12 @@ def window_of(pid: int) -> tuple[int, int, int] | None:
             and w.get("kCGWindowLayer") == 0
             and bounds.get("Width", 0) > 200
         ):
-            return int(w["kCGWindowNumber"]), int(bounds["Width"]), int(bounds["Height"])
+            return (
+                int(w["kCGWindowNumber"]),
+                int(bounds["Width"]),
+                int(bounds["Height"]),
+                w.get("kCGWindowOwnerName"),
+            )
     return None
 
 
@@ -194,7 +199,9 @@ def main() -> int:
 
         if sys.platform == "darwin":
             window = wait_for(lambda: window_of(first.pid), 10)
-            passed &= step(window is not None, f"the app has an on-screen window (id, w, h = {window})")
+            passed &= step(
+                window is not None, f"the app has an on-screen window (id, w, h, owner = {window})"
+            )
             if window and args.screenshot:  # reported, not gated: it depends on a privacy permission
                 time.sleep(2)  # let the page paint
                 args.screenshot.parent.mkdir(parents=True, exist_ok=True)

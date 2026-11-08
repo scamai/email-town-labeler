@@ -80,6 +80,7 @@ class Host:
     def start(self) -> None:
         self._thread.start()
         self.manager.start()
+        log.info("serving the workbench at %s", self.server.origin)  # the origin, never the launch token
 
     def _serve(self) -> None:
         try:
@@ -104,6 +105,7 @@ class Host:
             finally:
                 self.server.server_close()
                 self.lock.release()
+                log.info("the workbench stopped")
 
 
 def claim(root: Path, paths: Paths, *, wait: float | None = None) -> tuple[Host | None, dict | None]:
@@ -164,7 +166,9 @@ def run(root: Path, paths: Paths, webview: Any) -> int:
         text_select=True,  # pywebview disables selection by default; mail must be selectable and copyable
         zoomable=True,
     )
-    if host is not None:
+    if host is None:
+        log.info("opening a window on the workbench already running at %s", active["origin"])
+    else:
         # Quit from the app menu (Cmd+Q) ends the process inside the GUI loop, after `closing` fires:
         # stop there. A plain window close fires it too; the finally below is then a no-op.
         window.events.closing += host.stop
