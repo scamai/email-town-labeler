@@ -16,7 +16,7 @@ from ..gmail.auth import save_credentials
 from ..models.worker import load_service_model
 from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
-from .accounts import Accounts, imap_settings, password_store
+from .accounts import Accounts, display_name, imap_settings, password_store
 from .images import body_images, valid_image_bytes
 from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
@@ -150,13 +150,15 @@ class Workbench:
                     )
                     if k in a["settings"]
                 }
+                address = getattr(self.readers.get(a["id"]), "address", "")
                 accounts.append(
-                    {k: a[k] for k in ("id", "name", "provider", "enabled")}
+                    {k: a[k] for k in ("id", "provider", "enabled")}
                     | status
                     | {
+                        "name": display_name(a["name"], address),
                         "connection": connection,
                         "capabilities": self.account_capabilities(a["id"]),
-                        "address": getattr(self.readers.get(a["id"]), "address", ""),
+                        "address": address,
                     }
                 )
             result = {

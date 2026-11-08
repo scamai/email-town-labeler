@@ -21,6 +21,13 @@ contain breaking changes; they are called out.
 - Read IMAP list headers with one FETCH per 200 messages instead of one round trip per message.
 - A preview waits for an account that is busy syncing instead of failing after 1 s.
 - Replace the 5-second UI poll with a long-poll that answers as soon as local state changes.
+- Do not send Sent mail to the local model (shown as "Not classified (sent mail)"): classifying a Gmail
+  Sent folder read 100 bodies, 6,000 quota units, the whole per-user minute.
+
+### Desktop accounts
+
+- Show the auto-enrolled default Gmail account by its mailbox address instead of a generated name
+  ("当前 Gmail" / "Primary Gmail"); names the user typed are unchanged and nothing new is stored.
 
 ### Desktop startup
 
