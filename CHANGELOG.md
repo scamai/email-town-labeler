@@ -9,6 +9,11 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- The app no longer slides up and leaves an empty band below it. Each message row's screen-reader preview
+  escaped the list, so with 100 messages the page was ~12,700 px tall inside an 840 px window; a trackpad
+  scroll over a short message or the footer scrolled the whole app. Rows now contain their previews, and
+  the app shell clips anything that still escapes. `scripts/check_page_scroll_ui.py` checks both guards
+  separately at desktop, narrow and phone widths in WebKit and Chromium.
 - The selection survives Mark read/unread and star, as in Gmail; only messages that leave the folder
   (archive, Trash, restore) drop out. Before, finishing an action removed its messages from the selection,
   including ones selected while it ran: Shift+J twice right after starring showed 3 rows highlighted but
