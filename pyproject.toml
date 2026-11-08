@@ -46,6 +46,9 @@ onnx = ["onnxruntime>=1.18", "tokenizers>=0.20"]
 # Everything optional at once (both ML backends). Large: pulls torch.
 full = ["email-town-labeler[embed,onnx]"]
 dev = ["pytest>=8", "ruff>=0.6", "build>=1.2"]
+# `email-town`: the workbench in a native window (WKWebView / WebView2 / WebKitGTK), with the ONNX model
+# backend and the OS keychain. Linux also needs GTK: see docs/desktop-workbench.en.md.
+app = ["email-town-labeler[desktop,onnx]", "pywebview>=5.3"]
 
 [project.urls]
 Homepage = "https://github.com/scamai/email-town-labeler"
@@ -57,6 +60,14 @@ Security = "https://github.com/scamai/email-town-labeler/blob/main/SECURITY.md"
 
 [project.scripts]
 email-town-labeler = "email_town_labeler.cli:main"
+
+[project.gui-scripts]
+email-town = "email_town_labeler.desktop.window:main"
+
+[dependency-groups]
+# Build time only, never installed with the package: scripts/build_app.py freezes the `app` extra into a
+# double-click bundle. Pillow lets PyInstaller turn app-icon.png into the Windows .ico.
+app-build = ["pyinstaller>=6.11", "pillow>=10"]
 
 [tool.hatch.version]
 path = "src/email_town_labeler/__init__.py"
