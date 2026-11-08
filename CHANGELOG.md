@@ -7,6 +7,17 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Keyboard shortcuts
+
+- Gmail-style single keys (j/k, e, #, s, Shift U/I, x, c, r, a, f, /, g then i/s/a/t, ?) and Apple Mail ⌘
+  combinations (⌘N, ⌘R, ⌘⇧R, ⌘⇧F, ⌘F, ⌘Enter to send; Ctrl elsewhere). Each clicks the same button a pointer
+  would, so disabled controls and Trash's confirmation still apply. Single keys never fire while typing in a text
+  field, while an input method is composing, or under a dialog. `?` or the footer shows the list.
+- The macOS app's menus add Undo/Redo (⌘Z, ⇧⌘Z) and a Window menu with Minimize (⌘M) and Zoom to pywebview's
+  defaults.
+- `scripts/check_shortcuts_ui.py` checks every shortcut against the real server and a synthetic mailbox in WebKit
+  (the macOS app's engine) and Chromium.
+
 ### Desktop app on Windows
 
 - Fix two defects that made the 0.1.2 Windows build fail its checks: the bundle dropped Gmail's discovery

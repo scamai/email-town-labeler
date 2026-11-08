@@ -54,7 +54,7 @@
           </button>
           <button
             class="button button-primary"
-            id="composeButton"
+            id="composeButton" title="New message (C)" aria-keyshortcuts="C"
             type="button"
           >
             Compose
@@ -196,7 +196,7 @@
                 ><input
                   id="searchInput"
                   type="search"
-                  placeholder="Search subject or sender"
+                  placeholder="Search subject or sender ( / )"
                   autocomplete="off"
               /></label>
               <button
@@ -344,7 +344,7 @@
               <div class="preview-actions">
                 <button
                   class="button button-secondary button-small"
-                  data-single-action="archive"
+                  data-single-action="archive" title="Archive (E)" aria-keyshortcuts="E"
                   type="button"
                 >
                   Archive
@@ -358,7 +358,7 @@
                 </button>
                 <button
                   class="button button-danger button-small"
-                  data-single-action="trash"
+                  data-single-action="trash" title="Move to Trash (#)" aria-keyshortcuts="Shift+3 Delete"
                   type="button"
                 >
                   Trash
@@ -410,7 +410,14 @@
       <footer class="app-footer">
         <span id="footerStatus">Classified on your device</span
         ><button class="text-button" id="restartButton" type="button" hidden>
-          Restart
+          Restart</button
+        ><button
+          class="text-button footer-shortcuts"
+          id="shortcutsButton"
+          type="button"
+          aria-keyshortcuts="Shift+Slash"
+        >
+          Keyboard shortcuts <kbd>?</kbd>
         </button>
       </footer>
     </div>
@@ -788,9 +795,24 @@
         <div id="draftList" class="draft-list"></div>
       </div>
     </dialog>
+    <dialog id="shortcutsDialog" aria-labelledby="shortcutsTitle">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <h2 id="shortcutsTitle">Keyboard shortcuts</h2>
+          <form method="dialog">
+            <button class="icon-button" aria-label="Close">×</button>
+          </form>
+        </div>
+        <p class="dialog-intro">
+          Single keys work when you are not typing in a field.
+        </p>
+        <div class="shortcut-groups" id="shortcutsList"></div>
+      </div>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
     <script src="app.js" defer></script>
     <script src="images.js" defer></script>
     <script src="mail.js" defer></script>
+    <script src="shortcuts.js" defer></script>
   </body>
 </html>

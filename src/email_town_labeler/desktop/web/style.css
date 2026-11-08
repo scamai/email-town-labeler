@@ -419,6 +419,60 @@ h1 {
 .app-footer .text-button {
   min-height: 24px;
 }
+.footer-shortcuts {
+  margin-left: auto;
+}
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 12px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+#shortcutsDialog {
+  width: min(800px, calc(100vw - 32px));
+}
+.shortcut-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 16px 32px;
+  max-height: min(70vh, 640px);
+  overflow: auto;
+}
+.shortcut-groups h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.shortcut-groups dl {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.shortcut-groups dt {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.shortcut-groups dd {
+  margin: 0;
+  font-size: 13px;
+}
+@media (max-width: 520px) {
+  .shortcut-groups dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .shortcut-groups dd {
+    margin-bottom: 8px;
+  }
+}
 .sync-indicator {
   display: inline-flex;
   align-items: center;

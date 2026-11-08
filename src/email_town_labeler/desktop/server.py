@@ -113,6 +113,7 @@ class Handler(BaseHTTPRequestHandler):
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
             "/mail.js": ("mail.js", "text/javascript; charset=utf-8"),
             "/images.js": ("images.js", "text/javascript; charset=utf-8"),
+            "/shortcuts.js": ("shortcuts.js", "text/javascript; charset=utf-8"),
             "/style.css": ("style.css", "text/css; charset=utf-8"),
             "/logo.svg": ("logo.svg", "image/svg+xml"),
         }
