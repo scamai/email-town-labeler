@@ -143,6 +143,8 @@ def assert_account(page, capture: Path) -> None:
 def main() -> int:
     out = Path(tempfile.mkdtemp(prefix="email-town-layout-ui-"))
     paths = Paths.default(out / "home").ensure()
+    # Offline and deterministic: keyword rules, never the desktop default model's 263 MB download.
+    paths.config_file.write_text('[model]\nref = "rules"\n')
     readers: list[FixtureReader] = []
 
     def factory(account):
