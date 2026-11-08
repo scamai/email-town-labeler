@@ -7,6 +7,21 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Desktop loading speed
+
+- Budget Gmail reads in quota units the way Gmail meters them (6,000 per user per minute, shared with the
+  CLI service): the workbench may spend 4,800 units of a minute at once instead of trickling 240 metadata
+  reads a minute, so a cold 100-row list (2,000 units) no longer waits ~12.5 s for its second batch.
+  Rows appear 25 at a time, newest first; throttled reads retry 4 times instead of 2.
+- Keep each folder's last list and Gmail metadata across folder switches: returning to Inbox shows its rows
+  immediately and revalidates through Gmail history (0.5 s measured) instead of re-reading 100 messages.
+- Read bodies in batches over one request (Gmail) or one login (IMAP), classify each batch with one model
+  call, and read ahead the newest 10 bodies per Microsoft/IMAP account so the first opens are instant
+  (not for Gmail, where a body costs 60 quota units and an open takes about 0.1 s).
+- Read IMAP list headers with one FETCH per 200 messages instead of one round trip per message.
+- A preview waits for an account that is busy syncing instead of failing after 1 s.
+- Replace the 5-second UI poll with a long-poll that answers as soon as local state changes.
+
 ### Desktop startup
 
 - Bind the local workbench directly to numeric loopback without reverse DNS, so an unavailable

@@ -81,7 +81,9 @@
     initialized: false,
     authLost: false,
     sessionToken: "",
-    poll: null,
+    watching: false,
+    etag: "",
+    seq: 0,
     toastTimer: null,
     snapshot: "",
   };
@@ -114,6 +116,7 @@
       model: "Local automatic",
       manual: "Local manual",
       pending: "Awaiting classification",
+      none: "Not classified (sent mail)",
     })[source] || "Local category";
   function saveFocus() {
     const el = document.activeElement;
@@ -201,10 +204,6 @@
     state.authLost = true;
     state.sessionToken = "";
     sessionStorage.removeItem("email-town-session");
-    if (state.poll) {
-      clearInterval(state.poll);
-      state.poll = null;
-    }
     setSync("error", "Restart required");
     els.footerStatus.textContent =
       "Session expired. Reopen Email Town from the launcher.";
@@ -747,49 +746,7 @@
       renderList();
     }
     try {
-      const data = await api("/api/state");
-      const next = {
-        folder: data.folder || state.folder || "inbox",
-        accounts: Array.isArray(data.accounts) ? data.accounts : [],
-        messages: Array.isArray(data.messages) ? data.messages : [],
-        categories: Array.isArray(data.categories) ? data.categories : [],
-        refreshing: Boolean(data.refreshing),
-        lastRefresh: data.last_refresh || null,
-        jobs: Array.isArray(data.jobs) ? data.jobs : [],
-        demo: Boolean(data.demo),
-        limit: Number(data.limit) || 100,
-        modelError: data.model_error || "",
-      };
-      const snapshot = JSON.stringify(next);
-      const changed = snapshot !== state.snapshot;
-      Object.assign(state, next, { initialized: true, stale: false, snapshot });
-      reconcileMessageState();
-      if (state.activeId) {
-        const active = state.messages.find((m) => m.id === state.activeId);
-        els.previewUnread.hidden = !active.unread;
-        els.previewDone.textContent = active.done ? "Reopen" : "Mark done";
-        els.previewCategory.textContent =
-          categoryById(active.category)?.name ||
-          active.category ||
-          "Unclassified";
-        els.previewCategory.dataset.category = active.category || "unknown";
-      }
-      setSync(
-        state.accounts.some((account) => account.status === "error")
-          ? "error"
-          : "ok",
-        state.accounts.some((account) => account.status === "error")
-          ? "Some accounts have errors"
-          : state.refreshing
-            ? "Syncing"
-            : "Synced",
-      );
-      if (changed) {
-        renderFilters();
-        renderCounts();
-        renderList();
-        renderJobs();
-      }
+      applyState(await api("/api/state"));
     } catch (error) {
       if (error.message !== "unauthorized") {
         state.stale = state.initialized;
@@ -801,6 +758,80 @@
     } finally {
       state.syncing = false;
     }
+    watchState();
+  }
+  // Long-poll: the server answers as soon as its state differs from our etag
+  // (or after ~10 s unchanged), so new mail appears without a fixed delay.
+  async function watchState() {
+    if (state.watching) return;
+    state.watching = true;
+    try {
+      while (!document.hidden && !state.authLost && state.sessionToken) {
+        try {
+          const data = await api(
+            `/api/state?wait=${encodeURIComponent(state.etag || "0".repeat(32))}`,
+          );
+          // A stale answer (older seq) must not turn the long-poll into a busy loop.
+          if (!data.unchanged && !applyState(data))
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        } catch (error) {
+          if (error.message === "unauthorized") break;
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await loadState();
+        }
+      }
+    } finally {
+      state.watching = false;
+    }
+  }
+  function applyState(data) {
+    // Immediate reads and the long-poll overlap; never let an older answer win.
+    if (!data || Number(data.seq) <= state.seq) return false;
+    state.seq = Number(data.seq);
+    state.etag = text(data.etag);
+    const next = {
+      folder: data.folder || state.folder || "inbox",
+      accounts: Array.isArray(data.accounts) ? data.accounts : [],
+      messages: Array.isArray(data.messages) ? data.messages : [],
+      categories: Array.isArray(data.categories) ? data.categories : [],
+      refreshing: Boolean(data.refreshing),
+      lastRefresh: data.last_refresh || null,
+      jobs: Array.isArray(data.jobs) ? data.jobs : [],
+      demo: Boolean(data.demo),
+      limit: Number(data.limit) || 100,
+      modelError: data.model_error || "",
+    };
+    const snapshot = JSON.stringify(next);
+    const changed = snapshot !== state.snapshot;
+    Object.assign(state, next, { initialized: true, stale: false, snapshot });
+    reconcileMessageState();
+    if (state.activeId) {
+      const active = state.messages.find((m) => m.id === state.activeId);
+      els.previewUnread.hidden = !active.unread;
+      els.previewDone.textContent = active.done ? "Reopen" : "Mark done";
+      els.previewCategory.textContent =
+        categoryById(active.category)?.name ||
+        active.category ||
+        "Unclassified";
+      els.previewCategory.dataset.category = active.category || "unknown";
+    }
+    setSync(
+      state.accounts.some((account) => account.status === "error")
+        ? "error"
+        : "ok",
+      state.accounts.some((account) => account.status === "error")
+        ? "Some accounts have errors"
+        : state.refreshing
+          ? "Syncing"
+          : "Synced",
+    );
+    if (changed) {
+      renderFilters();
+      renderCounts();
+      renderList();
+      renderJobs();
+    }
+    return true;
   }
   async function refresh() {
     if (state.syncing || state.authLost || !state.sessionToken) return;
@@ -1212,9 +1243,6 @@
     render: null,
   };
   setProviderFields();
-  state.poll = window.setInterval(() => {
-    if (!document.hidden) loadState();
-  }, 5000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) loadState();
   });

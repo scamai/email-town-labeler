@@ -28,7 +28,8 @@ browser's IP and the requested URL (including tracking identifiers); their cooki
 Requests omit the referrer and never receive the workbench session token. The server does not proxy
 arbitrary URLs. Other image schemes and inline SVG are not displayed.
 
-The process holds bounded previews in RAM (64 × at most 256 KiB of body text plus 50 image references).
+The process holds bounded previews in RAM (128 × at most 256 KiB of body text plus 50 image references),
+including the newest 10 bodies per Microsoft/IMAP account read ahead from the mailbox so they open without waiting.
 Inline previews are limited to 8 MiB per image and 32 MiB of Blob data per open message; switching messages
 or losing authentication cancels pending loads and revokes those URLs. It does not create a general mail-content
 cache, while explicitly saved drafts and their attachments are stored under `workbench/mail` as described below.

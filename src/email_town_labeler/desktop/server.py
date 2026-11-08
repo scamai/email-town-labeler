@@ -135,7 +135,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if parsed.path == "/api/state":
-                self._response(200, self.server.manager.snapshot())
+                # ?wait=<etag> is a long-poll: it answers when the state changes, so mail shows up
+                # as soon as it is read instead of at the next fixed poll.
+                wait = parse_qs(parsed.query).get("wait", [""])[0]
+                manager = self.server.manager
+                self._response(
+                    200,
+                    manager.wait_snapshot(wait)
+                    if re.fullmatch(r"[a-f0-9]{32}", wait)
+                    else manager.snapshot(),
+                )
             elif parsed.path == "/api/mail-job":
                 self._response(
                     200, self.server.manager.mail_store.receipt(parse_qs(parsed.query).get("id", [""])[0])

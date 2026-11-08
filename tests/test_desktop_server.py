@@ -102,3 +102,16 @@ def test_loopback_http_serves_without_reverse_dns(monkeypatch):
         local.shutdown()
         local.server_close()
         thread.join(2)
+
+
+def test_state_wait_param_long_polls_only_with_a_wellformed_etag(server):
+    calls = []
+    server.manager.wait_snapshot = lambda etag: calls.append(etag) or {"unchanged": True, "etag": etag}
+    etag = "ab" * 16
+    status, _, body = request(server, "/api/state?wait=" + etag, auth=True)
+    assert status == 200 and json.loads(body) == {"unchanged": True, "etag": etag} and calls == [etag]
+    for odd in ("", "zz", "AB" * 16, etag + "0"):
+        status, _, body = request(server, "/api/state?wait=" + odd, auth=True)
+        assert status == 200 and json.loads(body) == {"messages": [{"subject": "fixture only"}]}
+    assert calls == [etag]
+    assert request(server, "/api/state?wait=" + etag)[0] == 401  # the long-poll is behind the same session

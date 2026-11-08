@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import secrets
 import threading
 import time
@@ -40,6 +42,21 @@ CATEGORY_NAMES = {
 }
 
 
+# Read-ahead: the newest bodies per account are fetched after the list so the first opens are instant.
+# A reader can lower it with a `read_ahead` attribute (Gmail does: bodies cost quota, opens are fast).
+PREFETCH = 10
+# The model triages received mail. Your own Sent mail is not classified: on Gmail a Sent folder
+# of 100 would read 100 bodies at 60 quota units each, a whole minute of the per-user budget.
+CLASSIFIED_FOLDERS = frozenset({"inbox", "archive", "trash"})
+# Bodies per provider round trip; the account lock is released between chunks so a preview can run.
+BODY_CHUNK = 10
+BODY_CACHE = 128
+# A preview waits this long for a busy account instead of failing while the list syncs.
+PREVIEW_WAIT = 20
+# Longest a /api/state long-poll is held before it answers "unchanged".
+STATE_WAIT = 10.0
+
+
 def safe_error(exc: Exception) -> str:
     if isinstance(exc, (ProviderError, ValueError)):
         # Our own ValueErrors contain no remote mail content. Callers never pass parse errors through.
@@ -60,7 +77,10 @@ class Workbench:
         self.reader_factory, self.model = reader_factory, classifier
         self.cfg = load_config(default_paths.config_file)
         self.lock, self.model_lock = threading.RLock(), threading.RLock()
-        self.reader_locks = {}
+        # Woken on every visible change so a waiting /api/state answers at once.
+        self.changed, self.version, self.seq = threading.Condition(self.lock), 0, 0
+        self.reader_locks, self.previews_waiting = {}, {}
+        self.folder_rows = {}
         self.readers, self.messages, self.account_status = {}, {}, {}
         self.predictions, self.bodies = {}, OrderedDict()
         self.jobs, self.undos = {}, OrderedDict()
@@ -85,6 +105,7 @@ class Workbench:
 
     def close(self):
         self.stop.set()
+        self._touch()
         if self.model_lock.acquire(timeout=1):
             try:
                 if self.model is not None and hasattr(self.model, "close"):
@@ -138,7 +159,7 @@ class Workbench:
                         "address": getattr(self.readers.get(a["id"]), "address", ""),
                     }
                 )
-            return {
+            result = {
                 "accounts": accounts,
                 "messages": sorted(rows, key=lambda m: m["date"], reverse=True),
                 "categories": [{"id": c, "name": CATEGORY_NAMES[c]} for c in LABEL_CLASSES],
@@ -150,6 +171,28 @@ class Workbench:
                 "limit": self.limit,
                 "folder": self.folder,
             }
+            self.seq += 1
+            digest = hashlib.sha256(json.dumps(result, sort_keys=True, ensure_ascii=False).encode())
+            # seq orders responses that overlap in the browser; etag says whether anything changed.
+            return result | {"etag": digest.hexdigest()[:32], "seq": self.seq, "version": self.version}
+
+    def _touch(self):
+        with self.lock:
+            self.version += 1
+            self.changed.notify_all()
+
+    def wait_snapshot(self, etag: str, timeout: float = STATE_WAIT) -> dict:
+        """Answer as soon as the snapshot differs from `etag`, or say "unchanged" after `timeout`."""
+        deadline = time.monotonic() + timeout
+        while True:
+            snap = self.snapshot()
+            remaining = deadline - time.monotonic()
+            if snap["etag"] != etag or remaining <= 0 or self.stop.is_set():
+                return snap if snap["etag"] != etag else {"unchanged": True, "etag": etag, "seq": snap["seq"]}
+            with self.lock:
+                if self.version == snap["version"]:
+                    # Local edits and clock-only changes need no notify: re-check at least twice a second.
+                    self.changed.wait(min(0.5, remaining))
 
     def refresh(self, *, more=False):
         with self.lock:
@@ -162,6 +205,7 @@ class Workbench:
                 return
             self.refreshing = True
             self.model_error = None
+            self._touch()
         threading.Thread(target=self._refresh, name="workbench-refresh", daemon=True).start()
 
     def _refresh(self):
@@ -187,6 +231,7 @@ class Workbench:
             with self.lock:
                 self.refreshing, self.last_refresh = False, int(time.time() * 1000)
                 again, self.refresh_again = self.refresh_again, False
+                self._touch()
             if again and not self.stop.is_set():
                 self.refresh()
 
@@ -197,42 +242,23 @@ class Workbench:
             self.account_status.setdefault(aid, {"loaded": 0, "last_sync": None, "truncated": False})
             self.account_status[aid].update(status="syncing", error=None)
             reader_lock = self.reader_locks.setdefault(aid, threading.RLock())
+            self._touch()
         try:
             with reader_lock:
                 reader = self.readers.get(aid)
                 if reader is None:
                     reader = self.reader_factory(account)
                     self.readers[aid] = reader
-                records, truncated = (
-                    reader.list(self.limit) if folder == "inbox" else reader.list(self.limit, folder=folder)
-                )
+                kwargs = {} if folder == "inbox" else {"folder": folder}
+                if getattr(reader, "progressive", False):
+                    kwargs["progress"] = lambda partial: self._show_partial(aid, partial, folder, epoch)
+                records, truncated = reader.list(self.limit, **kwargs)
                 if getattr(reader, "identity", None):
                     try:
                         self.accounts.bind_identity(aid, reader.identity)
                     except ValueError as exc:
                         raise ProviderError(str(exc)) from exc
-            incoming = {}
-            for rec in records:
-                key = message_key(aid, rec["provider_id"])
-                category = rec.get("category")
-                prediction = self.predictions.get(key)
-                source = "mailbox" if category else "model" if prediction else "pending"
-                if not category:
-                    category = prediction[0] if prediction else "unknown"
-                incoming[key] = {
-                    "id": key,
-                    "account_id": aid,
-                    "provider_id": rec["provider_id"],
-                    "subject": rec.get("headers", {}).get("subject", "")[:2000] or "(No subject)",
-                    "sender": rec.get("headers", {}).get("from", "")[:1000],
-                    "date": rec.get("internal_date", 0),
-                    "category": category,
-                    "done": False,
-                    "unread": "UNREAD" in rec.get("label_ids", []),
-                    "starred": "STARRED" in rec.get("label_ids", []),
-                    "source": source,
-                    "confidence": prediction[1] if prediction else None,
-                }
+            incoming = self._rows(aid, records, folder)
             with self.lock:
                 if (
                     not self.accounts.get(aid)["enabled"]
@@ -253,58 +279,14 @@ class Workbench:
                     truncated=truncated,
                     last_sync=int(time.time() * 1000),
                 )
+                self._touch()
             saved = self.state.read(list(incoming))
-            for rec in records:
-                if (
-                    self.stop.is_set()
-                    or not self.accounts.get(aid)["enabled"]
-                    or folder != self.folder
-                    or epoch != self.epochs.get(aid, 0)
-                ):
-                    break
-                key = message_key(aid, rec["provider_id"])
-                if rec.get("category") or key in self.predictions or saved.get(key, {}).get("category"):
-                    continue
-                try:
-                    with reader_lock:
-                        full = reader.detail(rec["provider_id"])
-                    self._cache_body(key, full)
-                    with self.model_lock:
-                        if self.model is None:
-                            self.model = load_service_model(
-                                self.cfg.model_ref,
-                                models_dir=self.paths.models_dir,
-                                device=self.cfg.device,
-                                allow_remote_endpoint=False,
-                                keep_loaded_minutes=self.cfg.keep_loaded_minutes,
-                            )
-                        prediction = self.model.predict([full])[0]
-                        # Never infer new-sender/contact knowledge across unrelated accounts.
-                        result = decide(
-                            prediction,
-                            known_contact=False,
-                            new_address=False,
-                            primary=False,
-                            cfg=self.cfg.for_model(self.model.manifest),
-                        )
-                    with self.lock:
-                        self.predictions[key] = (result.cls, result.pred.prob)
-                        if key in self.messages:
-                            self.messages[key].update(
-                                category=result.cls, confidence=result.pred.prob, source="model"
-                            )
-                except Exception as e:  # noqa: BLE001 - keep other accounts usable after model/provider failures
-                    with self.lock:
-                        self.model_error = (
-                            "Some messages could not be classified locally ("
-                            + type(e).__name__
-                            + "); you can still view and classify them manually"
-                        )
-                    break
+            self._read_ahead(aid, account, reader, reader_lock, records, saved, folder, epoch)
             with self.lock:
                 self.account_status[aid].update(
                     status="ready" if self.accounts.get(aid)["enabled"] else "paused", error=None
                 )
+                self._touch()
         except Exception as e:  # noqa: BLE001 - account isolation boundary; never expose raw provider errors
             # Never include remote exception strings: subjects/addresses can appear in provider errors.
             with self.lock:
@@ -315,6 +297,138 @@ class Workbench:
                     else "Sync failed. Check your sign-in and network (" + type(e).__name__ + ")",
                 )
                 self.readers.pop(aid, None)
+                self._touch()
+
+    def _rows(self, aid, records, folder) -> dict:
+        incoming = {}
+        for rec in records:
+            key = message_key(aid, rec["provider_id"])
+            category = rec.get("category")
+            prediction = self.predictions.get(key)
+            source = (
+                "mailbox"
+                if category
+                else "model"
+                if prediction
+                else "none"
+                if folder not in CLASSIFIED_FOLDERS
+                else "pending"
+            )
+            if not category:
+                category = prediction[0] if prediction else "unknown"
+            incoming[key] = {
+                "id": key,
+                "account_id": aid,
+                "provider_id": rec["provider_id"],
+                "subject": rec.get("headers", {}).get("subject", "")[:2000] or "(No subject)",
+                "sender": rec.get("headers", {}).get("from", "")[:1000],
+                "date": rec.get("internal_date", 0),
+                "category": category,
+                "done": False,
+                "unread": "UNREAD" in rec.get("label_ids", []),
+                "starred": "STARRED" in rec.get("label_ids", []),
+                "source": source,
+                "confidence": prediction[1] if prediction else None,
+            }
+        return incoming
+
+    def _show_partial(self, aid, records, folder, epoch):
+        """Rows a long list has already read appear before the rest; the final list replaces them."""
+        incoming = self._rows(aid, records, folder)
+        with self.lock:
+            if folder == self.folder and epoch == self.epochs.get(aid, 0) and not self.stop.is_set():
+                self.messages.update(incoming)
+                self._touch()
+
+    def _read_ahead(self, aid, account, reader, reader_lock, records, saved, folder, epoch):
+        """Fetch bodies the model needs plus the newest few, in chunks, and classify each chunk at once."""
+        keys = {rec["provider_id"]: message_key(aid, rec["provider_id"]) for rec in records}
+        unlabelled = {
+            rec["provider_id"]
+            for rec in records
+            if folder in CLASSIFIED_FOLDERS
+            and not rec.get("category")
+            and keys[rec["provider_id"]] not in self.predictions
+            and not saved.get(keys[rec["provider_id"]], {}).get("category")
+        }
+        with self.lock:
+            cached = set(self.bodies)
+        newest = {rec["provider_id"] for rec in records[: getattr(reader, "read_ahead", PREFETCH)]}
+        wanted = [
+            rec["provider_id"]
+            for rec in records
+            if rec["provider_id"] in unlabelled
+            or (rec["provider_id"] in newest and keys[rec["provider_id"]] not in cached)
+        ]
+        for start in range(0, len(wanted), BODY_CHUNK):
+            if (
+                self.stop.is_set()
+                or not self.accounts.get(aid)["enabled"]
+                or folder != self.folder
+                or epoch != self.epochs.get(aid, 0)
+            ):
+                return
+            chunk = wanted[start : start + BODY_CHUNK]
+            self._yield_to_previews(aid)
+            try:
+                with reader_lock:
+                    if hasattr(reader, "details"):
+                        fulls = reader.details(chunk)
+                    else:
+                        fulls = {pid: reader.detail(pid) for pid in chunk}
+                for pid, full in fulls.items():
+                    self._cache_body(keys[pid], full)
+                self._classify(
+                    [(keys[pid], fulls[pid]) for pid in chunk if pid in unlabelled and pid in fulls]
+                )
+            except Exception as e:  # noqa: BLE001 - keep other accounts usable after model/provider failures
+                with self.lock:
+                    self.model_error = (
+                        "Some messages could not be classified locally ("
+                        + type(e).__name__
+                        + "); you can still view and classify them manually"
+                    )
+                    self._touch()
+                return
+
+    def _classify(self, items):
+        if not items:
+            return
+        with self.model_lock:
+            if self.model is None:
+                self.model = load_service_model(
+                    self.cfg.model_ref,
+                    models_dir=self.paths.models_dir,
+                    device=self.cfg.device,
+                    allow_remote_endpoint=False,
+                    keep_loaded_minutes=self.cfg.keep_loaded_minutes,
+                )
+            predictions = self.model.predict([full for _key, full in items])
+            # Never infer new-sender/contact knowledge across unrelated accounts.
+            results = [
+                decide(
+                    prediction,
+                    known_contact=False,
+                    new_address=False,
+                    primary=False,
+                    cfg=self.cfg.for_model(self.model.manifest),
+                )
+                for prediction in predictions
+            ]
+        with self.lock:
+            for (key, _full), result in zip(items, results, strict=True):
+                self.predictions[key] = (result.cls, result.pred.prob)
+                if key in self.messages:
+                    self.messages[key].update(
+                        category=result.cls, confidence=result.pred.prob, source="model"
+                    )
+            self._touch()
+
+    def _yield_to_previews(self, aid):
+        # Background reads step aside while someone waits to open a message on this account.
+        deadline = time.monotonic() + PREVIEW_WAIT
+        while self.previews_waiting.get(aid) and time.monotonic() < deadline and not self.stop.is_set():
+            time.sleep(0.02)
 
     def _cache_body(self, key, full):
         with self.lock:
@@ -328,7 +442,7 @@ class Workbench:
                 "thread_id": full.get("thread_id", ""),
             }
             self.bodies.move_to_end(key)
-            while len(self.bodies) > 64:
+            while len(self.bodies) > BODY_CACHE:
                 self.bodies.popitem(last=False)
 
     def detail(self, key: str) -> dict:
@@ -343,8 +457,16 @@ class Workbench:
         if cached is None:
             if reader is None or reader_lock is None:
                 raise ProviderError("This account is offline. Refresh and try again.")
-            if not reader_lock.acquire(timeout=1):
-                raise ProviderError("This account is syncing. Try the preview again shortly.")
+            aid = item["account_id"]
+            with self.lock:
+                self.previews_waiting[aid] = self.previews_waiting.get(aid, 0) + 1
+            try:
+                acquired = reader_lock.acquire(timeout=PREVIEW_WAIT)
+            finally:
+                with self.lock:
+                    self.previews_waiting[aid] -= 1
+            if not acquired:
+                raise ProviderError("This account is still syncing. Try the preview again shortly.")
             try:
                 full = reader.detail(item["provider_id"])
             finally:
@@ -390,11 +512,13 @@ class Workbench:
             raise ValueError("Unknown mail folder")
         with self.lock:
             if folder != self.folder:
+                # Show the folder's last list at once and revalidate it, instead of an empty list.
+                self.folder_rows[self.folder] = self.messages
                 self.folder = folder
-                self.messages.clear()
-                self.bodies.clear()
+                self.messages = self.folder_rows.pop(folder, {})
                 for aid in self.readers:
                     self.epochs[aid] = self.epochs.get(aid, 0) + 1
+                self._touch()
         self.refresh()
         return {"ok": True}
 
@@ -504,6 +628,7 @@ class Workbench:
                         elif key in self.messages:
                             field = "unread" if action in ("read", "unread") else "starred"
                             self.messages[key][field] = action in ("unread", "star")
+                        self._touch()
                 result["succeeded"].append(key)
             except Exception as exc:  # noqa: BLE001 - preserve successes across independent accounts
                 result["failed"].append(
@@ -607,6 +732,7 @@ class Workbench:
             self.undos[token] = before
             while len(self.undos) > 50:
                 self.undos.popitem(last=False)
+            self._touch()
             return {"ok": True, "undo": token}
 
     def undo(self, token: str):
@@ -616,12 +742,14 @@ class Workbench:
                 raise ValueError("Undo expired. Review the messages again.")
             self.state.undo(before)
             self.undos.pop(token)
+            self._touch()
         return {"ok": True}
 
     def enable(self, account_id: str, enabled: bool):
         self.accounts.enable(account_id, enabled)
         with self.lock:
             self.account_status.setdefault(account_id, {}).update(status="waiting" if enabled else "paused")
+            self._touch()
         if enabled:
             self.refresh()
         return {"ok": True}
