@@ -87,6 +87,32 @@ def test_mailbox_category_skips_detail_and_model_and_local_actions_are_reversibl
     workbench.close()
 
 
+def test_a_correction_keeps_the_automatic_category_for_accuracy_counts(tmp_path):
+    """The sidebar counts a classification as wrong when the user moved it: the snapshot must say
+    what the classifier (or the mailbox label) chose, alongside the user's category."""
+    workbench, readers, first, second = _workbench(tmp_path)
+    readers[first] = FakeReader([_record("labelled", category="travel"), _record("predicted", category=None)])
+    readers[second] = FakeReader([_record("pending", category=None)])
+    keys = {
+        name: message_key(first if name != "pending" else second, name)
+        for name in ("labelled", "predicted", "pending")
+    }
+    workbench.predictions[keys["predicted"]] = ("orders", 0.91)
+    workbench._refresh()
+    rows = {row["id"]: row for row in workbench.snapshot()["messages"]}
+    assert [rows[keys[n]]["source"] for n in ("labelled", "predicted")] == ["mailbox", "model"]
+    assert not any("auto_category" in row for row in rows.values())  # nothing corrected yet
+    for key in keys.values():
+        workbench.action({"ids": [key], "action": "category", "category": "updates"})
+    rows = {row["id"]: row for row in workbench.snapshot()["messages"]}
+    assert {n: (rows[keys[n]]["category"], rows[keys[n]].get("auto_category")) for n in keys} == {
+        "labelled": ("updates", "travel"),
+        "predicted": ("updates", "orders"),
+        "pending": ("updates", None),  # nothing automatic to be wrong about
+    }
+    workbench.close()
+
+
 def test_failed_account_keeps_last_good_rows_and_other_account_works(tmp_path):
     workbench, readers, first, second = _workbench(tmp_path)
     good = FakeReader([_record("good")])

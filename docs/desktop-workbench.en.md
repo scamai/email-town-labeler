@@ -128,6 +128,9 @@ a different mailbox. Each additional mailbox needs its own user authorization.
 
 Filter across all or individual accounts by today, old unfinished mail, category, completion, or subject/sender
 search. Open a plaintext preview, change its local category, mark complete, or batch-edit and undo.
+Each category in the sidebar shows how many loaded messages it holds, how many are done, and how many are
+**wrong**: messages that classification (the local model or a mailbox label) put there and you moved to another
+category. Mail you have not checked is not counted as wrong, so the figure is a lower bound.
 Completion survives restart; undo tokens live only in the current process. Selection is limited to loaded,
 currently filtered results and 500 messages per action across accounts. The initial window is 100 inbox
 messages per account; Load more adds 100 up to 1,000 per account.

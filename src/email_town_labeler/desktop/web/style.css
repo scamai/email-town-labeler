@@ -1431,8 +1431,30 @@ dialog::backdrop {
 }
 .category-filter.is-active::after {
   content: "✓";
-  margin-left: auto;
   font-weight: 700;
+}
+/* Name over "8 done · 1 wrong", the loaded count on the right; the dot and ✓ sit on the name's line. */
+.category-filter {
+  align-items: flex-start;
+}
+.category-filter::before {
+  margin-top: 6px;
+}
+.category-label {
+  display: grid;
+  min-width: 0;
+}
+.category-stats {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.category-filter .count {
+  margin-left: auto;
+  line-height: 20px;
+}
+.category-wrong {
+  color: var(--danger);
 }
 .unread-badge {
   color: var(--muted);

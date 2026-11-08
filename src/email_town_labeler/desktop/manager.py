@@ -178,6 +178,9 @@ class Workbench:
                 saved = states.get(row["id"], {})
                 row["done"] = bool(saved.get("done", False))
                 if saved.get("category"):
+                    if row.get("source") in ("model", "mailbox"):
+                        # What classification chose before the user's choice: the sidebar's "wrong" count.
+                        row["auto_category"] = row["category"]
                     row["category"], row["source"] = saved["category"], "manual"
                 row.pop("provider_id", None)
             accounts = []
