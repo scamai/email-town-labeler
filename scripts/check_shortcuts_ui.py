@@ -38,6 +38,7 @@ class FixtureReader:
             for i in range(1, 5)
         ]
         self.sent = []
+        self.writes = []  # every provider write in order: proves queued keys run, and in sequence
 
     def capabilities(self):
         return {
@@ -77,6 +78,7 @@ class FixtureReader:
         return next(r for r in self.records if r["id"] == provider_id)
 
     def mutate(self, provider_id, action):
+        self.writes.append((provider_id, action))
         r = self.record(provider_id)
         if action in ("archive", "trash"):
             r["folder"] = action
@@ -101,13 +103,19 @@ class FixtureReader:
         }
 
 
-def until(check, what, timeout=10.0):
+def until(check, what, timeout=10.0, show=None):
+    """Poll `check`. With `until.page` set, wait through Playwright so its events (e.g. a confirm()
+    that a queued action raises meanwhile) are handled; time.sleep would leave the dialog blocking."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if check():
             return
-        time.sleep(0.05)
-    raise AssertionError(f"timed out waiting for: {what}")
+        page = getattr(until, "page", None)
+        if page is not None:
+            page.wait_for_timeout(50)
+        else:
+            time.sleep(0.05)
+    raise AssertionError(f"timed out waiting for: {what}" + (f" (saw {show()})" if show else ""))
 
 
 def main() -> int:
@@ -145,6 +153,7 @@ def main() -> int:
                     page = context.new_page()
                     errors = []
                     page.on("pageerror", lambda e, errors=errors: errors.append(str(e)))
+                    until.page = page
                     confirms = []  # Trash keeps its confirmation when reached by a shortcut
                     page.on("dialog", lambda d, confirms=confirms: (confirms.append(d.message), d.accept()))
                     page.goto(server.launch_url)
@@ -209,11 +218,29 @@ def main() -> int:
                     # Act: star (from inside the closed More menu), read state, done, archive, trash.
                     page.keyboard.press("s")
                     until(lambda: "STARRED" in mailbox.record("m2")["labels"], "s stars the open message")
+                    writes = len(mailbox.writes)
+                    page.keyboard.press("s")
+                    page.keyboard.press("s")  # back to back: unstar, then star again
+                    until(
+                        lambda writes=writes: mailbox.writes[writes:] == [("m2", "unstar"), ("m2", "star")],
+                        "s s unstars and stars",
+                    )
                     # Opening m2 already read it (open-to-read), so unread first, then read again.
                     until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "opening marks read")
+                    # Pressed back to back: the second key waits for the first action instead of being dropped.
+                    writes = len(mailbox.writes)
+                    page.keyboard.press(
+                        "s"
+                    )  # a running action, so both keys below queue and must keep their order
                     page.keyboard.press("Shift+U")
-                    until(lambda: "UNREAD" in mailbox.record("m2")["labels"], "Shift+U marks unread")
                     page.keyboard.press("Shift+I")
+                    until(
+                        lambda writes=writes: (
+                            mailbox.writes[writes + 1 :] == [("m2", "unread"), ("m2", "read")]
+                        ),
+                        "Shift+U then Shift+I",
+                        show=lambda writes=writes: mailbox.writes[writes:],
+                    )
                     until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "Shift+I marks read")
                     before = manager.snapshot()["messages"][1]["done"]  # local state persists across passes
                     page.keyboard.press("d")
@@ -221,13 +248,24 @@ def main() -> int:
                         lambda before=before: manager.snapshot()["messages"][1]["done"] is not before,
                         "d marks the open message done or reopens it",
                     )
+                    # A key queued behind a running action keeps the target it was pressed on:
+                    # s starts a write, e (queued) is pressed on m2, j opens m3 before e runs.
+                    page.keyboard.press("s")
                     page.keyboard.press("e")
+                    page.keyboard.press("j")
+                    expect(subject).to_have_text("Fixture message 3")
                     until(lambda: mailbox.record("m2")["folder"] == "archive", "e archives the open message")
+                    assert mailbox.record("m3")["folder"] == "inbox", (
+                        "the queued e moved to the message opened after it"
+                    )
                     expect(page.locator(".message-row")).to_have_count(3)
+                    page.keyboard.press("k")  # back to the top, as the old flow continued from m1
                     page.keyboard.press("j")
                     page.keyboard.press("#")
                     until(
-                        lambda: sum(r["folder"] == "trash" for r in mailbox.records) == 1, "# moves to Trash"
+                        lambda: sum(r["folder"] == "trash" for r in mailbox.records) == 1,
+                        "# moves to Trash",
+                        show=lambda: mailbox.writes[-3:],
                     )
                     assert len(confirms) == 1 and confirms[0].startswith(
                         "Move 1 selected messages to Trash?"
@@ -251,7 +289,11 @@ def main() -> int:
                     )
                     assert next(r for r in mailbox.records if r["subject"] == opened)["folder"] == "inbox"
 
-                    # Folders: g then a shows Archive, g then i returns to Inbox.
+                    # Folders: g then a shows Archive, g then i returns to Inbox (once the archive has settled).
+                    until(
+                        lambda page=page: not page.evaluate("window.EmailTownMailHost.mailBusy()"),
+                        "the archive settles",
+                    )
                     page.keyboard.press("g")
                     page.keyboard.press("a")
                     expect(page.locator(".message-row")).to_have_count(2)

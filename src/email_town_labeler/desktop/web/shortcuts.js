@@ -10,6 +10,8 @@
   const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
   const MOD = MAC ? "⌘" : "Ctrl";
   let pendingGo = 0; // time of a "g" press: the next key picks a folder
+  let pendingSelect = 0; // time of a "*" press: the next key picks what to select
+  const selector = () => window.EmailTownSelection;
 
   // [keys shown, description] per group; the help dialog is built from this table.
   const HELP = [
@@ -27,6 +29,11 @@
       "Act on the open message, or on the selection",
       [
         ["x", "Select or deselect the open message"],
+        ["Shift j / Shift k", "Extend the selection down / up"],
+        ["* then a / n / r / u", "Select all, none, read, unread"],
+        ["Shift-click", "Select a range (rows or checkboxes)"],
+        [`${MOD}-click`, "Add or remove one message"],
+        ["Esc", "Clear the selection"],
         ["e", "Archive"],
         ["# or Delete", "Move to Trash"],
         ["s", "Star or unstar"],
@@ -70,9 +77,51 @@
   }
   const selection = () => host()?.state.selected?.size || 0;
   // Gmail's rule: with messages selected an action applies to them, else to the open message.
+  // The targets are fixed when the key is pressed: "e j #" archives one message and trashes the next
+  // even while the archive is still running. A key pressed during another mail action waits for it
+  // (up to 10 s) instead of being dropped. It runs through the buttons' own path, so permissions and
+  // Trash's confirmation apply. "toggle-star" stars unless every target is already starred.
   function act(action) {
-    if (selection()) return press(`[data-mail-action="${action}"]`);
-    return press(`[data-single-action="${action}"]`);
+    const state = host()?.state;
+    if (!state || !host().mailAction) return false;
+    const ids = state.selected?.size
+      ? [...state.selected]
+      : state.activeId
+        ? [state.activeId]
+        : [];
+    if (!ids.length) return false;
+    const resolve = () => {
+      if (action !== "toggle-star") return action;
+      const targets = ids
+        .map((id) => state.messages.find((m) => m.id === id))
+        .filter(Boolean);
+      return targets.length && targets.every((m) => m.starred) ? "unstar" : "star";
+    };
+    queue.push({ resolve, ids, at: Date.now() });
+    pump();
+    return true;
+  }
+  // One queue, in key order: each action starts when the previous one has finished.
+  const queue = [];
+  let pumping = null;
+  function pump() {
+    if (pumping) return;
+    const next = queue[0];
+    if (!next) return;
+    if (host().mailBusy?.() && Date.now() - next.at < 10000) {
+      pumping = setTimeout(() => {
+        pumping = null;
+        pump();
+      }, 100);
+      return;
+    }
+    queue.shift();
+    host().mailAction(next.resolve(), next.ids); // sets busy at once, so the next one waits
+    if (queue.length)
+      pumping = setTimeout(() => {
+        pumping = null;
+        pump();
+      }, 100);
   }
   function rows() {
     return [...document.querySelectorAll(".message-row[data-message-id]")];
@@ -192,8 +241,23 @@
       return;
     }
     pendingGo = 0;
+    if (pendingSelect && Date.now() - pendingSelect < 1500) {
+      pendingSelect = 0;
+      const kind = { a: "all", n: "none", r: "read", u: "unread", s: "starred", t: "unstarred" }[lower];
+      if (kind && selector()?.selectWhere(kind)) event.preventDefault();
+      return;
+    }
+    pendingSelect = 0;
     let handled = false;
     if (key === "?") handled = showHelp();
+    else if (key === "*") {
+      pendingSelect = Date.now();
+      handled = true;
+    } else if (key === "Escape") handled = Boolean(selector()?.clear());
+    else if (event.shiftKey && (lower === "j" || key === "ArrowDown"))
+      handled = Boolean(selector()?.extend(1));
+    else if (event.shiftKey && (lower === "k" || key === "ArrowUp"))
+      handled = Boolean(selector()?.extend(-1));
     else if (lower === "j" || key === "ArrowDown") handled = move(1);
     else if (lower === "k" || key === "ArrowUp") handled = move(-1);
     else if (key === "/") handled = focusSearch();
@@ -204,8 +268,7 @@
     else if (lower === "e") handled = act("archive");
     else if (key === "#" || key === "Delete" || key === "Backspace")
       handled = act("trash");
-    else if (lower === "s" && !event.shiftKey)
-      handled = act("star") || act("unstar");
+    else if (lower === "s" && !event.shiftKey) handled = act("toggle-star");
     else if (key === "U") handled = act("unread");
     else if (key === "I") handled = act("read");
     else if (lower === "d" && !event.shiftKey)

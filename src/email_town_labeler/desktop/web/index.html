@@ -221,7 +221,25 @@
               ><input id="selectAll" type="checkbox" /><span
                 >Select all loaded</span
               ></label
-            >
+            ><details class="action-menu select-menu" id="selectMenu" data-align="start">
+              <summary
+                class="button button-quiet button-small"
+                aria-label="Select by state"
+                title="Select by state"
+              >
+                <span aria-hidden="true">▾</span>
+              </summary>
+              <div class="menu-panel" role="menu">
+                <button type="button" role="menuitem" data-select="all">All</button>
+                <button type="button" role="menuitem" data-select="none">None</button>
+                <button type="button" role="menuitem" data-select="read">Read</button>
+                <button type="button" role="menuitem" data-select="unread">Unread</button>
+                <button type="button" role="menuitem" data-select="starred">Starred</button>
+                <button type="button" role="menuitem" data-select="unstarred">
+                  Unstarred
+                </button>
+              </div>
+            </details>
             <span class="selection-count" id="selectionCount">0 messages</span>
             <button
               class="text-button"
@@ -813,6 +831,7 @@
     <script src="app.js" defer></script>
     <script src="images.js" defer></script>
     <script src="mail.js" defer></script>
+    <script src="selection.js" defer></script>
     <script src="shortcuts.js" defer></script>
   </body>
 </html>

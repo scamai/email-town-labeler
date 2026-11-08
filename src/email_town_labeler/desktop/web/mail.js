@@ -856,6 +856,8 @@
       : `${folder} · Email Town`;
   }
   host.render = render;
+  host.mailBusy = () => local.busy; // a mail action is in flight: its buttons are disabled meanwhile
+  host.mailAction = (action, ids) => mailAction(action, ids); // the buttons' path, permissions and confirm
   window.EmailTownMail = { render };
   render();
 })();
