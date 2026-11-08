@@ -358,32 +358,36 @@
               >
                 ← Back
               </button>
-              <span class="preview-heading-label">Message</span>
               <div class="preview-actions">
                 <button
-                  class="button button-secondary button-small"
-                  data-single-action="archive" title="Archive (E)" aria-keyshortcuts="E"
+                  class="icon-action"
+                  data-single-action="archive"
+                  title="Archive (E)"
+                  aria-keyshortcuts="E"
                   type="button"
                 >
-                  Archive
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11H4z M3 4h18v4H3z M10 12h4" /></svg><span class="sr-only">Archive</span>
                 </button>
                 <button
-                  class="button button-secondary button-small"
+                  class="icon-action"
                   data-single-action="restore"
+                  title="Restore to Inbox"
                   type="button"
                 >
-                  Restore
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h5l2 3h4l2-3h5 M5 5h14l2 8v6H3v-6z" /></svg><span class="sr-only">Restore</span>
                 </button>
                 <button
-                  class="button button-danger button-small"
-                  data-single-action="trash" title="Move to Trash (#)" aria-keyshortcuts="Shift+3 Delete"
+                  class="icon-action icon-action-danger"
+                  data-single-action="trash"
+                  title="Move to Trash (#)"
+                  aria-keyshortcuts="Shift+3 Delete"
                   type="button"
                 >
-                  Trash
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13 M10 11v6 M14 11v6" /></svg><span class="sr-only">Trash</span>
                 </button>
                 <details class="action-menu" id="previewMore">
-                  <summary class="button button-secondary button-small">
-                    More <span aria-hidden="true">⌄</span>
+                  <summary class="icon-action" title="More">
+                    <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width: 3"><path d="M6 12h.01 M12 12h.01 M18 12h.01" /></svg><span class="sr-only">More</span>
                   </summary>
                   <div class="menu-panel">
                     <span class="menu-label">Original mailbox</span>
@@ -410,18 +414,34 @@
                   </div>
                 </details>
               </div>
+              <div class="preview-nav">
+                <span class="preview-position" id="previewPosition"></span>
+                <button class="icon-action" id="previewNewer" type="button" title="Newer (K)">
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg><span class="sr-only">Newer message</span>
+                </button>
+                <button class="icon-action" id="previewOlder" type="button" title="Older (J)">
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg><span class="sr-only">Older message</span>
+                </button>
+              </div>
             </div>
-            <div class="preview-meta">
-              <span class="source-badge" id="previewSource"></span
-              ><span class="category-badge" id="previewCategory"></span
-              ><span class="unread-badge" id="previewUnread">Unread</span>
+            <div class="preview-title">
+              <h2 id="previewSubject"></h2>
+              <div class="preview-meta">
+                <span class="category-badge" id="previewCategory"></span
+                ><span class="source-badge" id="previewSource"></span
+                ><span class="unread-badge" id="previewUnread">Unread</span>
+              </div>
             </div>
-            <h2 id="previewSubject"></h2>
-            <p class="preview-byline" id="previewByline"></p>
-            <time class="preview-date" id="previewDate"></time>
-            <div id="previewEnvelope"></div>
+            <div class="preview-sender">
+              <span class="sender-avatar" id="previewAvatar" aria-hidden="true"></span>
+              <div class="sender-lines">
+                <p class="preview-byline" id="previewByline"></p>
+                <div id="previewEnvelope"></div>
+              </div>
+              <time class="preview-date" id="previewDate"></time>
+            </div>
+            <div class="email-body" id="previewBody"></div>
             <div class="reply-actions" aria-label="Reply and forward"></div>
-            <pre class="email-body" id="previewBody"></pre>
           </article>
         </section>
       </div>
@@ -833,6 +853,7 @@
     <script src="mail.js" defer></script>
     <script src="selection.js" defer></script>
     <script src="rowactions.js" defer></script>
+    <script src="reader.js" defer></script>
     <script src="shortcuts.js" defer></script>
   </body>
 </html>
