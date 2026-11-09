@@ -7,6 +7,19 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- The list no longer jitters under the pointer. Hovering a row (or tabbing into it) swapped the time for
+  the Archive / Trash / read controls, which made its title line 4.3 px taller and moved every row below;
+  the controls now float over the end of that line, on the row's own colour, and the time keeps its space.
+- Opening an unread message no longer resizes its row. A bold subject could wrap onto a second line where
+  the regular one did not (21–23 px at some lengths), so the list jumped just after the click; unread
+  subjects are now drawn heavier without changing glyph widths, and the unread dot sits in the left margin,
+  so read and unread text start in the same place.
+- `scripts/check_layout_stability_ui.py` points at and tabs through every control at 1280, 1000 and 390 px
+  in WebKit and Chromium and fails if anything else moves (105 shifts before, none after), and sweeps
+  subject lengths for read/unread size changes.
+
 ## [0.1.5] - 2026-11-08
 
 ### Per-category counts
