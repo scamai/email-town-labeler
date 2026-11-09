@@ -4,7 +4,7 @@ English
 
 # Releasing the desktop app (maintainers)
 
-[macOS](#macos-signed-and-notarized) · [What the script checks](#what-the-script-checks) · [Windows and Linux](#windows-and-linux)
+[macOS](#macos-signed-and-notarized) · [What the script checks](#what-the-script-checks) · [Before announcing](#before-announcing-test-the-installed-app) · [Windows and Linux](#windows-and-linux)
 
 ## macOS: signed and notarized
 
@@ -46,6 +46,25 @@ gh release upload v<version> dist/release/Email-Town-<version>-macos-arm64.dmg
   image, then runs `spctl` on both. Apple's notary log is kept beside the receipt, also for a rejection.
 - The receipt records the identity, what was signed, Apple's submission ids and answers, and the image's size
   and SHA-256. It is not a clean-machine test: open the image on another Mac before announcing a release.
+
+## Before announcing: test the installed app
+
+Install the notarized build in `/Applications`, open it, and run the native end-to-end check from a terminal
+that has Accessibility permission (System Settings → Privacy & Security → Accessibility):
+
+```bash
+python3 -m venv /tmp/axvenv && /tmp/axvenv/bin/pip install pyobjc-framework-ApplicationServices
+/tmp/axvenv/bin/python scripts/e2e_native_macos.py     # ends with "N/N checks passed"
+```
+
+It drives the real window with System Events keystrokes and reads it back through Accessibility: the
+shortcuts help, search, Sent and Inbox, `j`, star, Shift+J selection, compose, ⌘M, ⌘Q and reopening, plus the
+sidebar counts, the reading pane's position and that the page never scrolls as a whole. It uses your real
+account, so it opens only Sent mail and its one write is a star toggled on and back off; the Sent steps run
+only after the app reports Sent is open. Leave the Mac unlocked while it runs (about two minutes).
+
+A locked screen also hides the notarytool profile: `notarytool` then reports
+`No Keychain password item found for profile`, although the profile is intact. Unlock and retry.
 
 ## Windows and Linux
 
