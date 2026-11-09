@@ -674,6 +674,7 @@ input[type="checkbox"] {
   padding-bottom: 16px;
 }
 .message-row {
+  --row-bg: var(--surface); /* the row's own colour, which its floating hover controls take too */
   position: relative; /* keeps the row's screen-reader preview (.sr-only, absolute) inside the list */
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr);
@@ -681,14 +682,15 @@ input[type="checkbox"] {
   align-items: start;
   padding: 16px var(--pane-gutter);
   border-bottom: 1px solid var(--line);
+  background: var(--row-bg);
   cursor: pointer;
 }
 .message-row:hover {
-  background: var(--bg);
+  --row-bg: var(--bg);
 }
 .message-row.is-selected,
 .message-row.is-focused {
-  background: var(--accent-soft);
+  --row-bg: var(--accent-soft);
 }
 .message-row.is-focused {
   box-shadow: inset 3px 0 var(--accent);
@@ -740,19 +742,27 @@ input[type="checkbox"] {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* The controls float over the end of the title line and the time stays in place, invisible: showing them
+   never changes the line's height or the sender's width, so pointing along the list moves nothing. */
 .row-actions {
-  display: none;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  display: flex;
   gap: 4px;
-  margin: -4px 0;
+  padding-left: 8px;
+  background: var(--row-bg);
+  transform: translateY(-50%);
+  visibility: hidden;
 }
 @media (hover: hover) {
   .message-row:hover .row-actions,
   .message-row:focus-within .row-actions {
-    display: inline-flex;
+    visibility: visible;
   }
   .message-row:hover .row-title time,
   .message-row:focus-within .row-title time {
-    display: none;
+    visibility: hidden;
   }
 }
 .row-content {
@@ -761,6 +771,7 @@ input[type="checkbox"] {
   gap: 4px;
 }
 .row-title {
+  position: relative;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -797,23 +808,27 @@ input[type="checkbox"] {
   font-weight: 400;
   overflow-wrap: anywhere;
 }
+/* Unread is heavier, not wider: the subject wraps over up to two lines, and a bolder face would wrap it
+   differently, so opening a message would resize its row and move the list under the pointer. A stroke
+   thickens the glyphs and keeps their widths. The sender and time sit on one line and use real bold. */
 .message-row.is-unread .row-subject {
-  font-weight: 700;
+  -webkit-text-stroke: 0.04em currentColor;
 }
 .message-row.is-unread .row-sender,
 .message-row.is-unread .row-title time {
   color: var(--text);
   font-weight: 700;
 }
-.message-row.is-unread .row-sender::before {
+/* The unread dot sits in the row's left margin, so read and unread text start at the same place. */
+.message-row.is-unread::before {
   content: "";
-  display: inline-block;
+  position: absolute;
+  top: 22px; /* centred on the sender line: 16px padding + half its 19.5px line */
+  left: calc(var(--pane-gutter) / 2 - 4px);
   width: 8px;
   height: 8px;
-  margin-right: 8px;
   border-radius: 50%;
   background: var(--accent);
-  vertical-align: 1px;
 }
 .row-meta {
   display: flex;

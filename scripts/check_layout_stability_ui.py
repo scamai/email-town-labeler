@@ -7,7 +7,8 @@ or swap one label for another in the same space; it may never shift, resize or r
 check points the mouse at every visible interactive element (message rows, row controls, sidebar filters,
 toolbar and reading-pane buttons, folds, attachment cards), then tabs through the page, and compares every
 other element's box with the box it had at rest. Any edge that moves more than half a pixel is a failure.
-Desktop (1280), narrow (1000, the reading pane covers the list) and phone (390) widths, light theme.
+Reading a message (unread → read) keeps its row's height and the sender's starting point, across subject
+lengths that straddle the wrap points. Desktop (1280), narrow (1000, the reading pane covers the list) and phone (390) widths, light theme.
 WebKit (the macOS app's engine) and Chromium. --report lists every shift instead of stopping at the first.
 """
 
@@ -86,6 +87,33 @@ def workbench(root: Path) -> Workbench:
     )
     manager._refresh()
     return manager
+
+
+# Opening a message marks it read. Across subject lengths that straddle the wrap points, the row must keep
+# its height (or the list below jumps just after the click) and the sender text its starting point.
+READ_STATE = """() => {
+  const row = document.querySelector('.message-row');
+  const subject = row.querySelector('.row-open'), sender = row.querySelector('.row-sender');
+  const original = subject.textContent, was = row.classList.contains('is-unread');
+  // Where the sender's text starts (a range skips pseudo-elements, so an inline dot would show here).
+  const textStart = () => { const r = document.createRange(); r.selectNodeContents(sender);
+    return r.getBoundingClientRect().left; };
+  const words = ('Quarterly review of the shared roadmap and the budget for next year plus notes from the'
+    + ' planning call with design and engineering about launch dates and the hiring plan').split(' ');
+  const bad = [];
+  for (let n = 3; n <= words.length; n++) {
+    subject.textContent = words.slice(0, n).join(' ');
+    row.classList.add('is-unread');
+    const bold = [row.getBoundingClientRect().height, textStart()];
+    row.classList.remove('is-unread');
+    const plain = [row.getBoundingClientRect().height, textStart()];
+    if (Math.abs(bold[0] - plain[0]) > 0.5 || Math.abs(bold[1] - plain[1]) > 0.5)
+      bad.push(`${subject.textContent.length} chars: height ${bold[0] - plain[0]}, sender x ${bold[1] - plain[1]}`);
+  }
+  subject.textContent = original;
+  row.classList.toggle('is-unread', was);
+  return bad;
+}"""
 
 
 def shifts(before: dict, after: dict, skip: set[str]) -> list[tuple[str, list[float]]]:
@@ -184,6 +212,10 @@ def main() -> int:
                             if not report:
                                 raise AssertionError(failures[-1])
                         base = now
+                    for problem in page.evaluate(READ_STATE):
+                        failures.append(f"{where}: reading a message resizes its row at {problem}")
+                        if not report:
+                            raise AssertionError(failures[-1])
                     page.screenshot(path=str(out / f"{engine}-{width}.png"))
                     page.close()
                 print(f"{engine}: checked {', '.join(str(w) for w, _ in VIEWPORTS)} px")
