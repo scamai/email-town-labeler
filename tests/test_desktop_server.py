@@ -2,8 +2,10 @@
 
 import http.client
 import json
+import logging
 import re
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -137,3 +139,17 @@ def test_page_markup_has_no_inline_styles():
     for script in web.glob("*.js"):
         text = script.read_text(encoding="utf-8")
         assert 'setAttribute("style"' not in text, f"inline style set in {script.name}"
+
+
+def test_api_requests_are_timed_in_the_log_without_ids_or_queries(server, caplog):
+    """desktop.log must say how long each action took, so a slow click can be diagnosed afterwards."""
+    server.manager.mark_read = lambda key, read: {"ok": True, "changed": True}
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop.http"):
+        request(server, "/api/mark-read", method="POST", data={"id": "secret-message-id"}, auth=True)
+        request(server, "/api/state?wait=1", auth=True)  # the long poll is never logged
+        deadline = time.monotonic() + 2
+        while not caplog.records and time.monotonic() < deadline:
+            time.sleep(0.01)  # the line is written after the response is flushed
+    lines = [r.getMessage() for r in caplog.records]
+    assert len(lines) == 1 and re.fullmatch(r"POST /api/mark-read 200 \d+ ms", lines[0]), lines
+    assert "secret-message-id" not in lines[0]

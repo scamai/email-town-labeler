@@ -2,6 +2,8 @@
 
 import base64
 import json
+import logging
+import re
 import threading
 import time
 import uuid
@@ -437,3 +439,21 @@ def test_reply_defaults_never_extract_addresses_from_display_names():
     assert result["from"] == ["sender@inside.test"]
     assert result["reply-to"] == ["reply@inside.test"]
     assert result["to"] == ["owner@inside.test"]
+
+
+def test_bulk_action_logs_where_its_time_went(tmp_path, caplog):
+    w, _readers, _first, _second = setup_mail(tmp_path)
+    ids = [m["id"] for m in w.snapshot()["messages"]]
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        finished(
+            w, w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})["job_id"]
+        )
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("mail action")]
+    assert len(lines) == 1, lines
+    assert re.fullmatch(
+        r"mail action archive: 2 messages, 2 ok, 0 failed in \d+ ms \(waiting for the account \d+ ms, "
+        r"provider calls \d+ ms, slowest call \d+ ms\)",
+        lines[0],
+    ), lines
+    assert not any(i in lines[0] for i in ids)
+    w.close()

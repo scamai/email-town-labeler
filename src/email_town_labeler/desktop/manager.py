@@ -306,6 +306,7 @@ class Workbench:
             self.account_status[aid].update(status="syncing", error=None)
             reader_lock = self.reader_locks.setdefault(aid, threading.RLock())
             self._touch()
+        started = time.perf_counter()
         try:
             with reader_lock:
                 reader = self.readers.get(aid)
@@ -320,7 +321,16 @@ class Workbench:
                 kwargs = {} if folder == "inbox" else {"folder": folder}
                 if getattr(reader, "progressive", False):
                     kwargs["progress"] = lambda partial: self._show_partial(aid, partial, folder, epoch)
+                listed = time.perf_counter()
                 records, truncated = reader.list(self.limit, **kwargs)
+                log.info(
+                    "list %s (%s): %d messages in %.0f ms (lock wait %.0f ms)",
+                    folder,
+                    account.get("provider", "?"),
+                    len(records),
+                    (time.perf_counter() - listed) * 1000,
+                    (listed - started) * 1000,
+                )
                 if getattr(reader, "identity", None):
                     try:
                         self.accounts.bind_identity(aid, reader.identity)
@@ -333,6 +343,9 @@ class Workbench:
                     or folder != self.folder
                     or epoch != self.epochs.get(aid, 0)
                 ):
+                    log.info(
+                        "list %s: discarded (folder or mailbox changed while loading); loading again", folder
+                    )
                     self.refresh_again = True
                     return
                 removed = {k for k, v in self.messages.items() if v["account_id"] == aid} - incoming.keys()
@@ -763,14 +776,23 @@ class Workbench:
 
     def _mutate_messages(self, selected, action, request_id):
         result = {"status": "pending", "succeeded": [], "failed": [], "message": "Working…"}
+        started = time.perf_counter()
+        lock_wait = provider = slowest = 0.0
         for item in selected:
             aid, key = item["account_id"], item["id"]
             try:
+                waited = time.perf_counter()
                 with self.reader_locks[aid]:
+                    called = time.perf_counter()
+                    lock_wait += called - waited
                     reader = self.readers.get(aid)
                     if not reader or not self.accounts.get(aid)["enabled"]:
                         raise ProviderError("Account is offline or paused")
-                    reader.mutate(item["provider_id"], action)
+                    try:
+                        reader.mutate(item["provider_id"], action)
+                    finally:
+                        spent = time.perf_counter() - called
+                        provider, slowest = provider + spent, max(slowest, spent)
                     with self.lock:
                         self.epochs[aid] = self.epochs.get(aid, 0) + 1
                         self.bodies.pop(key, None)
@@ -802,6 +824,18 @@ class Workbench:
         )
         result["message"] = (
             f"{len(result['succeeded'])} updated in the original mailboxes; {len(result['failed'])} failed or unconfirmed."
+        )
+        log.info(
+            "mail action %s: %d messages, %d ok, %d failed in %.0f ms "
+            "(waiting for the account %.0f ms, provider calls %.0f ms, slowest call %.0f ms)",
+            action,
+            len(selected),
+            len(result["succeeded"]),
+            len(result["failed"]),
+            (time.perf_counter() - started) * 1000,
+            lock_wait * 1000,
+            provider * 1000,
+            slowest * 1000,
         )
         return result
 
