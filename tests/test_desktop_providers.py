@@ -216,7 +216,13 @@ def test_gmail_reader_uses_interactive_pacing_not_the_background_service_pace(mo
 
     monkeypatch.setattr(p, "GmailClient", Client)
     reader = p.GmailReader({"config_dir": str(paths.config_dir), "data_dir": str(paths.data_dir)})
-    assert reader.read_ahead == 0  # bodies cost 60 units each; Gmail opens are fast enough without
+    # Bodies are read ahead like a desktop client, and a cold start still fits the minute's budget with
+    # room for opens: a 100-row list (20 units a row) plus the read-ahead (60 units a body).
+    from email_town_labeler.gmail.client import FULL_GET_UNITS, METADATA_GET_UNITS
+
+    assert reader.read_ahead >= 20
+    spent = 100 * METADATA_GET_UNITS + reader.read_ahead * FULL_GET_UNITS
+    assert spent + 10 * FULL_GET_UNITS <= p.GMAIL_UNITS_PER_MINUTE, spent
     assert seen["batch_size"] == p.GMAIL_BATCH
     assert seen["max_retries"] == p.GMAIL_RETRIES >= 4  # a throttled batch must not fail the sync
     # A cold 100-row list (20 units a row) fits in the burst; the CLI service keeps a fifth of 6,000.

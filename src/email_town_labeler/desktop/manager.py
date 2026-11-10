@@ -62,7 +62,8 @@ PREFETCH = 10
 CLASSIFIED_FOLDERS = frozenset({"inbox", "archive", "trash"})
 # Bodies per provider round trip; the account lock is released between chunks so a preview can run.
 BODY_CHUNK = 10
-BODY_CACHE = 128
+BODY_CACHE = 300  # bodies kept in memory: the loaded inbox plus what was prefetched around it
+PREFETCH_MAX = 8  # bodies one /api/prefetch may ask for (the next few around the open message)
 # A preview waits this long for a busy account instead of failing while the list syncs.
 PREVIEW_WAIT = 20
 LEAVES_FOLDER = ("trash", "archive", "restore")  # mail actions that take a message out of the open folder
@@ -558,6 +559,41 @@ class Workbench:
             self.bodies.move_to_end(key)
             while len(self.bodies) > BODY_CACHE:
                 self.bodies.popitem(last=False)
+
+    def prefetch(self, keys) -> dict:
+        """Fetch the bodies of the messages next to the open one, in one batch per account, so the next
+        open is instant. Best effort: a busy account is skipped rather than waited for."""
+        if not isinstance(keys, list) or any(not isinstance(k, str) for k in keys):
+            raise ValueError("Prefetch takes a list of message ids")
+        wanted: dict[str, list[tuple[str, str]]] = {}
+        with self.lock:
+            for key in keys[:PREFETCH_MAX]:
+                item = self.messages.get(key)
+                if item is not None and key not in self.bodies:
+                    wanted.setdefault(item["account_id"], []).append((key, item["provider_id"]))
+        fetched = 0
+        for aid, items in wanted.items():
+            reader, reader_lock = self.readers.get(aid), self.reader_locks.get(aid)
+            if reader is None or reader_lock is None or self.previews_waiting.get(aid):
+                continue
+            if not reader_lock.acquire(timeout=0.5):
+                continue
+            try:
+                pids = [pid for _key, pid in items]
+                if hasattr(reader, "details"):
+                    fulls = reader.details(pids)  # one batched request
+                else:
+                    fulls = {pid: reader.detail(pid) for pid in pids}
+            except Exception as e:  # noqa: BLE001 - prefetch never fails the open it serves
+                log.info("prefetch skipped (%s)", type(e).__name__)
+                continue
+            finally:
+                reader_lock.release()
+            for key, pid in items:
+                if pid in fulls:
+                    self._cache_body(key, fulls[pid])
+                    fetched += 1
+        return {"fetched": fetched}
 
     def detail(self, key: str) -> dict:
         with self.lock:

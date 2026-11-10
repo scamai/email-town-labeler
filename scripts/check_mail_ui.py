@@ -41,6 +41,10 @@ class FixtureReader:
         ]
         self.sent = []
         self.unknown_next = False
+        # Fixed, distinct dates: "ok" is always the first row. Both used to read the clock separately, and
+        # a millisecond tick between them put "fail" first, so ".row-open" opened the wrong message.
+        self.base = int(time.time() * 1000)
+        self.dates = {"ok": self.base, "fail": self.base - 60_000}
 
     def capabilities(self):
         return {
@@ -63,7 +67,7 @@ class FixtureReader:
                     "cc": "copy@example.test",
                     "reply-to": '"intruder@outside.test" <reply@example.test>',
                 },
-                "internal_date": int(time.time() * 1000),
+                "internal_date": self.dates.get(r["provider_id"], self.base - 120_000),
                 "category": "updates",
                 "label_ids": r["label_ids"],
             }

@@ -264,6 +264,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.mail_store.save_draft(data)
             elif path == "/api/draft-delete":
                 result = manager.mail_store.delete_draft(data.get("id", ""))
+            elif path == "/api/prefetch":
+                result = manager.prefetch(data.get("ids"))
             elif path == "/api/mark-read":
                 result = manager.mark_read(data.get("id", ""), data.get("read", True))
             elif path == "/api/action":
