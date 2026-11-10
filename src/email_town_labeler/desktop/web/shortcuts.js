@@ -116,7 +116,7 @@
       return;
     }
     queue.shift();
-    host().mailAction(next.resolve(), next.ids); // sets busy at once, so the next one waits
+    host().mailAction(next.resolve(), next.ids); // marks itself posting at once, so the next one waits
     if (queue.length)
       pumping = setTimeout(() => {
         pumping = null;
