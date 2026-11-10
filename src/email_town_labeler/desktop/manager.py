@@ -65,6 +65,7 @@ BODY_CHUNK = 10
 BODY_CACHE = 128
 # A preview waits this long for a busy account instead of failing while the list syncs.
 PREVIEW_WAIT = 20
+LEAVES_FOLDER = ("trash", "archive", "restore")  # mail actions that take a message out of the open folder
 # Longest a /api/state long-poll is held before it answers "unchanged".
 STATE_WAIT = 10.0
 
@@ -83,7 +84,7 @@ class Workbench:
         self.state = LocalState(root / "workflow.sqlite")
         self.cache = ListCache(root / "cache.sqlite")
         self.mail_store = MailStore(root / "mail")
-        self.mail_slots = threading.BoundedSemaphore(3)
+        self.mail_slots = threading.BoundedSemaphore(3)  # sends; bulk mail actions queue in the outbox
         self.folder = "inbox"
         self.epochs = {}
         self.refresh_again = False
@@ -104,6 +105,13 @@ class Workbench:
         self.readers, self.messages, self.account_status = {}, {}, {}
         self.predictions, self.bodies = {}, OrderedDict()
         self.jobs, self.undos = {}, OrderedDict()
+        # Bulk mail actions run one after another in the background ("outbox"). Until a message's action
+        # is done it is hidden from the list (archive, trash, restore) or shown with its new flag (read,
+        # star), so the list answers at once. A failed message comes back as the provider has it.
+        self.outbox, self.outbox_worker = deque(), None
+        self.outbox_jobs: dict[str, dict] = {}
+        self.pending_leave: dict[str, str] = {}  # message key -> job id
+        self.pending_flags: dict[str, tuple[str, bool]] = {}  # message key -> (field, value)
         self.limit, self.refreshing, self.last_refresh = 100, False, None
         self.stop = threading.Event()
         self.model_error = None
@@ -172,7 +180,11 @@ class Workbench:
 
     def snapshot(self) -> dict:
         with self.lock:
-            rows = [dict(m) for m in self.messages.values()]
+            rows = [dict(m) for k, m in self.messages.items() if k not in self.pending_leave]
+            for row in rows:
+                if row["id"] in self.pending_flags:
+                    field, value = self.pending_flags[row["id"]]
+                    row[field] = value
             states = self.state.read([m["id"] for m in rows])
             for row in rows:
                 saved = states.get(row["id"], {})
@@ -228,6 +240,7 @@ class Workbench:
                 "refreshing": self.refreshing,
                 "last_refresh": self.last_refresh,
                 "jobs": list(self.jobs.values()),
+                "outbox": [dict(job) for job in self.outbox_jobs.values()],
                 "demo": self.demo,
                 "model_error": self.model_error,
                 "model_status": self.model_status,
@@ -731,16 +744,71 @@ class Workbench:
             self.mail_store.reserve(request_id, payload)
             return {"job_id": request_id}
         with self.lock:
-            if any(k not in self.messages for k in ids):
+            if any(k not in self.messages or k in self.pending_leave for k in ids):
                 raise ValueError("The list changed. Select messages again")
             selected = [dict(self.messages[k]) for k in ids]
             for item in selected:
                 aid = item["account_id"]
                 if not self.accounts.get(aid)["enabled"] or not self.account_capabilities(aid)["write"]:
                     raise ValueError("A selected account is paused or needs mail-management permission")
-        return self._mail_job(
-            request_id, payload, lambda: self._mutate_messages(selected, action, request_id)
-        )
+        if not self.mail_store.reserve(request_id, payload):
+            return {"job_id": request_id}
+        self._enqueue(request_id, action, selected)
+        return {"job_id": request_id}
+
+    def _enqueue(self, request_id, action, selected):
+        """Hide or re-flag the messages now, and queue the provider writes behind earlier actions."""
+        keys = [item["id"] for item in selected]
+        with self.lock:
+            for key in keys:
+                if action in LEAVES_FOLDER:
+                    self.pending_leave[key] = request_id
+                else:
+                    self.pending_flags[key] = (
+                        "unread" if action in ("read", "unread") else "starred",
+                        action in ("unread", "star"),
+                    )
+            self.outbox_jobs[request_id] = {
+                "id": request_id,
+                "action": action,
+                "total": len(keys),
+                "done": 0,
+                "failed": 0,
+            }
+            self.outbox.append((request_id, action, selected))
+            if self.outbox_worker is None or not self.outbox_worker.is_alive():
+                self.outbox_worker = threading.Thread(
+                    target=self._drain_outbox, name="workbench-outbox", daemon=True
+                )
+                self.outbox_worker.start()
+            self._touch()
+
+    def _drain_outbox(self):
+        while not self.stop.is_set():
+            with self.lock:
+                if not self.outbox:
+                    self.outbox_worker = None
+                    return
+                request_id, action, selected = self.outbox.popleft()
+            try:
+                result = self._mutate_messages(selected, action, request_id)
+            except Exception:  # noqa: BLE001 - a network failure may follow remote acceptance
+                result = {
+                    "status": "unknown",
+                    "succeeded": [],
+                    "failed": [],
+                    "message": "Could not confirm the result. Check the original mailbox before trying again.",
+                }
+            finally:
+                with self.lock:
+                    for item in selected:
+                        if self.pending_leave.get(item["id"]) == request_id:
+                            del self.pending_leave[item["id"]]
+                        self.pending_flags.pop(item["id"], None)
+                    self.outbox_jobs.pop(request_id, None)
+                    self._touch()
+            self.mail_store.finish(request_id, result)
+            self.refresh()
 
     def _mail_job(self, request_id, payload, work):
         if not self.mail_slots.acquire(blocking=False):
@@ -774,6 +842,13 @@ class Workbench:
         threading.Thread(target=run, name="workbench-mail-operation", daemon=True).start()
         return {"job_id": request_id}
 
+    def _progress(self, request_id, field):
+        with self.lock:
+            job = self.outbox_jobs.get(request_id)
+            if job is not None:
+                job[field] += 1
+                self._touch()
+
     def _mutate_messages(self, selected, action, request_id):
         result = {"status": "pending", "succeeded": [], "failed": [], "message": "Working…"}
         started = time.perf_counter()
@@ -805,7 +880,9 @@ class Workbench:
                             self.read_overrides.pop(key, None)  # an explicit action supersedes open-to-read
                         self._touch()
                 result["succeeded"].append(key)
+                self._progress(request_id, "done")
             except Exception as exc:  # noqa: BLE001 - preserve successes across independent accounts
+                self._progress(request_id, "failed")
                 result["failed"].append(
                     {
                         "id": key,

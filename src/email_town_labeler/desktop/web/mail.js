@@ -535,8 +535,10 @@
     const stays = (other) => !leaving.includes(other);
     return ids.slice(at + 1).find(stays) || ids.slice(0, at).reverse().find(stays) || null;
   }
+  // Bulk actions go to the outbox: the messages leave the list (or take their new flag) at once, the
+  // provider writes run in the background one action after another, and only failures interrupt.
   async function mailAction(action, chosen = selectedIds()) {
-    if (local.busy || !allowed(action, chosen)) return;
+    if (!allowed(action, chosen)) return;
     const names = unique(
       chosen.map(
         (id) =>
@@ -560,11 +562,20 @@
       window.innerWidth >= 1200
         ? nextAfter(active, chosen)
         : null;
-    local.busy = true;
-    renderSelection();
-    updateControls();
+    // As in Gmail, the selection outlives actions that leave messages in place (read, unread, star);
+    // messages that leave the folder drop out of it, and out of the list, before the server answers.
+    const leaving = LEAVES_FOLDER.includes(action) ? new Set(chosen) : null;
+    if (leaving) {
+      chosen.forEach((id) => host.state.selected.delete(id));
+      host.state.messages = host.state.messages.filter((m) => !leaving.has(m.id));
+      host.reconcileMessageState(); // closes the reading pane if its message left
+      host.renderList();
+    }
+    if (advance) host.openMessage(advance);
+    let job;
+    local.posting = true; // keyboard actions wait for this, so the server receives them in key order
     try {
-      const result = await host.api("/api/mail-action", {
+      job = await host.api("/api/mail-action", {
         method: "POST",
         body: JSON.stringify({
           request_id: crypto.randomUUID(),
@@ -572,24 +583,20 @@
           ids: chosen,
         }),
       });
-      const job = await pollJob(result.job_id);
-      // As in Gmail, the selection outlives actions that leave messages in place (read, unread, star),
-      // including messages selected while this action ran; only messages that left the folder drop out.
-      if (LEAVES_FOLDER.includes(action))
-        (job.succeeded || []).forEach((id) => host.state.selected.delete(id));
-      host.showToast(jobMessage(job));
-      if (job.status !== "complete") alert(jobMessage(job));
-      local.detailId = null;
-      await host.loadState();
-      if (advance && host.state.messages.some((m) => m.id === advance))
-        host.openMessage(advance);
     } catch (error) {
-      host.showToast(`${error.message} Refresh the mailbox before retrying.`);
+      host.showToast(`${error.message} Nothing was changed.`);
+      await host.loadState(); // puts back what was removed locally
+      return;
     } finally {
-      local.busy = false;
-      renderSelection();
-      updateControls();
+      local.posting = false;
     }
+    local.detailId = null;
+    await host.loadState();
+    pollJob(job.job_id).then((result) => {
+      if (result.status === "complete") return;
+      host.showToast(jobMessage(result));
+      if (result.status !== "pending") alert(jobMessage(result));
+    });
   }
   // A folder chosen while another switch (or a mail action) is still running is not dropped: the
   // last one chosen is opened when the current work finishes.
@@ -951,7 +958,8 @@
       : `${folder} · Email Town`;
   }
   host.render = render;
-  host.mailBusy = () => local.busy; // a mail action is in flight: its buttons are disabled meanwhile
+  // A send, or a bulk action still being handed to the outbox (a few ms): the next key action waits.
+  host.mailBusy = () => local.busy || Boolean(local.posting);
   host.mailAction = (action, ids) => mailAction(action, ids); // the buttons' path, permissions and confirm
   window.EmailTownMail = { render };
   render();

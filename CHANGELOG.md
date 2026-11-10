@@ -9,6 +9,10 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- Bulk actions no longer make you wait. Archive, Trash, Restore, read/unread and star now take effect in the
+  list at once and the mailbox writes run in a background queue, one action after another; the footer says
+  what is still going ("Archiving 12 of 40"). A message that fails comes back to the list, with the error.
+  You can keep working and switch folders meanwhile, and a fourth action queues instead of being refused.
 - The message list gets the height back. Its header (folder tabs, a large "Inbox" title, search, select-all
   bar and the "Load more" bar) took about 40% of the list pane; it is now two slim rows, search above and
   select-all · title · count below, and "Load more mail" sits under the list. The first message starts

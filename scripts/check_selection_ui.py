@@ -135,8 +135,9 @@ def main() -> int:
                 # running when the selection was made: star the open message, Shift+J twice while that
                 # write is in flight, and all three stay selected afterwards, rows and count alike.
                 count = page.locator("#mailSelectionCount")
-                busy = lambda page=page: page.evaluate("window.EmailTownMailHost.mailBusy()")
-                idle = lambda page=page: not page.evaluate("window.EmailTownMailHost.mailBusy()")
+                # In flight = still in the background outbox (the list has already been updated).
+                busy = lambda page=page: page.evaluate("window.EmailTownMailHost.state.outbox.length > 0")
+                idle = lambda page=page: not page.evaluate("window.EmailTownMailHost.state.outbox.length > 0")
                 rows.nth(0).locator(".row-open").click()
                 expect(subject).to_have_text("Fixture message 1")
                 mailbox.delay = 1.0
@@ -164,11 +165,23 @@ def main() -> int:
                 page.keyboard.press("n")
                 expect(selected).to_have_count(0)
 
-                # A bulk action applies to exactly the range.
+                # A bulk action applies to exactly the range, and the rows leave at once: the provider
+                # is slow (1 s a message) and the list must not wait for it (the outbox does).
                 rows.nth(1).locator(".row-check").click()
                 rows.nth(3).locator(".row-check").click(modifiers=["Shift"])
                 expect(selected).to_have_count(3)
+                mailbox.delay = 1.0
                 page.keyboard.press("e")
+                expect(rows).to_have_count(4, timeout=500)
+                archived = sum(r["folder"] == "archive" for r in mailbox.records)
+                assert archived < 3, (
+                    "the mailbox must still be working, or the instant removal proves nothing"
+                )
+                until(busy, "the outbox shows the archive")
+                expect(page.locator("#footerStatus")).to_contain_text("Archiving")
+                mailbox.delay = 0.0
+                until(idle, "the outbox drains")
+                expect(page.locator("#footerStatus")).to_have_text("Classified on your device")
                 until(
                     lambda: (
                         sorted(r["id"] for r in mailbox.records if r["folder"] == "archive")

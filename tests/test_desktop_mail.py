@@ -457,3 +457,74 @@ def test_bulk_action_logs_where_its_time_went(tmp_path, caplog):
     ), lines
     assert not any(i in lines[0] for i in ids)
     w.close()
+
+
+class GatedReader(MailReader):
+    """Holds every provider write until the test opens the gate: an outbox still working."""
+
+    def __init__(self, records, **kw):
+        super().__init__(records, **kw)
+        self.gate = threading.Event()
+
+    def mutate(self, mid, action):
+        assert self.gate.wait(3), "gate never opened"
+        super().mutate(mid, action)
+
+
+def setup_outbox(tmp_path, *, fail_write=False):
+    w, readers, first, second = _workbench(tmp_path)
+    readers[first] = GatedReader([_record("a"), _record("b")], fail_write=fail_write)
+    readers[second] = MailReader([])
+    w._refresh()
+    w.refresh = lambda **kwargs: None
+    ids = [m["id"] for m in w.snapshot()["messages"]]
+    return w, readers[first], ids
+
+
+def test_bulk_action_hides_messages_at_once_and_reports_progress(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})
+    snap = w.snapshot()  # the provider has written nothing yet
+    assert reader.writes == []
+    assert snap["messages"] == []
+    assert [(j["action"], j["total"], j["done"]) for j in snap["outbox"]] == [("archive", 2, 0)]
+    reader.gate.set()
+    assert finished(w, job["job_id"])["status"] == "complete"
+    snap = w.snapshot()
+    assert snap["messages"] == [] and snap["outbox"] == []
+    w.close()
+
+
+def test_bulk_action_queues_behind_a_running_one_instead_of_refusing(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    jobs = [
+        w.mail_action({"request_id": uuid.uuid4().hex, "ids": [key], "action": "read"})["job_id"]
+        for key in ids
+    ] + [w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "star"})["job_id"]]
+    rows = w.snapshot()["messages"]
+    assert all(not r["unread"] and r["starred"] for r in rows)  # shown as the user asked, at once
+    reader.gate.set()
+    assert [finished(w, j)["status"] for j in jobs] == ["complete"] * 3
+    assert [a for _m, a in reader.writes] == ["read", "read", "star", "star"]  # in the order asked
+    w.close()
+
+
+def test_failed_bulk_action_brings_the_message_back(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path, fail_write=True)
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "trash"})
+    assert w.snapshot()["messages"] == []
+    reader.gate.set()
+    result = finished(w, job["job_id"])
+    assert result["status"] == "failed" and len(result["failed"]) == 2
+    snap = w.snapshot()
+    assert sorted(m["id"] for m in snap["messages"]) == sorted(ids) and snap["outbox"] == []
+    w.close()
+
+
+def test_a_message_waiting_in_the_outbox_cannot_be_acted_on_again(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids[:1], "action": "archive"})
+    with pytest.raises(ValueError, match="list changed"):
+        w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids[:1], "action": "trash"})
+    reader.gate.set()
+    w.close()

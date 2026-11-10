@@ -74,6 +74,7 @@
     messages: [],
     categories: [],
     jobs: [],
+    outbox: [],
     refreshing: false,
     stale: false,
     modelError: "",
@@ -826,6 +827,27 @@
     });
   }
 
+  // The footer says what the background outbox is still doing: "Archiving 12 of 40 · Starring 0 of 2".
+  const OUTBOX_VERBS = {
+    archive: "Archiving",
+    trash: "Moving to Trash",
+    restore: "Restoring",
+    read: "Marking read",
+    unread: "Marking unread",
+    star: "Starring",
+    unstar: "Unstarring",
+  };
+  function renderOutbox() {
+    if (state.authLost) return;
+    const busy = state.outbox.map(
+      (job) =>
+        `${OUTBOX_VERBS[job.action] || "Updating"} ${Number(job.done) + Number(job.failed)} of ${Number(job.total)}`,
+    );
+    els.footerStatus.textContent = busy.length
+      ? busy.join(" · ")
+      : "Classified on your device";
+    els.footerStatus.classList.toggle("is-working", busy.length > 0);
+  }
   function reconcileMessageState() {
     const ids = new Set(state.messages.map((message) => message.id));
     state.selected.forEach((id) => {
@@ -899,6 +921,7 @@
       refreshing: Boolean(data.refreshing),
       lastRefresh: data.last_refresh || null,
       jobs: Array.isArray(data.jobs) ? data.jobs : [],
+      outbox: Array.isArray(data.outbox) ? data.outbox : [],
       demo: Boolean(data.demo),
       limit: Number(data.limit) || 100,
       modelError: data.model_error || "",
@@ -908,6 +931,7 @@
     const changed = snapshot !== state.snapshot;
     Object.assign(state, next, { initialized: true, stale: false, snapshot });
     reconcileMessageState();
+    renderOutbox();
     if (state.activeId) {
       const active = state.messages.find((m) => m.id === state.activeId);
       els.previewUnread.hidden = !active.unread;
@@ -1442,6 +1466,7 @@
     openMessage,
     accountById,
     renderList,
+    reconcileMessageState,
     filteredMessages,
     render: null,
   };
