@@ -180,10 +180,6 @@
             </div>
           </section>
           <div class="pane-header">
-            <div>
-              <p class="eyebrow" id="listContext">All accounts</p>
-              <h2 id="listTitle">Inbox</h2>
-            </div>
             <div class="list-tools">
               <label class="search-field"
                 ><span class="sr-only">Search mail</span
@@ -219,7 +215,7 @@
           </div>
           <div class="toolbar" id="selectionToolbar" hidden>
             <label class="check-wrap"
-              ><input id="selectAll" type="checkbox" /><span
+              ><input id="selectAll" type="checkbox" /><span class="sr-only"
                 >Select all loaded</span
               ></label
             ><details class="action-menu select-menu" id="selectMenu" data-align="start">
@@ -241,6 +237,10 @@
                 </button>
               </div>
             </details>
+            <h2 class="list-heading">
+              <span id="listTitle">Inbox</span
+              ><span class="list-context" id="listContext">All accounts</span>
+            </h2>
             <span class="selection-count" id="selectionCount">0 messages</span>
             <button
               class="text-button"
@@ -320,6 +320,12 @@
             aria-live="polite"
             hidden
           ></div>
+          <div
+            class="message-list"
+            id="messageList"
+            tabindex="-1"
+            aria-label="mail"
+          ></div>
           <div class="load-more-bar" id="loadMoreBar" hidden>
             <span id="loadedSummary">Showing loaded mail only</span
             ><button
@@ -330,12 +336,6 @@
               Load more mail
             </button>
           </div>
-          <div
-            class="message-list"
-            id="messageList"
-            tabindex="-1"
-            aria-label="mail"
-          ></div>
         </main>
 
         <section

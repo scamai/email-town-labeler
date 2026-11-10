@@ -47,6 +47,12 @@ def assert_list_geometry(page, label: str) -> None:
     checkbox = page.locator(".message-row .row-check").first.bounding_box()
     assert checkbox is not None
     assert abs(search["x"] - checkbox["x"]) <= 1, (label, search, checkbox)
+    # The list header must stay slim: the rows are what the pane is for (it once took ~40% of it).
+    pane = bounds(page, ".message-pane")
+    first_row = page.locator(".message-row").first.bounding_box()
+    assert first_row is not None
+    header = first_row["y"] - pane["y"]
+    assert header <= 200, (label, "list header too tall", header)
     assert_no_overflow(page, label)
 
 
