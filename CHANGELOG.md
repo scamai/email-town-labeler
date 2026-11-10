@@ -13,6 +13,9 @@ contain breaking changes; they are called out.
   bar and the "Load more" bar) took about 40% of the list pane; it is now two slim rows, search above and
   select-all · title · count below, and "Load more mail" sits under the list. The first message starts
   about 150 px from the top of the pane instead of about 480 px.
+- Category dots in the sidebar now use one clear hue each (the Gmail label hues), instead of the dark text
+  colours, where brown, maroon, purple, teal and green looked alike at 8 px. Each dot keeps at least 3:1
+  contrast in light and dark mode, and "Unclassified" is a grey ring rather than one more colour.
 
 ## [0.1.6] - 2026-11-09
 
