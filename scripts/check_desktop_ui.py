@@ -71,10 +71,23 @@ def check_palette(page, categories):
         colors = button.evaluate("""el => ({ink:getComputedStyle(el).color,
             surface:getComputedStyle(el).backgroundColor,
             dot:getComputedStyle(el,'::before').backgroundColor,
+            ring:getComputedStyle(el,'::before').boxShadow,
+            token:getComputedStyle(el).getPropertyValue('--category-dot').trim(),
+            sidebar:getComputedStyle(document.querySelector('.sidebar')).backgroundColor,
             selected:getComputedStyle(el,'::after').content})""")
         ratio = contrast(colors["ink"], colors["surface"])
         assert ratio >= 4.5, (category, ratio)
-        assert colors["dot"] == colors["ink"] and "✓" in colors["selected"]
+        assert "✓" in colors["selected"], category
+        # The dot has its own clear hue (not the dark text ink), readable as a mark on the sidebar.
+        assert colors["token"], (category, "no --category-dot token")
+        if category == "unknown":  # "Unclassified" is a ring: a transparent fill and a coloured inset
+            assert colors["ring"] != "none" and colors["dot"] == "rgba(0, 0, 0, 0)", (category, colors)
+            dot = colors["ring"]
+        else:
+            dot = colors["dot"]
+        assert dot != colors["ink"], (category, "dot reuses the text ink")
+        dot_ratio = contrast(dot, colors["sidebar"])
+        assert dot_ratio >= 3, (category, "dot contrast", dot_ratio)
         badges = page.locator(f'.message-row [data-category="{category}"]')
         if badges.count():
             badge = badges.first.evaluate(

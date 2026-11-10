@@ -15,6 +15,15 @@
   --category-updates-surface: #fbf3cf;
   --category-unknown-ink: #526174;
   --category-unknown-surface: #edf0f4;
+  /* Sidebar dots: one clear hue per category (Gmail's label hues), >= 3:1 on the surface. */
+  --category-action_needed-dot: #e5620a;
+  --category-new_sender-dot: #2f6fe4;
+  --category-newsletters-dot: #1f9d55;
+  --category-orders-dot: #9b4fdc;
+  --category-promotional-dot: #db3f7f;
+  --category-travel-dot: #0b98b4;
+  --category-updates-dot: #b08600;
+  --category-unknown-dot: #8a96a6;
   color-scheme: light dark;
   --bg: #f6f8fc;
   --surface: #fff;
@@ -64,6 +73,14 @@
     --category-updates-surface: #383018;
     --category-unknown-ink: #b8c4d3;
     --category-unknown-surface: #28313e;
+    --category-action_needed-dot: #ff9a4a;
+    --category-new_sender-dot: #6ea0ff;
+    --category-newsletters-dot: #4cc98a;
+    --category-orders-dot: #c88cff;
+    --category-promotional-dot: #f47cab;
+    --category-travel-dot: #4fc4dc;
+    --category-updates-dot: #ecd04a;
+    --category-unknown-dot: #8d99aa;
     --bg: #0d1117;
     --on-accent: #0d1117;
     --surface: #161b22;
@@ -1396,41 +1413,49 @@ dialog::backdrop {
 [data-category-filter="action_needed"] {
   --category-ink: var(--category-action_needed-ink);
   --category-surface: var(--category-action_needed-surface);
+  --category-dot: var(--category-action_needed-dot);
 }
 [data-category="new_sender"],
 [data-category-filter="new_sender"] {
   --category-ink: var(--category-new_sender-ink);
   --category-surface: var(--category-new_sender-surface);
+  --category-dot: var(--category-new_sender-dot);
 }
 [data-category="newsletters"],
 [data-category-filter="newsletters"] {
   --category-ink: var(--category-newsletters-ink);
   --category-surface: var(--category-newsletters-surface);
+  --category-dot: var(--category-newsletters-dot);
 }
 [data-category="orders"],
 [data-category-filter="orders"] {
   --category-ink: var(--category-orders-ink);
   --category-surface: var(--category-orders-surface);
+  --category-dot: var(--category-orders-dot);
 }
 [data-category="promotional"],
 [data-category-filter="promotional"] {
   --category-ink: var(--category-promotional-ink);
   --category-surface: var(--category-promotional-surface);
+  --category-dot: var(--category-promotional-dot);
 }
 [data-category="travel"],
 [data-category-filter="travel"] {
   --category-ink: var(--category-travel-ink);
   --category-surface: var(--category-travel-surface);
+  --category-dot: var(--category-travel-dot);
 }
 [data-category="updates"],
 [data-category-filter="updates"] {
   --category-ink: var(--category-updates-ink);
   --category-surface: var(--category-updates-surface);
+  --category-dot: var(--category-updates-dot);
 }
 [data-category="unknown"],
 [data-category-filter="unknown"] {
   --category-ink: var(--category-unknown-ink);
   --category-surface: var(--category-unknown-surface);
+  --category-dot: var(--category-unknown-dot);
 }
 
 .category-badge[data-category] {
@@ -1444,17 +1469,22 @@ dialog::backdrop {
     [data-category-filter="all"]
   )::before {
   content: "";
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
   border-radius: 50%;
-  background: var(--category-ink);
+  background: var(--category-dot, var(--category-ink));
+}
+/* "Unclassified" is the absence of a category: a ring, not another colour to tell apart. */
+.category-filter[data-category-filter="unknown"]:not([data-category-filter="all"])::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--category-dot);
 }
 /* A shared 3px inset selection rail; hue signals the selected category. */
 .category-filter.is-active:not([data-category-filter="all"]) {
   color: var(--category-ink);
   background: var(--category-surface);
-  box-shadow: inset 3px 0 var(--category-ink);
+  box-shadow: inset 3px 0 var(--category-dot, var(--category-ink));
 }
 .category-filter.is-active::after {
   content: "✓";
@@ -1465,7 +1495,7 @@ dialog::backdrop {
   align-items: flex-start;
 }
 .category-filter::before {
-  margin-top: 6px;
+  margin-top: 5px;
 }
 .category-label {
   display: grid;
