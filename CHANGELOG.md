@@ -7,6 +7,13 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Changed
+
+- The message list gets the height back. Its header (folder tabs, a large "Inbox" title, search, select-all
+  bar and the "Load more" bar) took about 40% of the list pane; it is now two slim rows, search above and
+  select-all · title · count below, and "Load more mail" sits under the list. The first message starts
+  about 150 px from the top of the pane instead of about 480 px.
+
 ## [0.1.6] - 2026-11-09
 
 ### Fixed

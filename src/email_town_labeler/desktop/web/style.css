@@ -520,8 +520,8 @@ kbd {
   gap: 8px;
 }
 .folder-tab {
-  min-height: 48px;
-  padding: 8px;
+  min-height: 40px;
+  padding: 4px 8px;
   border: 0;
   border-bottom: 2px solid transparent;
   background: transparent;
@@ -547,18 +547,35 @@ kbd {
   font-size: 12px;
   line-height: 20px;
 }
+/* The list header is two slim rows (search; select + title + count) so the rows below get the height. */
 .pane-header {
-  display: grid;
-  gap: 16px;
-  padding: 16px var(--pane-gutter);
+  padding: 8px var(--pane-gutter);
 }
-.pane-header h2 {
-  font-size: 24px;
+.pane-header .icon-button {
+  width: 32px;
+  min-height: 32px;
+  flex-basis: 32px;
+}
+.list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
-.pane-header .eyebrow {
-  overflow-wrap: anywhere;
+.list-heading > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-context {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 .list-tools {
   display: flex;
@@ -572,7 +589,7 @@ kbd {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  min-height: var(--control);
+  min-height: 32px;
   padding: 0 12px;
   border: 1px solid var(--control-border);
   border-radius: 6px;
@@ -586,7 +603,7 @@ kbd {
 .search-field input {
   width: 100%;
   min-width: 0;
-  padding: 8px 0;
+  padding: 4px 0;
   border: 0;
   outline: none;
   background: transparent;
@@ -596,10 +613,10 @@ kbd {
 .toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
-  min-height: 44px;
-  padding: 4px var(--pane-gutter);
+  min-height: 36px;
+  padding: 2px var(--pane-gutter);
   border-block: 1px solid var(--line);
   background: var(--bg);
 }
@@ -614,6 +631,7 @@ kbd {
 }
 .selection-count {
   margin-left: auto;
+  flex-shrink: 0;
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -661,8 +679,8 @@ input[type="checkbox"] {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
-  padding: 8px var(--pane-gutter);
-  border-bottom: 1px solid var(--line);
+  padding: 4px var(--pane-gutter);
+  border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 12px;
 }
@@ -1318,12 +1336,6 @@ dialog::backdrop {
   }
   .preview-pane {
     inset: 0;
-  }
-  .pane-header {
-    gap: 12px;
-  }
-  .pane-header h2 {
-    font-size: 20px;
   }
   .app-footer {
     padding: 4px 16px;
