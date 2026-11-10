@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -22,6 +24,8 @@ from .providers import ProviderError
 from .setup import save_google_client, setup_info
 
 MAX_BODY = 65536
+SLOW_GET_MS = 500  # GETs are logged only when slower than this; /api/state is a long poll and never logged
+log = logging.getLogger("email_town_labeler.desktop.http")
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -57,6 +61,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass  # Never put message IDs, credentials or request bodies in HTTP logs.
+
+    def send_response(self, code, message=None):
+        self._status = code
+        super().send_response(code, message)
+
+    def handle_one_request(self):
+        """Time each API request into desktop.log: method, path (never the query), status and ms."""
+        self._status, started = None, time.perf_counter()
+        super().handle_one_request()
+        command, raw = getattr(self, "command", None), getattr(self, "path", "") or ""
+        path = urlsplit(raw).path
+        if not command or not path.startswith("/api/") or path == "/api/state":
+            return
+        ms = (time.perf_counter() - started) * 1000
+        if command == "POST" or ms >= SLOW_GET_MS:
+            log.info("%s %s %s %.0f ms", command, path, self._status, ms)
 
     def _response(self, status, body, *, content_type="application/json; charset=utf-8", download=None):
         if isinstance(body, dict):

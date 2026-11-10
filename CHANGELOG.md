@@ -17,6 +17,13 @@ contain breaking changes; they are called out.
   colours, where brown, maroon, purple, teal and green looked alike at 8 px. Each dot keeps at least 3:1
   contrast in light and dark mode, and "Unclassified" is a grey ring rather than one more colour.
 
+### Added
+
+- `desktop.log` now says where the time goes. Every API action is logged with its path, status and duration
+  (never message IDs, query strings or bodies); each bulk mail action logs its message count, results, total
+  time, time spent waiting for the account and in provider calls; each list load logs its folder, provider,
+  message count and duration, and when a load was discarded and restarted.
+
 ## [0.1.6] - 2026-11-09
 
 ### Fixed
