@@ -73,8 +73,9 @@ GMAIL_RETRIES = 4
 class GmailReader:
     # list() reports rows batch by batch, so a cold list shows its newest rows within a second.
     progressive = True
-    # No read-ahead: a body costs 60 of the 6,000 units a minute, and opening one takes ~0.1 s anyway.
-    read_ahead = 0
+    # Read ahead the newest 30 bodies, in batches, like a desktop client: an open must not wait on the
+    # network. A body is fetched once per process (the body cache keeps it), so a refresh costs nothing.
+    read_ahead = 30
 
     def __init__(self, settings: dict):
         import httplib2

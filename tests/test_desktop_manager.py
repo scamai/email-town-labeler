@@ -357,7 +357,7 @@ def test_reader_without_read_ahead_fetches_only_bodies_the_model_needs(tmp_path)
     workbench.model = CountingModel()
 
     class QuotaReader(BatchReader):
-        read_ahead = 0  # like Gmail: a body costs quota and opening one is fast
+        read_ahead = 0  # a provider where bodies cost quota: only what the model needs
 
     readers[first] = QuotaReader([_record("labelled"), _record("unlabelled", category=None)])
     readers[second] = BatchReader([])
@@ -401,4 +401,37 @@ def test_generated_default_account_name_shows_mailbox_address(tmp_path):
     # Only the app-generated name is replaced; names the user chose stay exactly as typed.
     assert names == {first: "One", second: "Two", legacy["id"]: "owner@example.test"}
     assert workbench.accounts.get(legacy["id"])["name"] == "当前 Gmail"  # display only, address not persisted
+    workbench.close()
+
+
+def test_prefetch_reads_neighbours_in_one_batch_and_skips_cached_and_busy(tmp_path):
+    from email_town_labeler.desktop.manager import PREFETCH_MAX
+
+    workbench, readers, first, second = _workbench(tmp_path)
+
+    class NoAhead(BatchReader):
+        read_ahead = 0
+
+    readers[first] = NoAhead([_record(f"m{i}") for i in range(12)])
+    readers[second] = NoAhead([])
+    workbench.model = None
+    workbench._classify = lambda items: None
+    workbench._refresh()
+    keys = [m["id"] for m in workbench.snapshot()["messages"]]
+    readers[first].batches.clear()
+    workbench.detail(keys[0])  # opened: cached already
+    readers[first].batches.clear()
+    assert workbench.prefetch(keys[:10]) == {"fetched": PREFETCH_MAX - 1}
+    assert len(readers[first].batches) == 1  # one request, not one per message
+    assert workbench.prefetch(keys[:PREFETCH_MAX]) == {"fetched": 0}  # all cached now
+    # A busy account is skipped, never waited on: the open it serves must not slow down.
+    lock = workbench.reader_locks[first]
+    with lock:
+        result = {}
+        t = threading.Thread(target=lambda: result.update(workbench.prefetch(keys[10:])))
+        t.start()
+        t.join(2)
+    assert result == {"fetched": 0}
+    with pytest.raises(ValueError):
+        workbench.prefetch("not a list")
     workbench.close()

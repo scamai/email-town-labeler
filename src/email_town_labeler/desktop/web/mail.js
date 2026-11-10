@@ -677,9 +677,7 @@
     local.detailId = id;
     clearDetail();
     try {
-      const detail = await host.api(
-        `/api/message?id=${encodeURIComponent(id)}`,
-      );
+      const detail = await host.messageDetail(id); // shared with the reading pane: one request
       if (host.state.activeId !== id || local.detailId !== id) return;
       local.detail = detail;
       renderDetail(detail);

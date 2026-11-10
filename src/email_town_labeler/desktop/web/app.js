@@ -603,6 +603,47 @@
     restoreFocus(focus);
   }
 
+  // One body request per message, shared by the reading pane and the reply/attachment code, kept for
+  // the last 150 opened or prefetched. A failed read is forgotten so the next open tries again.
+  const detailCache = new Map();
+  const DETAIL_CACHE = 150;
+  function messageDetail(id) {
+    let pending = detailCache.get(id);
+    if (pending) {
+      detailCache.delete(id);
+    } else {
+      pending = api(`/api/message?id=${encodeURIComponent(id)}`);
+      pending.catch(() => detailCache.delete(id));
+    }
+    detailCache.set(id, pending);
+    while (detailCache.size > DETAIL_CACHE)
+      detailCache.delete(detailCache.keys().next().value);
+    return pending;
+  }
+  // Like Outlook, the next messages are read before they are opened: the three below the open one and
+  // the one above, fetched by the server in one batch, then kept here.
+  let prefetchTimer = null;
+  function prefetchAround(id) {
+    clearTimeout(prefetchTimer);
+    prefetchTimer = setTimeout(async () => {
+      const ids = filteredMessages().map((m) => m.id);
+      const at = ids.indexOf(id);
+      if (at < 0 || state.activeId !== id) return;
+      const near = [...ids.slice(at + 1, at + 4), ids[at - 1]].filter(
+        (other) => other && !detailCache.has(other),
+      );
+      if (!near.length) return;
+      try {
+        await api("/api/prefetch", {
+          method: "POST",
+          body: JSON.stringify({ ids: near }),
+        });
+        near.forEach((other) => messageDetail(other).catch(() => {}));
+      } catch (_) {
+        // Best effort: the open itself still reads the message.
+      }
+    }, 150);
+  }
   function openMessage(id) {
     state.activeId = id;
     renderList();
@@ -667,7 +708,12 @@
       els.previewDate.textContent = formatDate(message.date);
     }
     els.previewDate.title = formatDate(message.date);
-    els.previewBody.textContent = "Reading message…";
+    // Only say "Reading message…" when it really is a wait: a cached or prefetched body is drawn first.
+    els.previewBody.textContent = "";
+    const readingNote = setTimeout(() => {
+      if (state.activeId === id && !els.previewBody.textContent)
+        els.previewBody.textContent = "Reading message…";
+    }, 300);
     updatePreviewPosition();
     els.previewDone.textContent = message.done ? "Reopen" : "Mark done";
     const setOriginalLink = (value) => {
@@ -677,7 +723,9 @@
     };
     setOriginalLink(message.url);
     try {
-      const data = await api(`/api/message?id=${encodeURIComponent(id)}`);
+      const data = await messageDetail(id);
+      clearTimeout(readingNote);
+      prefetchAround(id);
       if (state.activeId === id) {
         const body = text(data.body || "(No plain-text body)");
         if (window.EmailTownReader) window.EmailTownReader.renderBody(els.previewBody, body);
@@ -685,6 +733,7 @@
         setOriginalLink(data.url || message.url);
       }
     } catch (error) {
+      clearTimeout(readingNote);
       if (state.activeId === id)
         els.previewBody.textContent = `Unable to read message: ${text(error.message)}`;
     }
@@ -1467,6 +1516,7 @@
     accountById,
     renderList,
     reconcileMessageState,
+    messageDetail,
     filteredMessages,
     render: null,
   };

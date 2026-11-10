@@ -9,6 +9,12 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
+  Gmail bodies after a list loads, and, whenever you open a message, the three below it and the one above in
+  one batched request. Opened and prefetched bodies are kept (300 on the server, 150 in the page), the
+  reading pane and the reply/attachment code share one request per message, and the "Reading message…"
+  note appears only when a body really takes longer than 0.3 s. A cold Gmail start still fits the
+  per-minute quota budget with room for about 16 opens.
 - Bulk actions no longer make you wait. Archive, Trash, Restore, read/unread and star now take effect in the
   list at once and the mailbox writes run in a background queue, one action after another; the footer says
   what is still going ("Archiving 12 of 40"). A message that fails comes back to the list, with the error.
