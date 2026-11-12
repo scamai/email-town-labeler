@@ -126,11 +126,18 @@ a different mailbox. Each additional mailbox needs its own user authorization.
 
 ## Process mail
 
-Filter across all or individual accounts by today, old unfinished mail, category, completion, or subject/sender
-search. Open a plaintext preview, change its local category, mark complete, or batch-edit and undo.
-Each category in the sidebar shows how many loaded messages it holds, how many are done, and how many are
-**wrong**: messages that classification (the local model or a mailbox label) put there and you moved to another
-category. Mail you have not checked is not counted as wrong, so the figure is a lower bound.
+Inbox opens on **Pending**. Marking a message done removes it from Pending; **Completed** finds it with
+its category tags intact, and **Reopen** returns it to Pending. Completion is local: it does not archive,
+delete, move, or mark the provider message read. An all-done Pending view offers **View completed**.
+
+Filter across all or individual accounts by Today, Earlier, category, completion, or subject/sender search.
+These filters compose; **Clear search and filters** returns to the default Pending view. The list header
+states the scope. Open a plaintext preview, change its local category, or batch-edit and undo.
+Date sections, accounts and categories show loaded totals and explicit unread counts, applying the other
+active filters. Only the active folder has a loaded unread count; other folders are not reported as zero.
+Category statistics distinguish automatic classifications, user corrections and awaiting classification.
+They do not measure accuracy or establish that unreviewed classifications are correct. Failed or paused
+accounts are distinguished from genuinely empty folders.
 Completion survives restart; undo tokens live only in the current process. Selection is limited to loaded,
 currently filtered results and 500 messages per action across accounts. The initial window is 100 inbox
 messages per account; Load more adds 100 up to 1,000 per account.
@@ -153,7 +160,7 @@ through the original message or downloaded attachments. Gmail and Outlook links 
 Opening a message marks it read in its mailbox, as Gmail does: the row loses its bold and blue dot at once, and the
 write follows in the background (a failed write puts the row back). **Mark unread** keeps it unread until you open it
 again. Accounts without mail-management permission, or paused, are left unchanged. The open folder's tab shows its
-unread count.
+unread count for the current filters.
 
 As in Gmail, hovering a row (or reaching it with the keyboard) shows Archive, Trash and Mark read/unread in place of
 the time, and every row has a star; they act without opening the message. Archiving or trashing the open message
@@ -245,8 +252,10 @@ the app. The same `app-icon.icns` is the [desktop app](#download-the-app)'s icon
 ## Privacy
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
-the **local browser's memory**. The process retains at most 128 previews (including the newest 10 per Microsoft/IMAP account read ahead), each with at most 256 KiB of body
-text plus up to 50 image references. Image blobs are released when switching messages or losing the session.
+the **local browser's memory**. The process retains at most 300 previews (including the newest 30 Gmail or
+10 Microsoft/IMAP bodies per account read ahead); each open page caches at most 150 opened or prefetched
+message details. Each server preview has at most 262,144 body-text characters
+plus up to 50 image references. Image blobs are released when switching messages or losing the session.
 External images load directly in the browser without a referrer or the workbench bearer token; the remote
 host sees the browser's IP and image URL, and its own cookie/cache policies apply. Bodies are never
 written to disk. The list is: `cache.sqlite` keeps subject, sender, date, read/star state, category and IDs of
@@ -271,11 +280,16 @@ Unavailable OS vault: IMAP enrollment stops without plaintext fallback. Model fa
 classification remain available.
 
 ```sh
-uv run pytest tests/test_desktop_*.py
-uv run --with playwright playwright install chromium
-uv run --with playwright python scripts/check_desktop_ui.py
-uv run --with playwright python scripts/check_mail_ui.py
-uv run --with playwright python scripts/check_layout_ui.py
+uv run --extra dev pytest tests/test_desktop_*.py
+uv run --extra dev --with playwright playwright install chromium webkit
+uv run --extra dev --with playwright python scripts/check_desktop_ui.py
+uv run --extra dev --with playwright python scripts/check_mail_ui.py
+uv run --extra dev --with playwright python scripts/check_layout_ui.py
+uv run --extra dev --with playwright python scripts/check_completion_ui.py
+uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
+# Also run WebKit; this does not replace native macOS acceptance:
+EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_desktop_ui.py
+EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_mail_ui.py
 ```
 
 Browser tests use clearly labeled synthetic mail from two accounts and exercise actual loopback HTTP actions,

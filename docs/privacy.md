@@ -28,8 +28,10 @@ browser's IP and the requested URL (including tracking identifiers); their cooki
 Requests omit the referrer and never receive the workbench session token. The server does not proxy
 arbitrary URLs. Other image schemes and inline SVG are not displayed.
 
-The process holds bounded previews in RAM (128 × at most 256 KiB of body text plus 50 image references),
-including the newest 10 bodies per Microsoft/IMAP account read ahead from the mailbox so they open without waiting.
+The process holds at most 300 previews in RAM (each with at most 262,144 text characters plus 50 image references),
+and each open page retains at most 150 opened or prefetched message details in browser memory.
+Read-ahead includes the newest 30 Gmail bodies or 10 Microsoft/IMAP bodies per account, plus the three
+messages below and one above the opened message, so nearby messages can open without waiting.
 Inline previews are limited to 8 MiB per image and 32 MiB of Blob data per open message; switching messages
 or losing authentication cancels pending loads and revokes those URLs. Bodies are never written to disk.
 The list itself is cached on disk so a restart shows mail at once: `workbench/cache.sqlite` (mode 0600) holds the
