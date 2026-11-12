@@ -26,7 +26,8 @@ contain breaking changes; they are called out.
   statistics distinguish automatic classifications, user corrections, and awaiting classification instead
   of presenting "0 wrong" as evidence of accuracy. An all-done Pending view offers a View completed action,
   and configured empty folders no longer suggest adding an account. Failed or paused accounts are
-  distinguished from empty folders, while other accounts keep their loaded mail.
+  distinguished from empty folders, while other accounts keep their loaded mail. Folder tabs keep their
+  height when the last unread badge disappears, preventing a roughly 10 px list jump on narrow windows.
 - Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
   Gmail bodies after a list loads, and, whenever you open a message, the three below it and the one above in
   one batched request. Opened and prefetched bodies are kept (300 on the server, 150 in the page), the
