@@ -162,7 +162,9 @@ def main() -> int:
                 manager._touch()
                 page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
                 until(
-                    lambda: page.evaluate("window.EmailTownMailHost.state.seq") > prior_seq,
+                    lambda page=page, prior_seq=prior_seq: (
+                        page.evaluate("window.EmailTownMailHost.state.seq") > prior_seq
+                    ),
                     "background snapshot crosses the browser boundary",
                 )
                 after = page.evaluate(
@@ -206,11 +208,15 @@ def main() -> int:
                       document.dispatchEvent(new Event('visibilitychange'));
                     }"""
                 )
-                until(lambda: page.evaluate("window.__heldState.length === 1"), "held immediate state")
+                until(
+                    lambda page=page: page.evaluate("window.__heldState.length === 1"), "held immediate state"
+                )
                 manager.last_refresh += 1
                 manager._touch()
                 until(
-                    lambda: page.evaluate("window.EmailTownMailHost.state.seq > window.__heldState[0].seq"),
+                    lambda page=page: page.evaluate(
+                        "window.EmailTownMailHost.state.seq > window.__heldState[0].seq"
+                    ),
                     "newer long-poll applies while immediate response is held",
                 )
                 newer = page.evaluate("window.EmailTownMailHost.state.seq")
@@ -222,7 +228,7 @@ def main() -> int:
                     }"""
                 )
                 until(
-                    lambda: page.evaluate(
+                    lambda page=page: page.evaluate(
                         "window.__heldResponseConsumed && !window.EmailTownMailHost.state.syncing"
                     ),
                     "held response is consumed and its caller settles",
@@ -250,7 +256,7 @@ def main() -> int:
                     rows.nth(index).locator(".row-check").click()
                 page.locator("#bulkMore > summary").click()
                 page.locator('#bulkMore [data-mail-action="unread"]').click()
-                until(lambda: not manager.snapshot()["outbox"], "bulk unread outbox")
+                until(lambda manager=manager: not manager.snapshot()["outbox"], "bulk unread outbox")
                 expect(page.locator(".message-row.is-selected")).to_have_count(3)
                 assert page.evaluate(identical), f"{engine}: bulk action replaced rows"
                 assert rows.nth(3).evaluate("row => row === window.__rows[3][1]")
@@ -266,7 +272,9 @@ def main() -> int:
                 manager._touch()
                 page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
                 until(
-                    lambda: page.evaluate("window.EmailTownMailHost.state.seq") > narrow_seq,
+                    lambda page=page, narrow_seq=narrow_seq: (
+                        page.evaluate("window.EmailTownMailHost.state.seq") > narrow_seq
+                    ),
                     "narrow background snapshot crosses the browser boundary",
                 )
                 expect(page.locator("#previewClose")).to_be_focused()
