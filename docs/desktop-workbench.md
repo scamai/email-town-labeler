@@ -242,7 +242,7 @@ uv run --extra dev --with playwright python scripts/check_mail_ui.py
 uv run --extra dev --with playwright python scripts/check_layout_ui.py
 uv run --extra dev --with playwright python scripts/check_completion_ui.py
 uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
-# Also exercise the native macOS browser engine through WebKit on the review host:
+# Also run WebKit; this does not replace native macOS acceptance:
 EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_desktop_ui.py
 EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_mail_ui.py
 ```

@@ -27,8 +27,22 @@ focus and visibility, background refresh, held responses, Done/undo, and narrow 
 The lead found and fixed an additional key-only focus-restoration edge during independent review.
 Old assets fail the identity regression, and the pre-guard version fails the Escape regression.
 Hover/focus geometry passed at 1280, 1000 and 390 px in both engines; 787 unit tests passed with
-nine optional-runtime skips, and all build/distribution/Docker checks passed. Workflow-view repairs
-remain in progress.
+nine optional-runtime skips, and all build/distribution/Docker checks passed.
+
+The daily-workflow changes landed in [PR #54](https://github.com/scamai/email-town-labeler/pull/54):
+Pending/Completed/Reopen, composed filters, scoped unread counts, factual classification statistics and
+useful empty states. Two synthetic Gmail identities verify reply From selection and account isolation.
+Failed or paused accounts are distinguished from empty folders. The narrow unread badge previously
+changed header height from 50.75 to 41 px in WebKit (50.5 to 41 in Chromium); both now stay at 41 px.
+The regression failed before this fix. Final checks passed 787 tests with nine optional-runtime skips,
+16 viewport/theme combinations across two engines, compose/send journeys, keyboard/navigation,
+completion, reconciliation, category statistics, layout and hover/focus geometry. Installed wheel UI
+assets match the delivered source; wheel/sdist/Docker checks passed.
+
+A final cross-queue audit exposed another P1 issue: automatic open-to-read and explicit unread can acquire
+the provider lock in the wrong order. A deterministic barrier test reproduces provider writes of unread
+then stale read, leaving the message read after refresh. This separate backend repair is still in progress;
+the per-field overlay repair in PR #52 alone does not establish cross-queue ordering.
 
 Changes are prepared by Kimi K3.1 Pro with max reasoning in isolated worktrees. The lead
 reviews diffs, reruns evidence and handles publication. No coding agent is allowed to send
@@ -139,11 +153,13 @@ replacement for the user's existing mail client.
 
 ## Visual-lint disposition
 
-The baseline source design scan reported no FAIL, with five warning categories. They are
+The final source design scan reported no FAIL, with five warning categories. They are
 lower priority than the reproduced workflow/state defects:
 
-- Spacing: three off-grid values (badge padding, an optical negative margin and category
-  metadata spacing). Review them in context; they did not cause hover/focus geometry failures.
+- Spacing: four off-grid values in the final scan. The new 6 px horizontal folder-tab padding
+  keeps names and unread badges on one stable row in narrow windows without reducing type size.
+  The other values are badge padding, an optical negative margin and category metadata spacing;
+  they did not cause the rendered hover/focus geometry failures.
 - Type: nine declared sizes versus the generic six-size floor. This includes compact reader
   metadata and avatar/control roles; do not flatten these roles merely to satisfy a scanner.
 - Radius: five sizes versus four; a token consolidation is a P2 follow-up, not a blocked mail task.
