@@ -11,19 +11,27 @@ import secrets
 import threading
 import time
 import webbrowser
+from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from socketserver import TCPServer
-from urllib.parse import parse_qs, quote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from ..gmail.auth import _write_private
 from ..lock import InstanceLock
+from .htmlview import view_csp
 from .mail import filename
 from .manager import Workbench
 from .providers import ProviderError
 from .setup import save_google_client, setup_info
 
 MAX_BODY = 65536
+VIEW_TTL = 30 * 60  # a formatted-view address works this long, for reloads of the open message
+MAX_VIEWS = 32
+APP_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https:; connect-src 'self'; "
+    "frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+)
 SLOW_GET_MS = 500  # GETs are logged only when slower than this; /api/state is a long poll and never logged
 log = logging.getLogger("email_town_labeler.desktop.http")
 
@@ -36,6 +44,10 @@ class LocalServer(ThreadingHTTPServer):
         self.manager = manager
         self.secret = secrets.token_urlsafe(32)
         self.session = secrets.token_urlsafe(32)
+        # Formatted-view capabilities: an iframe cannot send the session header, so the authorized
+        # /api/message-view hands out an unguessable address bound to one message and one image choice.
+        self.views: OrderedDict[str, tuple[str, bool, float]] = OrderedDict()
+        self.views_lock = threading.Lock()
         super().__init__(("127.0.0.1", port), Handler)
         self.origin = f"http://127.0.0.1:{self.server_port}"
         self.host = f"127.0.0.1:{self.server_port}"
@@ -45,6 +57,22 @@ class LocalServer(ThreadingHTTPServer):
         # and an unavailable system resolver must not delay the launch handshake.
         TCPServer.server_bind(self)
         self.server_name, self.server_port = self.server_address[:2]
+
+    def issue_view(self, key: str, remote: bool) -> str:
+        token = secrets.token_urlsafe(32)
+        with self.views_lock:
+            self.views[token] = (key, remote, time.monotonic() + VIEW_TTL)
+            while len(self.views) > MAX_VIEWS:
+                self.views.popitem(last=False)
+        return token
+
+    def view(self, token: str):
+        with self.views_lock:
+            entry = self.views.get(token)
+            if entry is None or entry[2] < time.monotonic():
+                self.views.pop(token, None)
+                return None
+            return entry
 
     @property
     def launch_url(self):
@@ -78,7 +106,9 @@ class Handler(BaseHTTPRequestHandler):
         if command == "POST" or ms >= SLOW_GET_MS:
             log.info("%s %s %s %.0f ms", command, path, self._status, ms)
 
-    def _response(self, status, body, *, content_type="application/json; charset=utf-8", download=None):
+    def _response(
+        self, status, body, *, content_type="application/json; charset=utf-8", download=None, csp=APP_CSP
+    ):
         if isinstance(body, dict):
             body = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
@@ -91,10 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-        )
+        self.send_header("Content-Security-Policy", csp)
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.end_headers()
         try:
@@ -133,6 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             "/app.js": ("app.js", "text/javascript; charset=utf-8"),
             "/mail.js": ("mail.js", "text/javascript; charset=utf-8"),
             "/images.js": ("images.js", "text/javascript; charset=utf-8"),
+            "/htmlview.js": ("htmlview.js", "text/javascript; charset=utf-8"),
             "/shortcuts.js": ("shortcuts.js", "text/javascript; charset=utf-8"),
             "/selection.js": ("selection.js", "text/javascript; charset=utf-8"),
             "/rowactions.js": ("rowactions.js", "text/javascript; charset=utf-8"),
@@ -156,6 +184,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.secret.encode(), ("EmailTown:" + challenge).encode(), "sha256"
             ).hex()
             self._response(200, {"proof": proof})
+            return
+        if parsed.path.startswith("/view/"):
+            self._formatted_view(parsed.path)
             return
         if not self._authorized():
             return
@@ -199,6 +230,12 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError:
                     name = "attachment"
                 self._response(200, raw, content_type="application/octet-stream", download=name)
+            elif parsed.path == "/api/message-view":
+                params = parse_qs(parsed.query)
+                key = params.get("id", [""])[0]
+                remote = params.get("remote", ["0"])[0] == "1"
+                self.server.manager.html_view(key, remote, "/")  # 400 now rather than a blank frame
+                self._response(200, {"url": "/view/" + self.server.issue_view(key, remote)})
             elif parsed.path == "/api/message":
                 key = parse_qs(parsed.query).get("id", [""])[0]
                 self._response(200, self.server.manager.detail(key))
@@ -208,6 +245,27 @@ class Handler(BaseHTTPRequestHandler):
             self._response(400, {"error": str(e)[:240]})
         except Exception:  # noqa: BLE001 - prevent provider exception details from reaching HTTP clients
             self._response(503, {"error": "Mail is temporarily unavailable. Try again shortly"})
+
+    def _formatted_view(self, path):
+        """/view/<token> is the sanitized message; /view/<token>/image/<attachment id> its inline images."""
+        parts = path.split("/")
+        entry = self.server.view(parts[2]) if len(parts) >= 3 else None
+        if entry is None or not (len(parts) == 3 or (len(parts) == 5 and parts[3] == "image")):
+            self._response(404, {"error": "This view has expired. Reopen the message"})
+            return
+        key, remote, _expires = entry
+        csp = view_csp(remote)
+        try:
+            if len(parts) == 3:
+                document, _blocked = self.server.manager.html_view(key, remote, f"/view/{parts[2]}/image/")
+                self._response(200, document.encode(), content_type="text/html; charset=utf-8", csp=csp)
+            else:
+                kind, raw = self.server.manager.image(key, unquote(parts[4]))
+                self._response(200, raw, content_type=kind, csp=csp)
+        except (ValueError, ProviderError) as e:
+            self._response(400, {"error": str(e)[:240]}, csp=csp)
+        except Exception:  # noqa: BLE001 - provider details never reach the page
+            self._response(503, {"error": "Mail is temporarily unavailable. Try again shortly"}, csp=csp)
 
     def do_POST(self):
         if not self._boundary(write=True):

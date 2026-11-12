@@ -87,8 +87,9 @@ Existing controls were traced and exercised:
 
 - The server binds numeric loopback, checks Host and Origin, uses bearer session authorization,
   and requires an application header for writes. Session credentials are not shared cookies.
-- Email HTML/scripts are not rendered. Plaintext and bounded image descriptors are used;
-  external image loading requires a click for the current preview. Inline images require a
+- Email HTML is sanitized to an allowlist and shown in a sandboxed, script-free frame with its own
+  Content-Security-Policy; sender scripts never run. External image loading requires a click for the
+  current message. Inline images require a
   referenced raster attachment with a validated MIME signature and size limit.
 - MIME header inputs are validated, Bcc stays out of transmitted message headers, attachments
   have normalized filenames, and reply requests must use the receiving account.

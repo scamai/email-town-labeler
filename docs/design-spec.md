@@ -409,7 +409,7 @@ Gmail writes use a one-shot fixed-origin HTTPS transport because httplib2 can re
 underneath googleapiclient's outer retry limit. See the linked upstream implementation comment
 and `test_gmail_write_transport_does_not_retry_an_accepted_post_with_lost_response`.
 
-Attachment downloads are authenticated, bounded and forced as downloads; no email HTML or
+Attachment downloads are authenticated, bounded and forced as downloads; no email script or
 attachment bytes are executed in the workbench. Session tokens never enter browser cookies or
 attachment URLs. Drafts are local, not provider draft synchronization. Provider write capability
 is derived from granted scopes or explicit SMTP configuration; broad grants are not silently
@@ -417,11 +417,21 @@ requested during refresh. See the desktop guide for limits and unverified provid
 
 Image preview contract: `GmailClient.get_records(..., include_html=True)` is desktop-only opt-in;
 default classifier records omit HTML. All readers supply transient `body_html` and attachment `content_id`
-metadata, including unnamed CID parts and Graph inline-only messages. The manager discards HTML after
-extracting at most 50 validated image descriptors into `/api/message`'s `images` list. Each descriptor has
+metadata, including unnamed CID parts and Graph inline-only messages. The manager keeps the HTML only in its
+in-memory body cache (never in `/api/message`, `/api/state` or the disk cache) and extracts at most 50
+validated image descriptors into `/api/message`'s `images` list, plus `has_html` and `external_images`. Each descriptor has
 `alt` and either an HTTPS `url` or `attachment_id` plus a supported raster `type`. `/api/state` has no images.
 `GET /api/image?id=...&attachment_id=...` requires the normal bearer header, accepts only attachments
 referenced by that loaded message, and checks raster signatures and the 8 MiB limit. It cannot proxy URLs.
+
+Formatted view contract (`desktop/htmlview.py`): `GET /api/message-view?id=...&remote=0|1` (bearer) checks
+the message has HTML and returns `/view/<token>`, an unguessable address bound to that message and image
+choice for 30 minutes (32 at most), because an iframe cannot send the bearer header. `/view/<token>` serves
+the allowlist-sanitized document and `/view/<token>/image/<attachment id>` its CID images, both with
+`default-src 'none'; img-src 'self' data: [https:]; style-src 'unsafe-inline'; form-action 'none'` plus a
+CSP sandbox without scripts or forms. The page embeds it in an iframe sandboxed the same way; WebKit then
+refuses listeners in the frame, so focus returns to the app on click, copy reads the frame's selection,
+and the height is measured on load and resize.
 The browser renders separate image elements below plaintext; no sender DOM, CSS, script, srcset or event
 attributes enter the page. Embedded downloads are sequential with a 15-second timeout and 32 MiB Blob
 budget. External loads require an explicit click for the current preview, use no referrer, and receive
@@ -458,7 +468,7 @@ recompose existing controls, keep provider behavior and original-mail safety con
   disclosures hold secondary actions. Mailbox and local actions have separate labels. Inapplicable
   Trash/Restore actions are hidden, while unavailable grants remain disabled.
 - Reading: archive/trash in the top action strip, subject and envelope next, then reply/forward and
-  plaintext body. Recipient headers precede the body. Full-width list replacement below 1200px avoids
+  body (formatted when the message has HTML, plain text otherwise). Recipient headers precede the body. Full-width list replacement below 1200px avoids
   the old implicit second grid row; Back restores focus. Below 768px the sidebar is a drawer with a
   dismissible backdrop, keyboard containment, manual refresh and an explicit close button.
 - Compose: aligned label/input columns, inherited sans text, bounded scroll area and persistent

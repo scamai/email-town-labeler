@@ -1,4 +1,6 @@
-"""Image loading, opt-in privacy and stale-preview checks against a synthetic local mailbox.
+"""Formatted (HTML) view, image loading, opt-in privacy and stale-preview checks against a synthetic mailbox.
+
+WebKit, the engine of the macOS app (WKWebView), and Chromium (close to Windows' WebView2).
 
 Run: uv run --no-project --with-editable '.[dev]' --with playwright python scripts/check_images_ui.py
 """
@@ -51,7 +53,11 @@ class ImageReader(FixtureReader):
         if provider_id == "ok":
             detail.update(
                 body_html=(
-                    "<script>window.senderScriptRan=true</script><p>Images</p>"
+                    "<script>window.senderScriptRan=true</script>"
+                    '<table width="600" style="border:1px solid #ccc"><tr><td style="padding:16px">'
+                    '<h1 style="color:#0b57d0">Meeting recap</h1><p>Images</p>'
+                    '<a href="https://recap.example.com/view" style="background:#0b57d0;color:#fff;padding:8px">'
+                    "View meeting recap</a></td></tr></table>"
                     '<img src="cid:photo" alt="Embedded photo" onload="window.senderScriptRan=true">'
                     '<img src="https://images.example.com/photo.png" alt="External photo">'
                     '<img src="https://images.example.com/broken.png" alt="Missing external photo">'
@@ -99,8 +105,13 @@ def main():
     thread.start()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
-            for theme, width in (("light", 390), ("dark", 390), ("light", 1440), ("dark", 1440)):
+            for engine, theme, width in (
+                ("webkit", "light", 390),
+                ("webkit", "dark", 1440),
+                ("chromium", "light", 1440),
+                ("chromium", "dark", 390),
+            ):
+                browser = getattr(playwright, engine).launch()
                 context = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=theme)
                 context.add_init_script("""(() => {
                   const create = URL.createObjectURL.bind(URL), revoke = URL.revokeObjectURL.bind(URL);
@@ -130,7 +141,56 @@ def main():
                         page.locator("#previewClose").click()
                     page.locator(".message-row").filter(has_text=subject).locator(".row-open").click()
 
+                # ─── Formatted view: the sender's layout in a sandboxed frame ───
                 open_row("Fixture received")
+                frame = page.frame_locator(".email-frame")
+                inline = frame.get_by_role("img", name="Embedded photo", exact=True)
+                expect(inline).to_be_visible()
+                assert inline.evaluate("img => img.complete && img.naturalWidth > 0")
+                expect(frame.get_by_role("heading", name="Meeting recap")).to_be_visible()
+                assert not external, "external image requested without consent"
+                assert page.evaluate("window.senderScriptRan") is None
+                assert frame.locator("body").evaluate("b => window.senderScriptRan") is None
+                expect(frame.locator("script")).to_have_count(0)
+                expect(page.locator(".preview-images")).to_have_count(0)
+                assert page.locator(".email-frame").evaluate(
+                    "f => Math.abs(f.offsetHeight - f.contentDocument.documentElement.scrollHeight) <= 2"
+                ), "the frame is not sized to its message"
+                expect(page.locator(".format-note")).to_have_text("2 external images hidden")
+                page.screenshot(path=str(out / f"formatted-{engine}-{theme}-{width}.png"))
+                context.route(
+                    "https://recap.example.com/**",
+                    lambda route: route.fulfill(body="recap", content_type="text/plain"),
+                )
+                with page.expect_popup() as popup:
+                    frame.get_by_role("link", name="View meeting recap").click()
+                popup.value.wait_for_url("https://recap.example.com/view")
+                assert popup.value.evaluate("window.opener") is None, "the opened page can reach the app"
+                popup.value.close()
+                assert not external
+                page.get_by_role("button", name="Show images").click()
+                expect(frame.get_by_role("img", name="External photo", exact=True)).to_be_visible()
+                expect(page.locator(".format-note")).to_have_text("External images shown for this message")
+                for _ in range(50):  # the second (404) image may still be on its way
+                    if len(external) >= 2:
+                        break
+                    page.wait_for_timeout(100)
+                assert len(external) == 2, len(external)
+                for request in external:
+                    assert not {"authorization", "cookie", "x-email-town"} & request.all_headers().keys()
+                assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")
+                page.screenshot(path=str(out / f"formatted-images-{engine}-{theme}-{width}.png"))
+                # Keys pressed inside the message still drive the app: j opens the next message.
+                frame.locator("h1").click()
+                expect(page.locator("#previewBody")).to_be_focused()
+                page.keyboard.press("j")
+                expect(page.locator("#previewSubject")).to_have_text("Fixture partial failure")
+                external.clear()
+
+                # ─── Plain text: the images panel, as before ───
+                open_row("Fixture received")
+                page.get_by_role("button", name="Plain text").click()
+                expect(page.locator(".email-frame")).to_have_count(0)
                 embedded = page.get_by_role("img", name="Embedded photo", exact=True)
                 expect(embedded).to_be_visible()
                 assert embedded.evaluate("img => img.complete && img.naturalWidth > 0")
@@ -147,7 +207,7 @@ def main():
                     assert not {"authorization", "referer", "x-email-town"} & request.all_headers().keys()
                 assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")
                 page.locator(".preview-images").scroll_into_view_if_needed()
-                page.screenshot(path=str(out / f"{theme}-{width}.png"))
+                page.screenshot(path=str(out / f"plain-{engine}-{theme}-{width}.png"))
 
                 open_row("Fixture partial failure")
                 expect(page.locator(".preview-images")).to_have_count(0)
@@ -162,6 +222,13 @@ def main():
                 expect(page.locator(".preview-images")).to_have_count(0)
                 assert page.evaluate("imageURLs.size") == 0
                 assert len(external) == 2, "consent leaked to a later preview"
+                open_row("Fixture received")  # the plain-text choice holds for this message
+                expect(page.locator(".preview-images")).to_have_count(1)
+                page.get_by_role("button", name="Show formatted").click()
+                expect(page.locator(".email-frame")).to_have_count(1)
+                expect(page.locator(".format-note")).to_have_text("2 external images hidden")
+                assert len(external) == 2, "consent leaked to the formatted view"
+                page.get_by_role("button", name="Plain text").click()
 
                 # An expired image request must clear both the preview and the session.
                 page.route("**/api/image?*", lambda route: route.fulfill(status=401, body="{}"))
@@ -170,14 +237,15 @@ def main():
                 expect(page.locator(".preview-images")).to_have_count(0)
                 assert not errors, errors
                 context.close()
-            browser.close()
+                browser.close()
     finally:
         reader.release.set()
         server.shutdown()
         server.server_close()
         manager.close()
     print(
-        f"image UI passed: 4 viewport/theme combinations; inline, remote opt-in, failure, switch, auth. Captures: {out}"
+        "image UI passed: WebKit + Chromium, 2 widths x 2 themes; formatted frame, inline, remote opt-in, "
+        f"links, keys, plain-text toggle, failure, switch, auth. Captures: {out}"
     )
 
 

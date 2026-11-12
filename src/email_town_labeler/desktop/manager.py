@@ -20,6 +20,7 @@ from ..policy import decide
 from ..taxonomy import LABEL_CLASSES
 from .accounts import Accounts, display_name, imap_settings, password_store
 from .cache import ListCache
+from .htmlview import MAX_HTML, remote_count, sanitize
 from .images import body_images, valid_image_bytes
 from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
@@ -536,19 +537,25 @@ class Workbench:
             time.sleep(0.02)
 
     def _cache_body(self, key, full):
+        # Parsed outside the lock: a 256 KB newsletter must not hold up the list.
+        entry = {
+            "body": str(full.get("body_text") or full.get("snippet") or "(No text available)")[:262144],
+            "images": body_images(full.get("body_html"), full.get("attachments", [])),
+            # In memory only, for the formatted view; detail() and the disk cache never carry it.
+            "html": str(full.get("body_html") or "")[:MAX_HTML],
+            "external_images": remote_count(full.get("body_html")),
+            "url": full.get("url", ""),
+            "headers": full.get("headers", {}),
+            "recipients": recipient_headers(full.get("headers", {})),
+            "attachments": full.get("attachments", []),
+            "thread_id": full.get("thread_id", ""),
+        }
         with self.lock:
-            self.bodies[key] = {
-                "body": str(full.get("body_text") or full.get("snippet") or "(No text available)")[:262144],
-                "images": body_images(full.get("body_html"), full.get("attachments", [])),
-                "url": full.get("url", ""),
-                "headers": full.get("headers", {}),
-                "recipients": recipient_headers(full.get("headers", {})),
-                "attachments": full.get("attachments", []),
-                "thread_id": full.get("thread_id", ""),
-            }
+            self.bodies[key] = entry
             self.bodies.move_to_end(key)
             while len(self.bodies) > BODY_CACHE:
                 self.bodies.popitem(last=False)
+        return entry
 
     def prefetch(self, keys) -> dict:
         """Fetch the bodies of the messages next to the open one, in one batch per account, so the next
@@ -586,6 +593,13 @@ class Workbench:
         return {"fetched": fetched}
 
     def detail(self, key: str) -> dict:
+        full = self._detail(key)
+        full["has_html"] = bool(full.pop("html", ""))
+        return full
+
+    def _detail(self, key: str) -> dict:
+        """detail() plus the raw HTML, taken in one step. A mail action drops the cached body at any moment
+        (the message may have changed), so nothing reads the cache again after this returns."""
         with self.lock:
             item = self.messages.get(key)
             if item is None:
@@ -599,7 +613,7 @@ class Workbench:
             with self.lock:
                 first = self.synced.setdefault(item["account_id"], threading.Event())
             if first.wait(PREVIEW_WAIT):
-                return self.detail(key)
+                return self._detail(key)
         if cached is None:
             if reader is None or reader_lock is None:
                 raise ProviderError("This account is offline. Refresh and try again.")
@@ -617,9 +631,7 @@ class Workbench:
                 full = reader.detail(item["provider_id"])
             finally:
                 reader_lock.release()
-            self._cache_body(key, full)
-            with self.lock:
-                cached = dict(self.bodies[key])
+            cached = dict(self._cache_body(key, full))
         with self.lock:
             if key not in self.messages:
                 self.bodies.pop(key, None)
@@ -633,6 +645,13 @@ class Workbench:
         if saved.get("category"):
             item.update(category=saved["category"], source="manual")
         return {**item, **cached}
+
+    def html_view(self, key: str, remote: bool, image_base: str) -> tuple[str, int]:
+        """The sanitized formatted view of one message (see htmlview.py)."""
+        full = self._detail(key)
+        if not full.get("html"):
+            raise ValueError("This message has no formatted version")
+        return sanitize(full["html"], full.get("attachments", []), image_base=image_base, remote=remote)
 
     def mark_read(self, key: str, read: bool = True) -> dict:
         """Mark one loaded message read or unread now, and write it to its mailbox in the background.

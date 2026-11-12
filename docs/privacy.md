@@ -22,8 +22,9 @@ grant and are separate from the label-only CLI service.
 Classification is shared on-device; remote model endpoints are refused even if allowed by the CLI config.
 
 Inline raster images referenced by Content-ID are fetched through the authenticated mailbox connection
-and displayed as browser Blob URLs. Raw email HTML, scripts and styles are never rendered. External HTTPS
-images require a click for each preview and load directly from the browser: image hosts can see the
+and displayed as browser Blob URLs. Email HTML is shown only after sanitizing to an allowlist, in a sandboxed
+frame whose own Content-Security-Policy forbids scripts, forms, fonts, frames and connections; sender scripts
+never run. External HTTPS images require a click for each message and load directly from the browser: image hosts can see the
 browser's IP and the requested URL (including tracking identifiers); their cookie and cache policies apply.
 Requests omit the referrer and never receive the workbench session token. The server does not proxy
 arbitrary URLs. Other image schemes and inline SVG are not displayed.

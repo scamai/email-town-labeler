@@ -150,11 +150,16 @@ must be re-added explicitly.
 
 Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
 Local overrides take precedence and are independent of completion. They currently neither write back to the
-provider nor train the existing CLI feedback model. Images referenced by the HTML body appear below the
-plaintext body; the sender's HTML layout, scripts and styles are never rendered. CID-linked PNG, JPEG,
-GIF, WebP, AVIF and BMP images load from the mailbox automatically (8 MiB each, 32 MiB per open preview).
-HTTPS external images stay blocked until **Load external images** is clicked for that preview. This can
-tell the sender the message was opened. Unsupported sources, SVGs and oversized inline files can be viewed
+provider nor train the existing CLI feedback model.
+
+A message with an HTML version opens formatted, as Gmail shows it: the sender's layout, colours, buttons and
+inline images. The HTML is reduced to an allowlist first (no scripts, forms, frames, SVG or event handlers;
+links keep only http, https and mailto) and shown in a sandboxed frame that cannot run code, submit forms
+or reach the network except for images; links open in the system browser. **Plain text** switches that
+message to its text version, where images appear below the body. CID-linked PNG, JPEG, GIF, WebP, AVIF and
+BMP images load from the mailbox automatically (8 MiB each, 32 MiB per open preview in plain text).
+HTTPS external images stay hidden until **Show images** (formatted) or **Load external images** (plain
+text) is clicked for that message. This can tell the sender the message was opened. Unsupported sources, SVGs and oversized inline files can be viewed
 through the original message or downloaded attachments. Gmail and Outlook links open the original message.
 
 Opening a message marks it read in its mailbox, as Gmail does: the row loses its bold and blue dot at once, and the
