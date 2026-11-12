@@ -144,3 +144,12 @@ lower priority than the reproduced workflow/state defects:
 
 Static scanning cannot establish alignment, text contrast, focus order or complete recovery
 flows. Those require the rendered and interaction checks in the acceptance matrix.
+
+## Recovery follow-ups
+
+Read-only tracing identified two P2 recovery improvements to validate separately from list
+stability: the initial state-fetch error offers a full page restart rather than an in-place
+retry, and a preview that times out during cached-account startup has no explicit retry button.
+After initialization, state polling retries after three seconds and retains prior mail; a
+browser regression should assert that the stale indicator clears after service recovery.
+Per-account errors are isolated and sanitized, but reconnect needs real-provider acceptance.
