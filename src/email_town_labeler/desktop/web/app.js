@@ -159,7 +159,7 @@
   }
   function restoreFocus(saved) {
     if (!saved) return;
-    if (usableFocus(saved.element)) {
+    if (saved.element && usableFocus(saved.element)) {
       if (document.activeElement !== saved.element) {
         saved.element.focus({ preventScroll: true });
         const row = saved.element.closest(".message-row");
