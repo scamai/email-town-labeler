@@ -13,6 +13,7 @@ mail as fixtures or transmit real mail to coding agents.
 | P1 | Routine navigation recreates every list row | In a 40-message fixture, 20 Down presses remove 800 row nodes | Unchanged rows retain identity, focus, geometry and scroll; changed rows update without whole-list teardown |
 | P1 | Queued flags overwrite each other | On an unread message, queue read then star while provider writes are blocked: snapshot becomes unread=true/starred=true | Independent fields retain their queued state; older requests cannot remove newer overlays |
 | P1 | Automatic read overtakes later explicit unread | Separate queues can write unread then stale read, leaving provider and UI read | PR #55 shares one ordered outbox; final intent and immediate failure rollback verified |
+| P1 | Routine progress moves the mail list | Twenty queued reads grow the narrow footer by 149 px; inline syncing adds another 34 px above the list | Single-line footer preserves full status, visible narrow syncing and shortcut controls; routine sync no longer inserts a list row |
 | P1 | Unread work is unclear in sidebar sections | Category stats show total/done/“wrong”, not unread | Explicit unread counts with documented account/folder/filter scope |
 | P1 | “0 wrong” suggests unsupported accuracy | Counter only observes manual category changes; there is no reviewed denominator | Say corrected/manual/automatic/pending as appropriate; do not imply unreviewed predictions are correct |
 
@@ -212,3 +213,20 @@ The tests observe real LocalServer responses and browser DOM/state, including co
 They do not simulate an actual DNS/TLS outage, provider credential expiry, OS process restart or a
 real second-Gmail grant. Expired local sessions still require the launcher, and mailbox grant renewal
 still requires provider authorization. This feature adds no automatic send or mailbox-mutation retry.
+
+## Progress-layout acceptance
+
+The progress regression exposed two additional causes of list movement after row reconciliation:
+at 390 px, 20 queued read operations expanded the footer from 40 to 189 px, shrinking the list by
+149 px; routine inline syncing inserted a 34 px notice above the list. The footer now keeps long
+status text on one line with ellipsis and retains the full text in its hover title. Its container
+can shrink without widening the app, and shortcut controls remain visible. Routine syncing uses
+the existing header and a footer fallback, so narrow layouts still show progress when the header
+indicator is hidden. Classifier download, error and stale-data notices remain available.
+
+`check_outbox_layout_ui.py` exercises 54 synthetic state/viewport/engine combinations: 0, 1 and
+20 pending jobs, refreshing on/off and returning to idle, at 1440, 1000 and 390 px in WebKit and
+Chromium. It checks real DOM geometry, focus, scroll, overflow, status text and shortcut interaction,
+and captures 12 rendered states. Old assets reproduce the geometry failures; an independent
+390 px probe caught and verified the visible-sync fallback. These fixtures drive LocalServer
+snapshots; they do not measure real provider latency or an actual blocked provider queue.

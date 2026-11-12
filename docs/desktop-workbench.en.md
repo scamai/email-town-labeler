@@ -290,6 +290,7 @@ uv run --extra dev --with playwright python scripts/check_desktop_ui.py
 uv run --extra dev --with playwright python scripts/check_mail_ui.py
 uv run --extra dev --with playwright python scripts/check_layout_ui.py
 uv run --extra dev --with playwright python scripts/check_recovery_ui.py
+uv run --extra dev --with playwright python scripts/check_outbox_layout_ui.py
 uv run --extra dev --with playwright python scripts/check_completion_ui.py
 uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
 # Also run WebKit; this does not replace native macOS acceptance:
