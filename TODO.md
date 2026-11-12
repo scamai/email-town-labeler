@@ -42,7 +42,7 @@ The user requested implementation through a usable local app, not a sequence of 
   signed and notarized: docs/releasing.md), update/rollback/uninstall.
   Neither the local launcher nor the app is a complete replacement for an email client yet.
 - [x] Desktop app: macOS, Windows and Linux package builds plus window/TLS/start/quit smokes passed in
-  [Desktop app run 43182995849](https://github.com/scamai/email-town-labeler/actions/runs/43182995849).
+  [Desktop app run 43191205293](https://github.com/scamai/email-town-labeler/actions/runs/43191205293).
 - [ ] Intel Mac build; GUI checks of attachment save, file picker and external links in the native window.
   The owner's updated signed installation still needs unlocked signing credentials and native acceptance;
   see [the daily-mail review](docs/daily-mail-review.md).

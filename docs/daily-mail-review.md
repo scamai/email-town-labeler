@@ -161,9 +161,10 @@ while keeping mailbox folders, account identity and category tags visible. Filte
 compose and report their scope. High-frequency operations should update state without
 animation or list teardown; all essential controls must work with keyboard and narrow layouts.
 
-The browser content is exercised in WebKit and Chromium on Linux. The [three-platform desktop run](https://github.com/scamai/email-town-labeler/actions/runs/43182995849)
+The browser content is exercised in WebKit and Chromium on Linux. The [three-platform desktop run](https://github.com/scamai/email-town-labeler/actions/runs/43191205293)
 passed native package builds and window/TLS smokes on macOS, Windows and Linux at source
-`426f6d7`. A separate arm64 build on an accessible Mac passed the bundled self-check (9/9), model
+`96c7fe6` (PR #58, including recovery and stable progress). A separate earlier arm64 build at
+`426f6d7` on an accessible Mac passed the bundled self-check (9/9), model
 worker, HTTPS, real Cocoa window, single-instance reuse, authenticated shutdown and child-process cleanup
 with an isolated temporary home. Three tiny ONNX inference tests that lacked runtimes on Linux also
 passed on the Mac (two classifier pooling cases and one sequence graph); they exercise implementation,
@@ -172,8 +173,8 @@ The workflow's release-attachment job is intentionally skipped for
 manual runs; unsigned CI macOS artifacts are not official release installers.
 
 Signed/notarized installation on the owner's Mac remains blocked by its locked login keychain;
-`notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
-replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
+`notarytool` returned `keychainLocked`. The latest unsigned CI build is available, but a final signed release is not prepared and the
+installed app has not been replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
 acceptance needs an Accessibility-authorized execution context. A later remote-access preflight was
 also refused by the SSH key agent; deployment needs that access restored. The [release procedure](releasing.md) requires the company identity, Apple notarization,
 and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
@@ -216,7 +217,7 @@ still requires provider authorization. This feature adds no automatic send or ma
 
 ## Progress-layout acceptance
 
-The progress regression exposed two additional causes of list movement after row reconciliation:
+[PR #58](https://github.com/scamai/email-town-labeler/pull/58) fixes two additional causes of list movement after row reconciliation:
 at 390 px, 20 queued read operations expanded the footer from 40 to 189 px, shrinking the list by
 149 px; routine inline syncing inserted a 34 px notice above the list. The footer now keeps long
 status text on one line with ellipsis and retains the full text in its hover title. Its container
@@ -230,3 +231,7 @@ Chromium. It checks real DOM geometry, focus, scroll, overflow, status text and 
 and captures 12 rendered states. Old assets reproduce the geometry failures; an independent
 390 px probe caught and verified the visible-sync fallback. These fixtures drive LocalServer
 snapshots; they do not measure real provider latency or an actual blocked provider queue.
+
+The final progress candidate `908a50c` passed 797 tests with nine absent optional-runtime skips,
+Ruff, distributions, fresh installed-wheel CLI and non-root Docker checks. Progress, recovery,
+reconciliation and navigation passed in both browser engines after integrating the recovery changes.
