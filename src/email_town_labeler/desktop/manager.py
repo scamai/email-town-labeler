@@ -37,6 +37,18 @@ from .state import LocalState, message_key
 
 log = logging.getLogger("email_town_labeler.desktop")
 
+
+def short(key) -> str:
+    """A message's place in desktop.log: the first 8 hex digits of its opaque key, never mail content."""
+    return str(key)[:8]
+
+
+def shorts(keys, limit=20) -> str:
+    keys = list(keys)
+    more = f" +{len(keys) - limit}" if len(keys) > limit else ""
+    return ",".join(short(k) for k in keys[:limit]) + more
+
+
 # With no config.toml (a fresh desktop app), classify with the published on-device model instead of the
 # CLI's keyword-only `rules` default. It is downloaded once on first use; a config file's model always wins.
 DESKTOP_MODEL = "town-modernbert-int8"
@@ -363,6 +375,7 @@ class Workbench:
                 for key in removed:
                     self.predictions.pop(key, None)
                     self.bodies.pop(key, None)
+                self._log_flag_changes(folder, incoming)
                 self.messages = {k: v for k, v in self.messages.items() if v["account_id"] != aid}
                 self.messages.update(incoming)
                 self.synced.setdefault(aid, threading.Event()).set()
@@ -427,6 +440,22 @@ class Workbench:
                 "confidence": prediction[1] if prediction else None,
             }
         return incoming
+
+    def _log_flag_changes(self, folder, incoming):
+        """Read/star states the mailbox reports differently from what the list showed (caller holds the lock).
+        A change while a local write is still queued is logged as "held": the queued value is shown."""
+        changes = []
+        for key, row in incoming.items():
+            before = self.messages.get(key)
+            if before is None:
+                continue
+            for field, on, off in (("unread", "unread", "read"), ("starred", "starred", "unstarred")):
+                if before[field] != row[field]:
+                    held = field in self.pending_flags.get(key, {})
+                    state = on if row[field] else off
+                    changes.append(f"{short(key)} {state}{' (held: local write queued)' if held else ''}")
+        if changes:
+            log.info("list %s: mailbox changed %d flag(s): %s", folder, len(changes), "; ".join(changes[:20]))
 
     def _show_partial(self, aid, records, folder, epoch):
         """Rows a long list has already read appear before the rest; the final list replaces them."""
@@ -668,10 +697,20 @@ class Workbench:
             aid = item["account_id"]
             override = self.pending_flags.get(key, {}).get("unread")
             unread = override[1] if override is not None else item["unread"]
+            target = "read" if read else "unread"
             if unread is not read:
+                log.info(
+                    "mark-%s %s: already %s%s, nothing to do",
+                    target,
+                    short(key),
+                    target,
+                    " (queued)" if override is not None else "",
+                )
                 return {"ok": True, "changed": False}
             if not self.accounts.get(aid)["enabled"] or not self.account_capabilities(aid)["write"]:
+                log.info("mark-%s %s: skipped, account paused or read-only", target, short(key))
                 return {"ok": False, "changed": False}
+            log.info("mark-%s %s: queued", target, short(key))
             self.mail_action(
                 {
                     "request_id": uuid.uuid4().hex,
@@ -771,6 +810,7 @@ class Workbench:
                     raise ValueError("A selected account is paused or needs mail-management permission")
         if not self.mail_store.reserve(request_id, payload):
             return {"job_id": request_id}
+        log.info("mail action %s queued: %d message(s) %s", action, len(ids), shorts(ids))
         self._enqueue(request_id, action, selected)
         return {"job_id": request_id}
 
@@ -923,12 +963,14 @@ class Workbench:
             f"{len(result['succeeded'])} updated in the original mailboxes; {len(result['failed'])} failed or unconfirmed."
         )
         log.info(
-            "mail action %s: %d messages, %d ok, %d failed in %.0f ms "
+            "mail action %s: %d messages, %d ok [%s], %d failed [%s] in %.0f ms "
             "(waiting for the account %.0f ms, provider calls %.0f ms, slowest call %.0f ms)",
             action,
             len(selected),
             len(result["succeeded"]),
+            shorts(result["succeeded"]),
             len(result["failed"]),
+            shorts(f["id"] for f in result["failed"]),
             (time.perf_counter() - started) * 1000,
             lock_wait * 1000,
             provider * 1000,

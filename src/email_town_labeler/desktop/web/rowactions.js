@@ -105,7 +105,7 @@
     const row = control?.closest(".message-row[data-message-id]");
     if (!control || !row || !list.contains(row)) return;
     event.stopPropagation();
-    host().mailAction(control.dataset.rowAction, [row.dataset.messageId]);
+    host().mailAction(control.dataset.rowAction, [row.dataset.messageId], "row-button");
   });
   if (list) new MutationObserver(syncAll).observe(list, { childList: true });
   window.EmailTownRowActions = { sync };

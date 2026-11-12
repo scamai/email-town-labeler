@@ -537,7 +537,16 @@
   }
   // Bulk actions go to the outbox: the messages leave the list (or take their new flag) at once, the
   // provider writes run in the background one action after another, and only failures interrupt.
-  async function mailAction(action, chosen = selectedIds()) {
+  async function mailAction(action, chosen = selectedIds(), via = "toolbar") {
+    host.uiLog?.("mail-action", {
+      action,
+      via,
+      ids: chosen.slice(0, 20).map(host.k8),
+      count: chosen.length,
+      active: host.k8(host.state.activeId),
+      includes_active: chosen.includes(host.state.activeId),
+      allowed: allowed(action, chosen),
+    });
     if (!allowed(action, chosen)) return;
     const names = unique(
       chosen.map(
@@ -575,7 +584,7 @@
       host.reconcileMessageState(); // closes the reading pane if its message left
       host.renderScope();
     }
-    if (advance) host.openMessage(advance);
+    if (advance) host.openMessage(advance, { via: "auto-advance" });
     if (leaving) host.ensureListFocus(focusIndex);
     let job;
     local.posting = true; // keyboard actions wait for this, so the server receives them in key order
@@ -656,11 +665,14 @@
   // Once per open: a detail reload after another action (e.g. "Mark unread") must not read it again;
   // only opening a different message and coming back does.
   async function markReadOnOpen(id) {
-    if (local.autoRead === id) return;
+    const log = (decision, extra = {}) =>
+      host.uiLog?.("auto-read", { id: host.k8(id), decision, ...extra });
+    if (local.autoRead === id) return log("skip:already-handled-this-open");
     local.autoRead = id;
     const message = host.state.messages.find((m) => m.id === id);
-    if (!message?.unread || !accountFor(message.account_id)?.capabilities?.write)
-      return;
+    if (!message?.unread) return log("skip:not-unread");
+    if (!accountFor(message.account_id)?.capabilities?.write) return log("skip:read-only-account");
+    log("mark-read");
     const show = (unread) => {
       message.unread = unread;
       if (host.state.activeId === id) $("previewUnread").hidden = !unread;
@@ -673,8 +685,10 @@
         method: "POST",
         body: JSON.stringify({ id, read: true }),
       });
+      log(result.ok ? "done" : "refused", { changed: Boolean(result.changed) });
       if (!result.ok) show(true);
     } catch (_) {
+      log("failed");
       show(true);
     }
   }
@@ -887,7 +901,7 @@
     (button) =>
       (button.onclick = () => {
         if (host.state.activeId)
-          mailAction(button.dataset.singleAction, [host.state.activeId]);
+          mailAction(button.dataset.singleAction, [host.state.activeId], "pane-menu");
       }),
   );
   $("composeButton").onclick = () => openCompose();
@@ -926,6 +940,7 @@
     renderSelection();
     const id = host.state.activeId;
     if (id !== local.opened) {
+      host.uiLog?.("open-changed", { from: host.k8(local.opened), to: host.k8(id) });
       local.opened = id; // a new open: allow one open-to-read for it
       local.autoRead = null;
     }
@@ -966,7 +981,8 @@
   host.render = render;
   // A send, or a bulk action still being handed to the outbox (a few ms): the next key action waits.
   host.mailBusy = () => local.busy || Boolean(local.posting);
-  host.mailAction = (action, ids) => mailAction(action, ids); // the buttons' path, permissions and confirm
+  // the buttons' path, permissions and confirm
+  host.mailAction = (action, ids, via = "key") => mailAction(action, ids, via);
   window.EmailTownMail = { render };
   render();
 })();

@@ -44,7 +44,11 @@ mail (263 MB download, 382 MB on disk); the list says so while it downloads and 
 `config.toml` model, including the keyword-only `rules`, always takes precedence. Its log is
 `workbench/desktop.log` in the data folder (macOS `~/Library/Application Support/email-town-labeler/`,
 Windows `%LOCALAPPDATA%\email-town-labeler\`, Linux `~/.local/share/email-town-labeler/`); it contains no
-mail content. To check a download, run the binary with `--self-check`; it reports what the app can load
+mail content. To make "what happened to this message" answerable it records, by the first 8 characters of
+each message's opaque key: every open and how (click, `j`/`k`, Shift+J, auto-advance, arrows), selection
+changes, handled shortcut keys, mailbox actions and their per-message results, each open-to-read decision,
+and read/star changes the mailbox reported on sync. The page's events pass through a filter that keeps
+only short tokens, so subjects, addresses and text cannot be written. To check a download, run the binary with `--self-check`; it reports what the app can load
 without opening a window or touching your data:
 
 ```sh

@@ -78,7 +78,7 @@
     selected().add(next);
     anchor = next;
     commit();
-    host().openMessage(next);
+    host().openMessage(next, { via: step < 0 ? "shift+k" : "shift+j" });
     return true;
   }
   function clear() {
