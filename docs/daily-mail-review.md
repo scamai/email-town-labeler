@@ -12,6 +12,7 @@ mail as fixtures or transmit real mail to coding agents.
 | P1 | Done has no useful default destination | Inbox defaults to completion=all; Done leaves the row with a strike-through | Pending Inbox removes it; Completed finds it; Reopen restores it; category survives |
 | P1 | Routine navigation recreates every list row | In a 40-message fixture, 20 Down presses remove 800 row nodes | Unchanged rows retain identity, focus, geometry and scroll; changed rows update without whole-list teardown |
 | P1 | Queued flags overwrite each other | On an unread message, queue read then star while provider writes are blocked: snapshot becomes unread=true/starred=true | Independent fields retain their queued state; older requests cannot remove newer overlays |
+| P1 | Automatic read overtakes later explicit unread | Separate queues can write unread then stale read, leaving provider and UI read | PR #55 shares one ordered outbox; final intent and immediate failure rollback verified |
 | P1 | Unread work is unclear in sidebar sections | Category stats show total/done/“wrong”, not unread | Explicit unread counts with documented account/folder/filter scope |
 | P1 | “0 wrong” suggests unsupported accuracy | Counter only observes manual category changes; there is no reviewed denominator | Say corrected/manual/automatic/pending as appropriate; do not imply unreviewed predictions are correct |
 
@@ -39,10 +40,17 @@ The regression failed before this fix. Final checks passed 787 tests with nine o
 completion, reconciliation, category statistics, layout and hover/focus geometry. Installed wheel UI
 assets match the delivered source; wheel/sdist/Docker checks passed.
 
-A final cross-queue audit exposed another P1 issue: automatic open-to-read and explicit unread can acquire
-the provider lock in the wrong order. A deterministic barrier test reproduces provider writes of unread
-then stale read, leaving the message read after refresh. This separate backend repair is still in progress;
-the per-field overlay repair in PR #52 alone does not establish cross-queue ordering.
+The final cross-queue repair landed in [PR #55](https://github.com/scamai/email-town-labeler/pull/55).
+A deterministic barrier test reproduced provider writes of unread then stale read, leaving the message
+read after refresh. Automatic opening and explicit flags now share the ordered outbox. Pending flags are
+snapshot/detail overlays rather than stored mailbox state; a regression caught and prevented rollback
+poisoning during implementation review. Other checks cover repeated opens, read/unread/read, all failure
+combinations, existing epoch rejection of delayed lists, and external read-state changes after completion.
+The final candidate passed 797 tests with nine optional-runtime skips, Ruff, distributions, fresh installed
+wheel CLI and non-root Docker checks. Both browser engines passed navigation, reconciliation, completion,
+row actions, selection and shortcuts. Reconciliation fixtures now synchronize with automatic-read
+refreshes and restore test reordering by captured IDs. A deliberate whole-list-rebuild mutation of the
+current assets fails the live row/control identity assertion; assertions still detect the original defect.
 
 Changes are prepared by Kimi K3.1 Pro with max reasoning in isolated worktrees. The lead
 reviews diffs, reruns evidence and handles publication. No coding agent is allowed to send
@@ -109,10 +117,11 @@ accounts refresh independently with at most three account workers, and a failed 
 not erase another account's loaded mail. Synthetic tests verify identity isolation, enrollment
 checks, pagination, expired grants, read/write capabilities and partial operation failure.
 
-The review host has no configured real account registry and no running real workbench. It
-therefore cannot prove the owner's second Gmail, Microsoft tenant or IMAP server loads or
-sends successfully. The owner selected a **second Gmail** as the first real-account acceptance
-target. Remaining acceptance requires owner enrollment through the app, then:
+The Linux review host has no configured real account registry or running real workbench. The owner
+selected a **second Gmail**, confirmed that it is not yet added or authorized, and uses the installed
+macOS app. An accessible Mac has the company signing identity, but its login keychain is locked.
+No live second-account loading or mail delivery is established by synthetic tests. Remaining acceptance
+requires owner enrollment through the app, then:
 
 1. Load two real accounts together; check new-mail arrival, refresh and one-account failure.
 2. Check expired credentials, reconnect and duplicate-account rejection.
@@ -146,10 +155,19 @@ while keeping mailbox folders, account identity and category tags visible. Filte
 compose and report their scope. High-frequency operations should update state without
 animation or list teardown; all essential controls must work with keyboard and narrow layouts.
 
-The browser content is exercised in WebKit and Chromium on Linux. Native macOS/Windows
-windows, file pickers, accessibility tools, OAuth return paths and packaged distribution are
-separate gates. Passing this review's synthetic checks does not yet justify claiming a complete
-replacement for the user's existing mail client.
+The browser content is exercised in WebKit and Chromium on Linux. The [three-platform desktop run](https://github.com/scamai/email-town-labeler/actions/runs/43182995849)
+passed native package builds and window/TLS smokes on macOS, Windows and Linux at source
+`426f6d7`. A separate arm64 build on an accessible Mac passed the bundled self-check (9/9), model
+worker, HTTPS, real Cocoa window, single-instance reuse, authenticated shutdown and child-process cleanup
+with an isolated temporary home. The workflow's release-attachment job is intentionally skipped for
+manual runs; unsigned CI macOS artifacts are not official release installers.
+
+Signed/notarized installation on the owner's Mac remains blocked by its locked login keychain;
+`notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
+replaced. The [release procedure](releasing.md) requires the company identity, Apple notarization,
+and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
+mail round trips remain separate gates. These results do not yet establish a complete replacement for
+the owner's existing mail client.
 
 ## Visual-lint disposition
 

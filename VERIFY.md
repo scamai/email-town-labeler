@@ -22,14 +22,14 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; 🟡 partial
 | MAIL12 | Manual category/completion persist independently through reload | ✅ | `check_desktop_ui.py`: real HTTP actions, undo, local category, reload |
 | MAIL13 | Desktop/narrow/phone, light/dark, keyboard and accessible controls | ✅ | Both engines pass 16 viewport/theme combinations total, keyboard journeys and layout/geometry checks; physical devices and screen readers remain SHIP02 |
 | MAIL14 | Empty, loading, offline, stale and account-error recovery | 🟡 | Empty Pending, configured empty folders, failed/paused second account and healthy-account retention pass; explicit retry affordances and stale-recovery browser regression remain P2 follow-ups |
-| MAIL15 | Real second Gmail, Microsoft and IMAP account load and mail round trips | ⚠ | Owner prioritizes second Gmail. No account registry or live workbench on review host; requires owner enrollment and test-mailbox round trips |
+| MAIL15 | Real second Gmail, Microsoft and IMAP account load and mail round trips | ⚠ | Owner prioritizes a second Gmail and confirms it is not yet added/authorized; target is the installed macOS app. Requires owner Google authorization and test-mailbox round trips |
 | MAIL16 | Classification quality on representative labeled mail | ⚠ | No consented labeled multi-account evaluation set; correction counts cannot establish accuracy |
-| MAIL17 | Automatic open-to-read and explicit unread preserve cross-queue intent | ❌ | Deterministic barrier reproduction sends unread then stale read, ending remotely read after refresh; separate backend fix in progress |
+| MAIL17 | Automatic open-to-read and explicit unread preserve cross-queue intent | ✅ | PR #55: unified outbox; deterministic provider/snapshot ordering, immediate rollback after pending refresh, repeated opens, failure combinations, epoch rejection and external flag changes; 49 focused tests |
 | SEC01 | Host/origin/session protections and private state | ✅ | `test_desktop_server.py`, `test_desktop_mail.py`; plaintext receiver input never becomes executable HTML |
 | SEC02 | Email images, downloads, header injection and Bcc privacy | ✅ | `test_desktop_images.py`, `test_desktop_mail.py`; remote images require explicit per-preview load |
 | SEC03 | Dependencies and tracked secret-history inspection | ⚠ | `pip-audit` found no known vulnerabilities among 36 audited installed dependencies; local package/absent optional extras excluded; tracked credential-path/history checks found none, dedicated secret scanner unavailable |
-| SHIP01 | Lint, full tests, distributions, Docker and installed-wheel smoke | ✅ | PR #54 final candidate: 787 passed, 9 absent optional ML-runtime skips; Ruff, builds, installed UI asset comparison, sdist inspection and non-root Docker smoke pass. MAIL17 follow-up is not yet delivered |
-| SHIP02 | Native packaged app and real provider end-to-end acceptance | ⚠ | Browser tests on Linux do not validate macOS/Windows shell, OAuth/vault, native file picker or delivery |
+| SHIP01 | Lint, full tests, distributions, Docker and installed-wheel smoke | ✅ | PR #55 final candidate: 797 passed, 9 absent optional ML-runtime skips; Ruff, builds, fresh-wheel CLI, sdist inspection and non-root Docker smoke pass; PR #54 also compared installed UI assets |
+| SHIP02 | Native packaged app and real provider end-to-end acceptance | 🟡 | Three-platform app workflow 43182995849 passed builds/window/TLS smokes at PR #55 merge; native arm64 Mac build also passed isolated-home smoke. Signed installation and installed-app Accessibility checks await unlocked login keychain; real second-Gmail authorization remains MAIL15 |
 
 ## Review boundaries
 
