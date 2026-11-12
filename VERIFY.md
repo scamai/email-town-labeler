@@ -12,7 +12,7 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; ⚠ external
 | MAIL02 | Done leaves pending work; Completed can reopen; tags persist | ❌ | Default `filters.done = all` leaves completed rows struck through in Inbox; workflow redesign in progress |
 | MAIL03 | Account/category/date/completion/search filters compose and explain scope | ⬜ | Audit all filter combinations and clear-filter behavior |
 | MAIL04 | Section/account/category unread counts are explicit and scoped | ❌ | Existing category counts contain total/done/corrections, no unread count |
-| MAIL05 | No list replacement, focus loss or scroll jump on routine updates | ❌ | `renderList()` replaces all children on each open/update; stable rendering work in progress |
+| MAIL05 | No list replacement, focus loss or scroll jump on routine updates | ✅ | PR #53: same 40-row/20-Down fixture removes zero rows instead of 800; WebKit/Chromium identity, reorder focus/visibility, background updates, narrow Back/Escape and geometry pass |
 | MAIL06 | Concurrent queued flags preserve latest intent across different fields | ✅ | PR #52: seven regressions fail before fix and pass after; latest per-field intent survives refresh and earlier completion/failure |
 | MAIL07 | Reply, reply-all, forward, drafts, attachments, send and failure recovery | ✅ | `check_mail_ui.py`; synthetic server/provider tests. Live delivery remains MAIL15 |
 | MAIL08 | Duplicate/uncertain send is not automatically retried; newer drafts survive | ✅ | `tests/test_desktop_mail.py`: durable receipt, timeout, partial send, atomic draft cleanup |

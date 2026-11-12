@@ -18,7 +18,17 @@ mail as fixtures or transmit real mail to coding agents.
 The queued-flag fix landed in [PR #52](https://github.com/scamai/email-town-labeler/pull/52).
 Seven new regression cases failed before the fix and passed afterward; the full suite passed
 787 tests with nine absent optional-runtime skips. The lead also verified a fresh wheel
-installation, distribution contents and a non-root Docker smoke run. UI repairs remain in progress.
+installation, distribution contents and a non-root Docker smoke run.
+
+The stable-list fix landed in [PR #53](https://github.com/scamai/email-town-labeler/pull/53).
+The original 40-message/20-Down reproduction now removes zero row nodes, versus 800 before.
+WebKit and Chromium verify row/control identity, selection, current-state row actions, reordered-row
+focus and visibility, background refresh, held responses, Done/undo, and narrow Back/Escape.
+The lead found and fixed an additional key-only focus-restoration edge during independent review.
+Old assets fail the identity regression, and the pre-guard version fails the Escape regression.
+Hover/focus geometry passed at 1280, 1000 and 390 px in both engines; 787 unit tests passed with
+nine optional-runtime skips, and all build/distribution/Docker checks passed. Workflow-view repairs
+remain in progress.
 
 Changes are prepared by Kimi K3.1 Pro with max reasoning in isolated worktrees. The lead
 reviews diffs, reruns evidence and handles publication. No coding agent is allowed to send
