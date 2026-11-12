@@ -731,9 +731,7 @@
         ? `Downloading the on-device classifier (${text(state.modelStatus.size)}, once). Mail is readable meanwhile.`
         : state.stale
         ? "Sync failed; showing the last loaded data."
-        : state.refreshing && state.messages.length
-          ? "Syncing latest changes…"
-          : "";
+        : "";
     renderMailboxNotice();
     els.selectionToolbar.hidden = !state.messages.length;
     els.selectionCount.textContent = state.selected.size
@@ -1185,9 +1183,13 @@
       (job) =>
         `${OUTBOX_VERBS[job.action] || "Updating"} ${Number(job.done) + Number(job.failed)} of ${Number(job.total)}`,
     );
-    els.footerStatus.textContent = busy.length
+    const status = busy.length
       ? busy.join(" · ")
-      : "Classified on your device";
+      : state.refreshing
+        ? "Syncing mail…"
+        : "Classified on your device";
+    els.footerStatus.textContent = status;
+    els.footerStatus.title = status;
     els.footerStatus.classList.toggle("is-working", busy.length > 0);
   }
   function reconcileMessageState() {
