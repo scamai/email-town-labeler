@@ -29,7 +29,7 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; 🟡 partial
 | SEC02 | Email images, downloads, header injection and Bcc privacy | ✅ | `test_desktop_images.py`, `test_desktop_mail.py`; remote images require explicit per-preview load |
 | SEC03 | Dependencies and tracked secret-history inspection | ⚠ | `pip-audit` found no known vulnerabilities among 36 audited installed dependencies; local package/absent optional extras excluded; tracked credential-path/history checks found none, dedicated secret scanner unavailable |
 | SHIP01 | Lint, full tests, distributions, Docker and installed-wheel smoke | ✅ | PR #55 final candidate: 797 passed, 9 absent optional ML-runtime skips; Ruff, builds, fresh-wheel CLI, sdist inspection and non-root Docker smoke pass; PR #54 also compared installed UI assets |
-| SHIP02 | Native packaged app and real provider end-to-end acceptance | 🟡 | Three-platform app workflow 43182995849 passed builds/window/TLS smokes at PR #55 merge; native arm64 Mac build also passed isolated-home smoke. Signed installation and installed-app Accessibility checks await unlocked login keychain; real second-Gmail authorization remains MAIL15 |
+| SHIP02 | Native packaged app and real provider end-to-end acceptance | 🟡 | Three-platform app workflow 43182995849 passed builds/window/TLS smokes at PR #55 merge; native arm64 Mac build also passed isolated-home smoke. Signed installation and installed-app Accessibility checks await unlocked login keychain and Accessibility permission; real second-Gmail authorization remains MAIL15 |
 
 ## Review boundaries
 

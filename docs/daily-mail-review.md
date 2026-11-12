@@ -164,7 +164,8 @@ manual runs; unsigned CI macOS artifacts are not official release installers.
 
 Signed/notarized installation on the owner's Mac remains blocked by its locked login keychain;
 `notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
-replaced. The [release procedure](releasing.md) requires the company identity, Apple notarization,
+replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
+acceptance needs an Accessibility-authorized execution context. The [release procedure](releasing.md) requires the company identity, Apple notarization,
 and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
 mail round trips remain separate gates. These results do not yet establish a complete replacement for
 the owner's existing mail client.
