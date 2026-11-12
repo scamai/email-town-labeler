@@ -12,8 +12,10 @@ contain breaking changes; they are called out.
 - Queued read/unread and star actions on the same message keep their latest state while earlier
   actions finish, including failures and background refreshes, instead of flashing back to old flags.
 
-- Repeated Up/Down or j/k navigation keeps the opened message visible in the list and focuses its
-  replacement row after a redraw, instead of leaving scrolling and focus on detached elements.
+- Message rows now reconcile in place by account-scoped message ID instead of being destroyed and rebuilt
+  on every open, read, selection, or background update. Unchanged rows and their controls retain DOM identity,
+  scroll position and geometry; repeated keys keep focus, removed rows advance it, and undo restores the
+  reopened row. Row actions resolve current state when clicked rather than retaining stale handlers.
 
 ### Changed
 

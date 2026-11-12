@@ -132,21 +132,80 @@
       pending: "Awaiting classification",
       none: "Not classified (sent mail)",
     })[source] || "Local category";
+  function usableFocus(el = document.activeElement) {
+    return Boolean(
+      el &&
+        el !== document.body &&
+        el !== document.documentElement &&
+        el.isConnected &&
+        !el.closest("[hidden], [inert]") &&
+        el.getClientRects().length,
+    );
+  }
   function saveFocus() {
     const el = document.activeElement;
+    const row = el?.closest?.(".message-row[data-message-id]");
+    const rows = row
+      ? [...els.messageList.querySelectorAll(".message-row[data-message-id]")]
+      : [];
+    const position = row
+      ? { rowId: row.dataset.messageId, rowIndex: rows.indexOf(row), element: el }
+      : { element: el };
     for (const key of ["focusKey", "accountFilter", "categoryFilter"]) {
-      if (el?.dataset[key]) return { key, value: el.dataset[key] };
+      if (el?.dataset[key]) return { key, value: el.dataset[key], ...position };
     }
+    if (row) return { key: "rowControl", value: el.dataset.rowAction || "", ...position };
     return null;
   }
   function restoreFocus(saved) {
     if (!saved) return;
-    const el = [
-      ...document.querySelectorAll(
-        "[data-focus-key], [data-account-filter], [data-category-filter]",
-      ),
-    ].find((el) => el.dataset[saved.key] === saved.value);
-    el?.focus({ preventScroll: true });
+    if (usableFocus(saved.element)) {
+      if (document.activeElement !== saved.element) {
+        saved.element.focus({ preventScroll: true });
+        const row = saved.element.closest(".message-row");
+        if (row) {
+          const rowBox = row.getBoundingClientRect();
+          const listBox = els.messageList.getBoundingClientRect();
+          if (rowBox.top < listBox.top) els.messageList.scrollTop += rowBox.top - listBox.top;
+          else if (rowBox.bottom > listBox.bottom)
+            els.messageList.scrollTop += rowBox.bottom - listBox.bottom;
+        }
+      }
+      return;
+    }
+    if (saved.key === "rowControl") {
+      const row = els.messageList.querySelector(
+        `.message-row[data-message-id="${CSS.escape(saved.rowId)}"]`,
+      );
+      const control = row?.querySelector(`[data-row-action="${CSS.escape(saved.value)}"]`);
+      if (control) {
+        control.focus({ preventScroll: true });
+        return;
+      }
+    } else {
+      const el = [
+        ...document.querySelectorAll(
+          "[data-focus-key], [data-account-filter], [data-category-filter]",
+        ),
+      ].find((el) => el.dataset[saved.key] === saved.value);
+      if (el) {
+        el.focus({ preventScroll: true });
+        return;
+      }
+    }
+    if (!saved.rowId) return;
+    const rows = [...els.messageList.querySelectorAll(".message-row[data-message-id]")];
+    const row = rows[Math.min(Math.max(0, saved.rowIndex), rows.length - 1)];
+    const target = row?.querySelector(
+      saved.value === `select-${saved.rowId}` ? ".row-check" : ".row-open",
+    );
+    (target || els.messageList).focus({ preventScroll: true });
+  }
+  function ensureListFocus(index = 0) {
+    if (usableFocus()) return;
+    const rows = [...els.messageList.querySelectorAll(".message-row[data-message-id]")];
+    const row = rows[Math.min(Math.max(0, index), rows.length - 1)];
+    (row?.querySelector(".row-open") || els.messageList).focus({ preventScroll: true });
   }
 
   function setSync(kind, label) {
@@ -171,6 +230,7 @@
     undo.className = "text-button";
     undo.textContent = "Undo";
     undo.addEventListener("click", async () => {
+      const reopenedId = state.activeId;
       try {
         await api("/api/undo", {
           method: "POST",
@@ -178,6 +238,10 @@
         });
         els.toast.textContent = "Change undone";
         await loadState();
+        if (reopenedId && filteredMessages().some((message) => message.id === reopenedId))
+          els.messageList
+            .querySelector(`.message-row[data-message-id="${CSS.escape(reopenedId)}"] .row-open`)
+            ?.focus({ preventScroll: true });
       } catch (error) {
         els.toast.textContent = error.message;
       }
@@ -411,6 +475,92 @@
       : "";
   }
 
+  const rowNodes = new Map();
+  const setText = (node, value) => {
+    const next = text(value);
+    if (node.textContent !== next) node.textContent = next;
+  };
+  function createRow(message) {
+    const row = document.createElement("article");
+    row.className = "message-row";
+    row.dataset.messageId = message.id;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "row-check";
+    checkbox.dataset.focusKey = `select-${message.id}`;
+    const body = document.createElement("div");
+    body.className = "row-content";
+    const title = document.createElement("div");
+    title.className = "row-title";
+    const sender = document.createElement("span");
+    sender.className = "row-sender";
+    const date = document.createElement("time");
+    title.append(sender, date);
+    const subject = document.createElement("button");
+    subject.type = "button";
+    subject.dataset.focusKey = `open-${message.id}`;
+    subject.className = "row-open row-subject";
+    const meta = document.createElement("div");
+    meta.className = "row-meta";
+    const category = document.createElement("span");
+    category.className = "category-badge";
+    const account = document.createElement("div");
+    account.className = "row-account";
+    const starred = document.createElement("span");
+    starred.className = "row-starred-badge unread-badge";
+    starred.textContent = "★ Starred";
+    const unread = document.createElement("span");
+    unread.className = "row-unread-label sr-only";
+    unread.textContent = "Unread";
+    meta.append(category, account, starred, unread);
+    const snippet = document.createElement("div");
+    snippet.className = "row-preview sr-only";
+    body.append(title, subject, meta, snippet);
+    row.append(checkbox, body);
+    return row;
+  }
+  function syncRow(row, message) {
+    row.classList.toggle("is-unread", Boolean(message.unread));
+    row.classList.toggle("is-focused", message.id === state.activeId);
+    row.classList.toggle("is-selected", state.selected.has(message.id));
+    const subjectText = text(message.subject || "No subject");
+    const checkbox = row.querySelector(".row-check");
+    checkbox.checked = state.selected.has(message.id);
+    checkbox.setAttribute("aria-label", `Select ${subjectText}`);
+    const subject = row.querySelector(".row-open");
+    subject.classList.toggle("row-status", Boolean(message.done));
+    setText(subject, subjectText);
+    setText(row.querySelector(".row-sender"), message.sender || "Unknown sender");
+    const dateValue = new Date(Number(message.date) || 0);
+    const date = row.querySelector("time");
+    date.title = formatDate(message.date);
+    date.dateTime = dateValue.toISOString();
+    setText(
+      date,
+      new Intl.DateTimeFormat(
+        "en-US",
+        Number(message.date) >= localMidnight()
+          ? { hour: "numeric", minute: "2-digit" }
+          : { month: "short", day: "numeric" },
+      ).format(dateValue),
+    );
+    const category = row.querySelector(".category-badge");
+    category.dataset.category = message.category || "unknown";
+    setText(
+      category,
+      categoryById(message.category)?.name || message.category || "Unclassified",
+    );
+    category.title = `Classification: ${sourceName(message.source)}`;
+    setText(
+      row.querySelector(".row-account"),
+      accountById(message.account_id)?.name || "Unknown account",
+    );
+    row.querySelector(".row-starred-badge").hidden = !message.starred;
+    row.querySelector(".row-unread-label").hidden = !message.unread;
+    setText(row.querySelector(".row-preview"), `Classification: ${sourceName(message.source)}`);
+    window.EmailTownRowActions?.sync(row);
+  }
+
   function renderList() {
     if (state.authLost) {
       els.selectionToolbar.hidden = true;
@@ -482,111 +632,51 @@
     els.markDone.disabled = els.reopen.disabled = state.selected.size === 0;
     els.selectAll.checked =
       messages.length > 0 && messages.every((m) => state.selected.has(m.id));
-    els.messageList.replaceChildren();
     if (hasLoading) {
       const loading = document.createElement("div");
       loading.className = "loading-state";
       const h = document.createElement("h3");
       h.textContent = "Reading local accounts";
-      loading.append(
-        h,
-        document.createTextNode("Your mail list will appear shortly."),
-      );
-      els.messageList.append(loading);
+      loading.append(h, document.createTextNode("Your mail list will appear shortly."));
+      els.messageList.replaceChildren(loading);
+      restoreFocus(focus);
       return;
     }
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       const h = document.createElement("h3");
-      h.textContent = state.messages.length
-        ? "No messages match these filters"
-        : "No mail yet";
+      h.textContent = state.messages.length ? "No messages match these filters" : "No mail yet";
       const p = document.createElement("p");
       p.textContent = state.messages.length
         ? "Try clearing a filter or search term."
         : "Add an account to load mail into this workbench.";
       empty.append(h, p);
-      els.messageList.append(empty);
+      els.messageList.replaceChildren(empty);
+      restoreFocus(focus);
       return;
     }
-    messages.forEach((message) => {
-      const row = document.createElement("article");
-      row.className = `message-row${message.unread ? " is-unread" : ""}${message.id === state.activeId ? " is-focused" : ""}${state.selected.has(message.id) ? " is-selected" : ""}`;
-      row.dataset.messageId = message.id;
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "row-check";
-      checkbox.dataset.focusKey = `select-${message.id}`;
-      checkbox.checked = state.selected.has(message.id);
-      checkbox.setAttribute(
-        "aria-label",
-        `Select ${text(message.subject || "No subject")}`,
-      );
-      checkbox.addEventListener("click", (event) => {
-        event.stopPropagation();
-        toggleSelected(message.id, checkbox.checked);
-      });
-      const body = document.createElement("div");
-      body.className = "row-content";
-      const title = document.createElement("div");
-      title.className = "row-title";
-      const subject = document.createElement("button");
-      subject.type = "button";
-      subject.dataset.focusKey = `open-${message.id}`;
-      subject.className = `row-open row-subject${message.done ? " row-status" : ""}`;
-      subject.textContent = text(message.subject || "No subject");
-      const sender = document.createElement("span");
-      sender.className = "row-sender";
-      sender.textContent = text(message.sender || "Unknown sender");
-
-      const snippet = document.createElement("div");
-      snippet.className = "row-preview sr-only";
-      snippet.textContent = `Classification: ${sourceName(message.source)}`;
-      const account = document.createElement("div");
-      account.className = "row-account";
-      account.textContent = text(
-        accountById(message.account_id)?.name || "Unknown account",
-      );
-
-      const meta = document.createElement("div");
-      meta.className = "row-meta";
-      const date = document.createElement("time");
-      date.title = formatDate(message.date);
-      date.textContent = new Intl.DateTimeFormat(
-        "en-US",
-        Number(message.date) >= localMidnight()
-          ? { hour: "numeric", minute: "2-digit" }
-          : { month: "short", day: "numeric" },
-      ).format(new Date(Number(message.date) || 0));
-      title.append(sender, date);
-      const category = document.createElement("span");
-      category.className = "category-badge";
-      category.dataset.category = message.category || "unknown";
-      category.textContent = text(
-        categoryById(message.category)?.name ||
-          message.category ||
-          "Unclassified",
-      );
-      category.title = `Classification: ${sourceName(message.source)}`;
-      meta.append(category, account);
-      if (message.starred) {
-        const star = document.createElement("span");
-        star.className = "unread-badge";
-        star.textContent = "★ Starred";
-        meta.append(star);
+    const loadedIds = new Set(state.messages.map((message) => message.id));
+    for (const [id, row] of rowNodes) {
+      if (!loadedIds.has(id)) {
+        row.remove();
+        rowNodes.delete(id);
       }
-      if (message.unread) {
-        // Unread reads as weight and a dot, as in Gmail; the word stays for screen readers.
-        const unread = document.createElement("span");
-        unread.className = "sr-only";
-        unread.textContent = "Unread";
-        meta.append(unread);
+    }
+    const visibleIds = new Set(messages.map((message) => message.id));
+    for (const child of [...els.messageList.children]) {
+      if (!child.classList.contains("message-row") || !visibleIds.has(child.dataset.messageId))
+        child.remove();
+    }
+    messages.forEach((message, index) => {
+      let row = rowNodes.get(message.id);
+      if (!row) {
+        row = createRow(message);
+        rowNodes.set(message.id, row);
       }
-      body.append(title, subject, meta, snippet);
-      row.append(checkbox, body);
-      row.addEventListener("click", () => openMessage(message.id));
-      els.messageList.append(row);
+      syncRow(row, message);
+      const current = els.messageList.children[index];
+      if (current !== row) els.messageList.insertBefore(row, current || null);
     });
     els.selectionToolbar.hidden =
       state.selected.size === 0 && !state.messages.length;
@@ -602,6 +692,17 @@
       messages.every((message) => state.selected.has(message.id));
     restoreFocus(focus);
   }
+  els.messageList.addEventListener("click", (event) => {
+    const row = event.target.closest(".message-row[data-message-id]");
+    if (!row || !els.messageList.contains(row)) return;
+    if (event.target.closest("[data-row-action]")) return;
+    if (event.target.closest(".row-check")) {
+      event.stopPropagation();
+      toggleSelected(row.dataset.messageId, event.target.checked);
+      return;
+    }
+    openMessage(row.dataset.messageId);
+  });
 
   // One body request per message, shared by the reading pane and the reply/attachment code, kept for
   // the last 150 opened or prefetched. A failed read is forgotten so the next open tries again.

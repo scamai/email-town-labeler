@@ -1,7 +1,5 @@
-// Row controls as in Gmail: a star toggle on every row, and Archive / Trash / Mark read-unread on
-// hover or keyboard focus (pointer devices only; touch keeps the star and the preview's buttons).
-// Rows are re-rendered by app.js; a MutationObserver decorates each new row. Every control runs the
-// toolbar's own mailAction, so account permissions and Trash's confirmation still apply.
+// Row controls as in Gmail: a star toggle on every writable row, and Archive / Trash / Mark read-unread
+// on hover or keyboard focus. Keyed rows retain their controls; labels and actions follow current state.
 (() => {
   "use strict";
 
@@ -30,58 +28,86 @@
     svg.append(path);
     return svg;
   }
-  function button(className, label, action, id, iconName, filled) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = className;
-    b.title = label;
-    b.setAttribute("aria-label", label);
-    b.dataset.rowAction = action;
-    b.append(icon(iconName, filled));
-    b.addEventListener("click", (event) => {
-      event.stopPropagation(); // a control, not "open this message"
-      host().mailAction(action, [id]);
-    });
-    return b;
+  function button(className, role, label, action, iconName, filled = false) {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = className;
+    control.dataset.role = role;
+    control.title = label;
+    control.setAttribute("aria-label", label);
+    control.dataset.rowAction = action;
+    control.append(icon(iconName, filled));
+    return control;
+  }
+  function syncButton(control, label, action, iconName, filled = false) {
+    control.title = label;
+    control.setAttribute("aria-label", label);
+    control.dataset.rowAction = action;
+    const path = control.querySelector("path");
+    path.setAttribute("d", ICONS[iconName]);
+    path.setAttribute("fill", filled ? "currentColor" : "none");
   }
 
-  function decorate(row) {
-    if (row.dataset.decorated) return;
+  function sync(row) {
     const id = row.dataset.messageId;
-    const message = host()?.state.messages.find((m) => m.id === id);
+    const message = host()?.state.messages.find((item) => item.id === id);
     if (!message) return;
-    row.dataset.decorated = "1";
     const canWrite = Boolean(host().accountById?.(message.account_id)?.capabilities?.write);
-    if (!canWrite) return; // read-only or paused account: nothing here could act
-    const star = button(
-      "row-star",
+    if (!canWrite) {
+      row.querySelector(".row-star")?.remove();
+      row.querySelector(".row-actions")?.remove();
+      return;
+    }
+    let star = row.querySelector(".row-star");
+    if (!star) {
+      star = button("row-star", "star", "Star (S)", "star", "star");
+      row.querySelector(".row-check")?.after(star);
+    }
+    syncButton(
+      star,
       message.starred ? "Unstar (S)" : "Star (S)",
       message.starred ? "unstar" : "star",
-      id,
       "star",
-      message.starred,
+      Boolean(message.starred),
     );
     star.classList.toggle("is-starred", Boolean(message.starred));
     star.setAttribute("aria-pressed", String(Boolean(message.starred)));
-    row.querySelector(".row-check")?.after(star);
-    const actions = document.createElement("span");
-    actions.className = "row-actions";
+
+    let actions = row.querySelector(".row-actions");
+    if (!actions) {
+      actions = document.createElement("span");
+      actions.className = "row-actions";
+      actions.append(
+        button("row-action", "archive", "Archive (E)", "archive", "archive"),
+        button("row-action", "restore", "Restore to Inbox", "restore", "archive"),
+        button("row-action", "trash", "Move to Trash (#)", "trash", "trash"),
+        button("row-action", "read-state", "Mark as read (Shift+I)", "read", "read"),
+      );
+      row.querySelector(".row-title")?.append(actions);
+    }
     const trashed = host().state.folder === "trash";
-    actions.append(
-      trashed
-        ? button("row-action", "Restore to Inbox", "restore", id, "archive")
-        : button("row-action", "Archive (E)", "archive", id, "archive"),
-      ...(trashed ? [] : [button("row-action", "Move to Trash (#)", "trash", id, "trash")]),
-      message.unread
-        ? button("row-action", "Mark as read (Shift+I)", "read", id, "read")
-        : button("row-action", "Mark as unread (Shift+U)", "unread", id, "unread"),
+    actions.querySelector('[data-role="archive"]').hidden = trashed;
+    actions.querySelector('[data-role="restore"]').hidden = !trashed;
+    actions.querySelector('[data-role="trash"]').hidden = trashed;
+    syncButton(
+      actions.querySelector('[data-role="read-state"]'),
+      message.unread ? "Mark as read (Shift+I)" : "Mark as unread (Shift+U)",
+      message.unread ? "read" : "unread",
+      message.unread ? "read" : "unread",
     );
-    row.querySelector(".row-title")?.append(actions);
   }
 
-  function decorateAll() {
-    list?.querySelectorAll(".message-row[data-message-id]").forEach(decorate);
+  function syncAll() {
+    list?.querySelectorAll(".message-row[data-message-id]").forEach(sync);
   }
-  if (list) new MutationObserver(decorateAll).observe(list, { childList: true });
-  decorateAll();
+  list?.addEventListener("click", (event) => {
+    const control = event.target.closest("[data-row-action]");
+    const row = control?.closest(".message-row[data-message-id]");
+    if (!control || !row || !list.contains(row)) return;
+    event.stopPropagation();
+    host().mailAction(control.dataset.rowAction, [row.dataset.messageId]);
+  });
+  if (list) new MutationObserver(syncAll).observe(list, { childList: true });
+  window.EmailTownRowActions = { sync };
+  syncAll();
 })();
