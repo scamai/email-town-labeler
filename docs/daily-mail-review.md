@@ -1,11 +1,11 @@
 # Daily-mail readiness review
 
-Started 2026-11-12 from `e178fd0`. The acceptance goal is a dependable daily workflow:
+Started 2026-11-11 from `e178fd0`. The acceptance goal is a dependable daily workflow:
 connect accounts → find pending/unread mail → read/reply → finish → recover or reopen.
 This review uses synthetic messages and authenticated local servers. It does not use real
 mail as fixtures or transmit real mail to coding agents.
 
-## Confirmed defects being repaired
+## Confirmed defects and repair status
 
 | Priority | Finding | Reproduction / consequence | Acceptance |
 | --- | --- | --- | --- |
@@ -14,6 +14,11 @@ mail as fixtures or transmit real mail to coding agents.
 | P1 | Queued flags overwrite each other | On an unread message, queue read then star while provider writes are blocked: snapshot becomes unread=true/starred=true | Independent fields retain their queued state; older requests cannot remove newer overlays |
 | P1 | Unread work is unclear in sidebar sections | Category stats show total/done/“wrong”, not unread | Explicit unread counts with documented account/folder/filter scope |
 | P1 | “0 wrong” suggests unsupported accuracy | Counter only observes manual category changes; there is no reviewed denominator | Say corrected/manual/automatic/pending as appropriate; do not imply unreviewed predictions are correct |
+
+The queued-flag fix landed in [PR #52](https://github.com/scamai/email-town-labeler/pull/52).
+Seven new regression cases failed before the fix and passed afterward; the full suite passed
+787 tests with nine absent optional-runtime skips. The lead also verified a fresh wheel
+installation, distribution contents and a non-root Docker smoke run. UI repairs remain in progress.
 
 Changes are prepared by Kimi K3.1 Pro with max reasoning in isolated worktrees. The lead
 reviews diffs, reruns evidence and handles publication. No coding agent is allowed to send
@@ -82,7 +87,8 @@ checks, pagination, expired grants, read/write capabilities and partial operatio
 
 The review host has no configured real account registry and no running real workbench. It
 therefore cannot prove the owner's second Gmail, Microsoft tenant or IMAP server loads or
-sends successfully. Remaining acceptance requires owner enrollment through the app, then:
+sends successfully. The owner selected a **second Gmail** as the first real-account acceptance
+target. Remaining acceptance requires owner enrollment through the app, then:
 
 1. Load two real accounts together; check new-mail arrival, refresh and one-account failure.
 2. Check expired credentials, reconnect and duplicate-account rejection.
@@ -120,3 +126,21 @@ The browser content is exercised in WebKit and Chromium on Linux. Native macOS/W
 windows, file pickers, accessibility tools, OAuth return paths and packaged distribution are
 separate gates. Passing this review's synthetic checks does not yet justify claiming a complete
 replacement for the user's existing mail client.
+
+## Visual-lint disposition
+
+The baseline source design scan reported no FAIL, with five warning categories. They are
+lower priority than the reproduced workflow/state defects:
+
+- Spacing: three off-grid values (badge padding, an optical negative margin and category
+  metadata spacing). Review them in context; they did not cause hover/focus geometry failures.
+- Type: nine declared sizes versus the generic six-size floor. This includes compact reader
+  metadata and avatar/control roles; do not flatten these roles merely to satisfy a scanner.
+- Radius: five sizes versus four; a token consolidation is a P2 follow-up, not a blocked mail task.
+- Shadows: the scan counts inset active-row/category indicators as shadows. Those communicate
+  state rather than floating elevation, so the generic three-shadow threshold is not applicable.
+- Color: sender avatars use dynamic HSL custom properties by design. The star's fixed gold
+  color remains a P2 token-consistency follow-up owned by the UI maintainer.
+
+Static scanning cannot establish alignment, text contrast, focus order or complete recovery
+flows. Those require the rendered and interaction checks in the acceptance matrix.

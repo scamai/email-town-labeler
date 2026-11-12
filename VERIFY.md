@@ -1,6 +1,6 @@
 # Daily mail acceptance
 
-Review started 2026-11-12 against `e178fd0`. Dominant surface: local desktop mail client
+Review started 2026-11-11 against `e178fd0`. Dominant surface: local desktop mail client
 (Python loopback server and shared browser UI); CLI/model backends are also in scope.
 Synthetic fixtures never establish acceptance by a real mailbox provider.
 
@@ -13,7 +13,7 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; ⚠ external
 | MAIL03 | Account/category/date/completion/search filters compose and explain scope | ⬜ | Audit all filter combinations and clear-filter behavior |
 | MAIL04 | Section/account/category unread counts are explicit and scoped | ❌ | Existing category counts contain total/done/corrections, no unread count |
 | MAIL05 | No list replacement, focus loss or scroll jump on routine updates | ❌ | `renderList()` replaces all children on each open/update; stable rendering work in progress |
-| MAIL06 | Concurrent queued flags preserve latest intent across different fields | ❌ | Unread message + queued read then star yields unread=true before provider completes |
+| MAIL06 | Concurrent queued flags preserve latest intent across different fields | ✅ | PR #52: seven regressions fail before fix and pass after; latest per-field intent survives refresh and earlier completion/failure |
 | MAIL07 | Reply, reply-all, forward, drafts, attachments, send and failure recovery | ✅ | `check_mail_ui.py`; synthetic server/provider tests. Live delivery remains MAIL15 |
 | MAIL08 | Duplicate/uncertain send is not automatically retried; newer drafts survive | ✅ | `tests/test_desktop_mail.py`: durable receipt, timeout, partial send, atomic draft cleanup |
 | MAIL09 | Bulk partial failure, safe Trash/Restore and cross-account isolation | ✅ | `tests/test_desktop_mail.py`, including no broad IMAP expunge and no cross-account reply |
@@ -22,7 +22,7 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; ⚠ external
 | MAIL12 | Manual category/completion persist independently through reload | ✅ | `check_desktop_ui.py`: real HTTP actions, undo, local category, reload |
 | MAIL13 | Desktop/narrow/phone, light/dark, keyboard and accessible controls | ⬜ | Baseline desktop check passes 8 viewport/theme combinations; post-fix audit pending |
 | MAIL14 | Empty, loading, offline, stale and account-error recovery | ⬜ | Exercise explicit recovery paths alongside healthy-account isolation |
-| MAIL15 | Real second Gmail, Microsoft and IMAP account load and mail round trips | ⚠ | No account registry or live workbench on review host; requires owner enrollment and test-mailbox round trips |
+| MAIL15 | Real second Gmail, Microsoft and IMAP account load and mail round trips | ⚠ | Owner prioritizes second Gmail. No account registry or live workbench on review host; requires owner enrollment and test-mailbox round trips |
 | MAIL16 | Classification quality on representative labeled mail | ⚠ | No consented labeled multi-account evaluation set; correction counts cannot establish accuracy |
 | SEC01 | Host/origin/session protections and private state | ✅ | `test_desktop_server.py`, `test_desktop_mail.py`; plaintext receiver input never becomes executable HTML |
 | SEC02 | Email images, downloads, header injection and Bcc privacy | ✅ | `test_desktop_images.py`, `test_desktop_mail.py`; remote images require explicit per-preview load |
