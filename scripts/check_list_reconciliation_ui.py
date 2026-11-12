@@ -281,6 +281,11 @@ def main() -> int:
                 page.locator("#previewClose").click()
                 expect(rows.nth(4).locator(".row-open")).to_be_focused()
                 assert page.locator("#messageList").evaluate("list => list.scrollTop") == scroll
+                # Escape uses a focus key without a saved element, even with visible header focus.
+                rows.nth(4).locator(".row-open").click()
+                page.locator("#refreshButton").focus()
+                page.keyboard.press("Escape")
+                expect(rows.nth(4).locator(".row-open")).to_be_focused()
                 assert not errors, errors
                 print(f"{engine}: identity, focus, scroll, Done/undo, bulk and held responses pass")
             finally:
