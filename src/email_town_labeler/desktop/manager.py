@@ -100,15 +100,12 @@ class Workbench:
         # Set once an account's first list of this process is in; previews of cached rows wait for it.
         self.synced = {}
         self.folder_rows = {}
-        # Read/unread set from the UI before the provider confirms it: key -> unread. A list read that
-        # is older than the write must not flip the row back; the entry ends once a list agrees.
-        self.read_overrides, self.read_queue, self.read_worker = {}, deque(), None
         self.readers, self.messages, self.account_status = {}, {}, {}
         self.predictions, self.bodies = {}, OrderedDict()
         self.jobs, self.undos = {}, OrderedDict()
-        # Bulk mail actions run one after another in the background ("outbox"). Until a message's action
-        # is done it is hidden from the list (archive, trash, restore) or shown with its new flag (read,
-        # star), so the list answers at once. A failed message comes back as the provider has it.
+        # Mail actions, including open-to-read, run one after another in the background ("outbox"). Until
+        # a message's action is done it is hidden from the list (archive, trash, restore) or shown with its
+        # new flag (read, star), including over a stale list. A failed message returns to the provider state.
         self.outbox, self.outbox_worker = deque(), None
         self.outbox_jobs: dict[str, dict] = {}
         self.pending_leave: dict[str, str] = {}  # message key -> job id
@@ -403,12 +400,6 @@ class Workbench:
             category = rec.get("category")
             prediction = self.predictions.get(key)
             unread = "UNREAD" in rec.get("label_ids", [])
-            override = self.read_overrides.get(key)
-            if override is not None:
-                if override == unread:
-                    self.read_overrides.pop(key, None)  # the mailbox has caught up
-                else:
-                    unread = override
             source = (
                 "mailbox"
                 if category
@@ -634,6 +625,8 @@ class Workbench:
                 self.bodies.pop(key, None)
                 raise ValueError("Message is no longer in the loaded list. Refresh and try again.")
             item = dict(self.messages[key])
+            for field, (_request_id, value) in self.pending_flags.get(key, {}).items():
+                item[field] = value
         item.pop("provider_id", None)
         saved = self.state.read([key]).get(key, {})
         item["done"] = bool(saved.get("done"))
@@ -645,7 +638,7 @@ class Workbench:
         """Mark one loaded message read or unread now, and write it to its mailbox in the background.
 
         This is what opening a message does, as in Gmail. Accounts without write permission, or paused,
-        are left as they are. A failed write puts the row back and is logged by type only.
+        are left as they are. A failed write puts the row back.
         """
         if type(read) is not bool:
             raise ValueError("read must be a boolean")
@@ -654,49 +647,20 @@ class Workbench:
             if item is None:
                 raise ValueError("Message is no longer in the loaded list")
             aid = item["account_id"]
-            if item["unread"] is not read:
+            override = self.pending_flags.get(key, {}).get("unread")
+            unread = override[1] if override is not None else item["unread"]
+            if unread is not read:
                 return {"ok": True, "changed": False}
             if not self.accounts.get(aid)["enabled"] or not self.account_capabilities(aid)["write"]:
                 return {"ok": False, "changed": False}
-            item["unread"] = not read
-            self.read_overrides[key] = not read
-            self.read_queue.append((key, aid, item["provider_id"], read))
-            self._touch()
-            if self.read_worker is None:
-                self.read_worker = threading.Thread(
-                    target=self._write_reads, name="workbench-read", daemon=True
-                )
-                self.read_worker.start()
+            self.mail_action(
+                {
+                    "request_id": uuid.uuid4().hex,
+                    "ids": [key],
+                    "action": "read" if read else "unread",
+                }
+            )
         return {"ok": True, "changed": True}
-
-    def _write_reads(self):
-        while not self.stop.is_set():
-            with self.lock:
-                if not self.read_queue:
-                    self.read_worker = None
-                    return
-                key, aid, provider_id, read = self.read_queue.popleft()
-                reader_lock = self.reader_locks.get(aid)
-            try:
-                if reader_lock is None:
-                    raise ProviderError("Account is offline")
-                with reader_lock:
-                    reader = self.readers.get(aid)
-                    if reader is None:
-                        raise ProviderError("Account is offline")
-                    reader.mutate(provider_id, "read" if read else "unread")
-            except Exception as e:  # noqa: BLE001 - the row goes back; other accounts are unaffected
-                log.warning(
-                    "marking a message %s failed (%s)", "read" if read else "unread", type(e).__name__
-                )
-                with self.lock:
-                    if self.read_overrides.get(key) is (not read):
-                        self.read_overrides.pop(key, None)
-                    if key in self.messages:
-                        self.messages[key]["unread"] = read
-                    self._touch()
-        with self.lock:
-            self.read_worker = None
 
     def account_capabilities(self, aid):
         reader = self.readers.get(aid)
@@ -915,8 +879,6 @@ class Workbench:
                         elif key in self.messages:
                             field = "unread" if action in ("read", "unread") else "starred"
                             self.messages[key][field] = action in ("unread", "star")
-                        if action in ("read", "unread"):
-                            self.read_overrides.pop(key, None)  # an explicit action supersedes open-to-read
                         self._touch()
                 result["succeeded"].append(key)
                 self._progress(request_id, "done")

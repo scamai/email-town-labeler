@@ -9,6 +9,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- Opening mail and explicitly marking it read or unread now share one ordered background queue, so an
+  earlier automatic read cannot overwrite a later unread action. Pending flags remain temporary overlays;
+  failed writes restore the confirmed state even if a background refresh ran while the write was pending.
+
 - Queued read/unread and star actions on the same message keep their latest state while earlier
   actions finish, including failures and background refreshes, instead of flashing back to old flags.
 

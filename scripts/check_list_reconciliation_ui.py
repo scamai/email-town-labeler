@@ -113,12 +113,32 @@ def main() -> int:
                     && window.__first.star === row.querySelector('.row-star');
                 }"""
 
+                def settle_mail(manager=manager, page=page):
+                    # Automatic reads now use the outbox and refresh afterward. Drain those real
+                    # responses before deliberately reordering only the browser's synthetic state.
+                    until(
+                        lambda: manager.outbox_worker is None and not manager.refreshing,
+                        "mail writes and their refresh finish",
+                    )
+                    seq = manager.snapshot()["seq"]
+                    page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+                    until(
+                        lambda: page.evaluate(
+                            "seq => !window.EmailTownMailHost.state.syncing && "
+                            "window.EmailTownMailHost.state.seq >= seq",
+                            seq,
+                        ),
+                        "settled mailbox snapshot reaches the browser",
+                    )
+
                 rows.first.locator(".row-open").focus()
                 page.keyboard.press("Enter")
                 expect(rows.first).not_to_have_class(re.compile(r"\bis-unread\b"))
                 assert page.evaluate(first_identical), f"{engine}: open/read replaced row or controls"
                 expect(rows.first.locator('[data-row-action="unread"]')).to_have_count(1)
                 expect(rows.first.locator(".row-open")).to_be_focused()
+
+                settle_mail()
 
                 # Reordering an existing focused row can blur it even when the node stays connected.
                 reorder_id = rows.nth(20).get_attribute("data-message-id")
@@ -141,10 +161,14 @@ def main() -> int:
                 )
                 assert reorder_geometry["visible"], reorder_geometry
                 assert page.evaluate(identical), f"{engine}: reorder replaced a row"
+                # A real snapshot may restore state while the synthetic DOM stays reordered.
+                # Restore the captured order explicitly; a second reverse can reverse fresh state.
                 page.evaluate(
                     """() => {
-                      window.EmailTownMailHost.state.messages.reverse();
-                      window.EmailTownMailHost.renderList();
+                      const host = window.EmailTownMailHost;
+                      const messages = new Map(host.state.messages.map(message => [message.id, message]));
+                      host.state.messages = window.__rows.map(([id]) => messages.get(id));
+                      host.renderList();
                     }"""
                 )
                 page.evaluate(
@@ -185,6 +209,8 @@ def main() -> int:
                 assert page.evaluate(identical), f"{engine}: repeated keys replaced rows"
                 assert page.evaluate("window.__removedRows") == 0, f"{engine}: rows removed during navigation"
                 assert page.evaluate("window.__rows[0][1].getAnimations({subtree:true}).length") == 0
+
+                settle_mail()
 
                 # Hold a real immediate response after the server creates it; let a newer long-poll win.
                 page.evaluate(
@@ -236,7 +262,7 @@ def main() -> int:
                     ),
                     "held response is consumed and its caller settles",
                 )
-                assert page.evaluate("window.EmailTownMailHost.state.seq") == newer
+                assert page.evaluate("window.EmailTownMailHost.state.seq") >= newer
                 assert page.evaluate(identical), f"{engine}: out-of-order response replaced rows"
 
                 # Done removes a focused pending row; focus advances. Undo restores the active row.

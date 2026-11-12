@@ -60,7 +60,6 @@ def main() -> int:
             record.update(folder="inbox", labels=["UNREAD"])
         manager.folder = "inbox"
         manager.messages.clear()
-        manager.read_overrides.clear()
         manager._refresh()
 
     try:
