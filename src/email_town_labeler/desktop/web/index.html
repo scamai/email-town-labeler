@@ -307,6 +307,16 @@
             role="status"
             aria-live="polite"
           ></div>
+          <div class="list-error" id="listError" role="alert" hidden>
+            <span id="listErrorText"></span>
+            <button
+              class="button button-secondary button-small"
+              id="retryMailButton"
+              type="button"
+            >
+              Retry mail load
+            </button>
+          </div>
           <div class="demo-banner" id="demoBanner" hidden>
             Demo data: this is not a live mailbox.
           </div>
@@ -438,7 +448,17 @@
               </div>
               <time class="preview-date" id="previewDate"></time>
             </div>
-            <div class="email-body" id="previewBody"></div>
+            <div class="email-body" id="previewBody" tabindex="-1"></div>
+            <div class="preview-error" id="previewError" role="alert" hidden>
+              <span id="previewErrorText"></span>
+              <button
+                class="button button-secondary button-small"
+                id="retryPreviewButton"
+                type="button"
+              >
+                Retry message
+              </button>
+            </div>
             <div class="reply-actions" aria-label="Reply and forward"></div>
           </article>
         </section>

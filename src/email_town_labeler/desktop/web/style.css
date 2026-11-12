@@ -718,6 +718,33 @@ input[type="checkbox"] {
 .list-status:empty {
   display: none;
 }
+.list-error,
+.preview-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.list-error {
+  padding: 8px var(--pane-gutter);
+  border-width: 0 0 1px;
+  font-size: 12px;
+}
+.list-error span,
+.preview-error span {
+  flex: 1;
+  min-width: 180px;
+}
+.preview-error {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
 .demo-banner {
   background: var(--surface-2);
 }
