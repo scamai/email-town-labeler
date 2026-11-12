@@ -135,10 +135,12 @@
       list[
         index < 0 ? 0 : Math.min(list.length - 1, Math.max(0, index + step))
       ];
-    const open = next.querySelector(".row-open");
-    open?.click();
-    open?.focus({ preventScroll: true });
-    next.scrollIntoView({ block: "nearest" });
+    const id = next.dataset.messageId;
+    next.querySelector(".row-open")?.click();
+    // Opening redraws the list: focus the replacement, not the detached button.
+    document.querySelector(
+      `.message-row[data-message-id="${CSS.escape(id)}"] .row-open`,
+    )?.focus({ preventScroll: true });
     return true;
   }
   function toggleOpenSelected() {

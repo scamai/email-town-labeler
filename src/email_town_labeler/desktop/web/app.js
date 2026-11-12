@@ -647,6 +647,9 @@
   function openMessage(id) {
     state.activeId = id;
     renderList();
+    els.messageList.querySelector(
+      `.message-row[data-message-id="${CSS.escape(id)}"]`,
+    )?.scrollIntoView({ block: "nearest" });
     els.previewPane.classList.add("is-open");
     els.previewEmpty.hidden = true;
     els.previewContent.hidden = false;
