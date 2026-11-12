@@ -121,10 +121,13 @@ Exchange 本地部署不等于 Microsoft Graph 邮箱；需管理员允许的 IM
 
 ## 统一处理
 
-- 左侧选择所有账户或单个账户，再按“今天”、历史待处理、分类和完成状态筛选。
+- 收件箱默认显示 **Pending（待处理）**。Done 后从待处理列表移出，在 **Completed（已完成）** 中可找到；**Reopen** 恢复为待处理，分类标签保留。全部处理完后可点 **View completed** 查看已完成邮件。
+- 左侧选择所有账户或单个账户，再组合“今天”、Earlier（较早）、分类、完成状态和搜索。清除搜索与筛选会回到默认 Pending；列表标题说明当前范围。
 - 中间显示账户、主题、发件人、分类；搜索只查当前已载入的主题和发件人。
 - 打开邮件可预览纯文本，在本机更改分类或标记完成。支持批量操作和撤销。
-- 左侧每个分类显示已载入邮件数、已完成数和“wrong”数：自动分类（本机模型或邮箱标签）放进该分类、后来被你改到别的分类的邮件。没检查过的邮件不计入，所以这是下限。
+- 日期分区、账户和分类显示已载入数量及明确的未读数，并应用其他当前筛选条件。只有当前文件夹有已载入的未读计数，未载入的文件夹不会被当作零未读。
+- 分类统计区分自动分类、用户修正和尚待分类，不再用“0 wrong”暗示准确率；未检查的自动分类不能据此判定为正确。
+- 加载失败、暂停账户和真正的空文件夹有不同提示；一个账户出错不会清掉其他账户的已载入邮件。
 - 完成不会删除、移动、归档或标记原邮件已读，也不会移除原来的分类标签。
 - Gmail 已有项目分类标签会直接显示；未分类邮件、Microsoft 和 IMAP 邮件使用共享的本机模型；自己的已发送邮件不分类。
 - 本机手动分类优先于自动分类，并与完成状态独立。它目前不写回服务端，也不加入旧 CLI 的学习反馈。
@@ -141,7 +144,7 @@ Gmail/SMTP 附件合计上限为 20 MiB，Graph 为 2 MiB；下载上限分别�
 IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全移动的服务器会禁用移动操作。
 
 打开邮件会像 Gmail 一样把它标为已读：列表中的加粗和蓝点立即消失，写回邮箱在后台完成（失败会恢复原状）。点 **Mark unread** 后，
-它会保持未读，直到再次打开。没有管理邮件权限或已暂停的账户不做改动。当前文件夹的标签上显示未读数。
+它会保持未读，直到再次打开。没有管理邮件权限或已暂停的账户不做改动。当前文件夹的标签上显示符合当前筛选的已载入未读数。
 
 和 Gmail 一样，鼠标悬停在某行（或用键盘移到该行）时，时间位置会换成归档、删除、标为已读/未读按钮，每行还有星标；
 它们不会打开邮件。归档或删除正在查看的邮件后，宽窗口会自动打开下一封（更早的），窄窗口则回到列表。
@@ -232,11 +235,16 @@ python3 scripts/install_macos_workbench.py
 本机测试命令：
 
 ```sh
-uv run pytest tests/test_desktop_*.py
-uv run --with playwright playwright install chromium
-uv run --with playwright python scripts/check_desktop_ui.py
-uv run --with playwright python scripts/check_mail_ui.py
-uv run --with playwright python scripts/check_layout_ui.py
+uv run --extra dev pytest tests/test_desktop_*.py
+uv run --extra dev --with playwright playwright install chromium webkit
+uv run --extra dev --with playwright python scripts/check_desktop_ui.py
+uv run --extra dev --with playwright python scripts/check_mail_ui.py
+uv run --extra dev --with playwright python scripts/check_layout_ui.py
+uv run --extra dev --with playwright python scripts/check_completion_ui.py
+uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
+# Also exercise the native macOS browser engine through WebKit on the review host:
+EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_desktop_ui.py
+EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_mail_ui.py
 ```
 
 浏览器测试使用明确标注的合成双账户数据，检查真实本地 HTTP 操作、筛选、预览、完成/撤销、
