@@ -96,12 +96,17 @@ Existing controls were traced and exercised:
   when an earlier version finishes sending.
 - IMAP uses TLS and UID-scoped mutations; the app does not broadly expunge a mailbox. Microsoft
   API requests use immutable IDs on reads and writes, avoiding the ordinary move-ID change.
-- Installed dependency audit reported no known vulnerabilities in 36 audited dependencies.
-  The local development package is not published on PyPI and was excluded by the scanner;
-  optional runtime/build extras absent from this environment are not covered by this result.
-- Tracked credential-filename and matching history inspection found no committed token/client
-  credential JSON, `.env` or SQLite paths. This is a bounded inspection, not proof no secret
-  ever appeared under another name. A dedicated secrets scanner was not installed.
+- The Linux baseline dependency audit reported no known vulnerabilities in 36 audited dependencies.
+  A second audit covered all 63 third-party packages in the actual macOS build environment, including
+  its app/model/build dependencies: no known vulnerabilities and no skipped packages. These exact
+  installed versions were exported as pinned requirements and checked with `pip-audit --no-deps
+  --disable-pip --strict`; the local project package was excluded. This does not audit native system
+  libraries or optional runtimes outside those environments.
+- Tracked credential-filename/history inspection found no committed token/client credential JSON,
+  `.env` or SQLite paths. Gitleaks 8.30.1 additionally scanned all 76 reachable commits (2.10 MB) in
+  the non-shallow repository with default rules, an empty ignore file, allow-comments disabled and
+  redacted output: no leaks found. The tool's release checksum was verified. This is a bounded scanner
+  result, not proof that no secret exists under an unrecognized format.
 - Privacy documentation had stale preview-cache limits. It now matches the code: 300 server
   previews, 150 details per open page, 30 Gmail/10 Microsoft or IMAP bodies read ahead per
   account, and a server body-text limit of 262,144 characters (not bytes).
@@ -159,13 +164,17 @@ The browser content is exercised in WebKit and Chromium on Linux. The [three-pla
 passed native package builds and window/TLS smokes on macOS, Windows and Linux at source
 `426f6d7`. A separate arm64 build on an accessible Mac passed the bundled self-check (9/9), model
 worker, HTTPS, real Cocoa window, single-instance reuse, authenticated shutdown and child-process cleanup
-with an isolated temporary home. The workflow's release-attachment job is intentionally skipped for
+with an isolated temporary home. Three tiny ONNX inference tests that lacked runtimes on Linux also
+passed on the Mac (two classifier pooling cases and one sequence graph); they exercise implementation,
+not real-mail classification accuracy. Test-only dependencies were added after the app binary was built.
+The workflow's release-attachment job is intentionally skipped for
 manual runs; unsigned CI macOS artifacts are not official release installers.
 
 Signed/notarized installation on the owner's Mac remains blocked by its locked login keychain;
 `notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
 replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
-acceptance needs an Accessibility-authorized execution context. The [release procedure](releasing.md) requires the company identity, Apple notarization,
+acceptance needs an Accessibility-authorized execution context. A later remote-access preflight was
+also refused by the local signing agent; deployment needs that access restored. The [release procedure](releasing.md) requires the company identity, Apple notarization,
 and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
 mail round trips remain separate gates. These results do not yet establish a complete replacement for
 the owner's existing mail client.

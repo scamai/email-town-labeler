@@ -41,9 +41,11 @@ The user requested implementation through a usable local app, not a sequence of 
 - [ ] Public distribution: OAuth verification/public client strategy, Windows code signing (macOS releases are
   signed and notarized: docs/releasing.md), update/rollback/uninstall.
   Neither the local launcher nor the app is a complete replacement for an email client yet.
-- [ ] Desktop app: run the `Desktop app` workflow once and fix what the Windows and Linux builds report; only the
-  macOS build has been run (locally). Intel Mac build; GUI checks of attachment save, file picker and
-  external links in the native window.
+- [x] Desktop app: macOS, Windows and Linux package builds plus window/TLS/start/quit smokes passed in
+  [Desktop app run 43182995849](https://github.com/scamai/email-town-labeler/actions/runs/43182995849).
+- [ ] Intel Mac build; GUI checks of attachment save, file picker and external links in the native window.
+  The owner's updated signed installation still needs unlocked signing credentials and native acceptance;
+  see [the daily-mail review](docs/daily-mail-review.md).
 
 Usage: [本机工作台](docs/desktop-workbench.md) · [English guide](docs/desktop-workbench.en.md).
 Existing-client acceptance protocol: [client workflow](docs/client-workflow.md).
