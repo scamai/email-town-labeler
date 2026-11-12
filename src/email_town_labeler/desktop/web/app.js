@@ -34,6 +34,9 @@
     clearFilters: $("clearFiltersButton"),
     listTitle: $("listTitle"),
     listStatus: $("listStatus"),
+    listError: $("listError"),
+    listErrorText: $("listErrorText"),
+    retryMail: $("retryMailButton"),
     demoBanner: $("demoBanner"),
     jobStatus: $("jobStatus"),
     loadMoreBar: $("loadMoreBar"),
@@ -60,6 +63,9 @@
     previewByline: $("previewByline"),
     previewDate: $("previewDate"),
     previewBody: $("previewBody"),
+    previewError: $("previewError"),
+    previewErrorText: $("previewErrorText"),
+    retryPreview: $("retryPreviewButton"),
     categoryDialog: $("categoryDialog"),
     categoryForm: $("categoryForm"),
     categorySelect: $("categorySelect"),
@@ -77,6 +83,13 @@
     outbox: [],
     refreshing: false,
     stale: false,
+    listError: "",
+    listRetryFocus: false,
+    previewError: "",
+    previewErrorId: null,
+    previewRequest: 0,
+    previewLoading: false,
+    previewRetryFocus: false,
     modelError: "",
     modelStatus: null,
     lastRefresh: null,
@@ -213,6 +226,48 @@
     els.syncIndicator.classList.toggle("is-loading", kind === "loading");
     els.syncText.textContent = label;
   }
+  function renderSyncStatus() {
+    const accountError = state.accounts.some((account) => account.status === "error");
+    setSync(
+      accountError ? "error" : "ok",
+      accountError ? "Some accounts have errors" : state.refreshing ? "Syncing" : "Synced",
+    );
+  }
+  function renderListError() {
+    els.listError.hidden = !state.listError || state.authLost;
+    els.listErrorText.textContent = state.listError;
+    els.retryMail.disabled = state.syncing;
+  }
+  function clearListError() {
+    if (!state.listError && !state.listRetryFocus) return;
+    const retryFocused = document.activeElement === els.retryMail;
+    const restoreFocus =
+      (state.listRetryFocus || retryFocused) && (!usableFocus() || retryFocused);
+    state.listError = "";
+    state.listRetryFocus = false;
+    renderListError();
+    if (restoreFocus) els.messageList.focus({ preventScroll: true });
+  }
+  function renderPreviewError() {
+    const visible = Boolean(
+      state.previewError && state.previewErrorId === state.activeId && !state.authLost,
+    );
+    els.previewError.hidden = !visible;
+    els.previewErrorText.textContent = visible ? state.previewError : "";
+    els.retryPreview.disabled = state.previewLoading;
+  }
+  function clearPreviewError(request) {
+    if (request !== state.previewRequest) return;
+    const retryFocused = document.activeElement === els.retryPreview;
+    const restoreFocus = state.previewRetryFocus || retryFocused;
+    state.previewError = "";
+    state.previewErrorId = null;
+    state.previewLoading = false;
+    state.previewRetryFocus = false;
+    renderPreviewError();
+    if (restoreFocus && (!usableFocus() || retryFocused))
+      els.previewBody.focus({ preventScroll: true });
+  }
   function showToast(message) {
     els.toast.textContent = message;
     els.toast.hidden = false;
@@ -287,11 +342,20 @@
       "Session expired. Reopen Email Town from the launcher.";
     els.restart.hidden = false;
     state.refreshing = false;
+    state.listError = "";
+    state.listRetryFocus = false;
+    state.previewError = "";
+    state.previewErrorId = null;
+    state.previewRequest += 1;
+    state.previewLoading = false;
+    state.previewRetryFocus = false;
     state.activeId = null;
     els.previewPane.classList.remove("is-open");
     els.previewContent.hidden = true;
     els.previewEmpty.hidden = false;
     renderList();
+    renderListError();
+    renderPreviewError();
   }
 
   function filteredMessages(omit = "") {
@@ -692,6 +756,18 @@
       restoreFocus(focus);
       return;
     }
+    if (state.listError && !state.initialized) {
+      const error = document.createElement("div");
+      error.className = "error-state";
+      const h = document.createElement("h3");
+      h.textContent = "Mail could not be loaded";
+      const p = document.createElement("p");
+      p.textContent = "Retry mail load to use the current session without restarting.";
+      error.append(h, p);
+      els.messageList.replaceChildren(error);
+      restoreFocus(focus);
+      return;
+    }
     if (!messages.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
@@ -831,7 +907,7 @@
       }
     }, 150);
   }
-  function openMessage(id) {
+  function openMessage(id, { retry = false } = {}) {
     state.activeId = id;
     renderList();
     els.messageList.querySelector(
@@ -840,7 +916,7 @@
     els.previewPane.classList.add("is-open");
     els.previewEmpty.hidden = true;
     els.previewContent.hidden = false;
-    loadPreview(id);
+    loadPreview(id, retry);
     if (window.innerWidth < 1200) els.previewClose.focus();
   }
   function safeOriginalUrl(value) {
@@ -865,9 +941,17 @@
       return "";
     }
   }
-  async function loadPreview(id) {
+  async function loadPreview(id, retry = false) {
     const message = state.messages.find((item) => item.id === id);
     if (!message) return;
+    const request = ++state.previewRequest;
+    state.previewLoading = true;
+    if (!retry) {
+      state.previewError = "";
+      state.previewErrorId = null;
+      state.previewRetryFocus = false;
+    }
+    renderPreviewError();
     els.previewSource.textContent = text(
       accountById(message.account_id)?.name || "Unknown account",
     );
@@ -901,7 +985,11 @@
     // Only say "Reading message…" when it really is a wait: a cached or prefetched body is drawn first.
     els.previewBody.textContent = "";
     const readingNote = setTimeout(() => {
-      if (state.activeId === id && !els.previewBody.textContent)
+      if (
+        state.activeId === id &&
+        state.previewRequest === request &&
+        !els.previewBody.textContent
+      )
         els.previewBody.textContent = "Reading message…";
     }, 300);
     updatePreviewPosition();
@@ -915,17 +1003,29 @@
     try {
       const data = await messageDetail(id);
       clearTimeout(readingNote);
-      prefetchAround(id);
-      if (state.activeId === id) {
+      if (state.activeId === id && state.previewRequest === request) {
         const body = text(data.body || "(No plain-text body)");
         if (window.EmailTownReader) window.EmailTownReader.renderBody(els.previewBody, body);
         else els.previewBody.textContent = body;
         setOriginalLink(data.url || message.url);
+        clearPreviewError(request);
+        prefetchAround(id);
       }
     } catch (error) {
       clearTimeout(readingNote);
-      if (state.activeId === id)
-        els.previewBody.textContent = `Unable to read message: ${text(error.message)}`;
+      if (state.activeId !== id || state.previewRequest !== request) return;
+      if (els.previewBody.textContent === "Reading message…")
+        els.previewBody.textContent = "";
+      state.previewLoading = false;
+      state.previewError = `Unable to read message: ${text(error.message)}`;
+      state.previewErrorId = id;
+      renderPreviewError();
+      if (state.previewRetryFocus) {
+        const retryFocused = document.activeElement === els.retryPreview;
+        state.previewRetryFocus = false;
+        if (!usableFocus() || retryFocused)
+          els.retryPreview.focus({ preventScroll: true });
+      }
     }
   }
   // "2 of 37" and the newer/older arrows in the reading pane's toolbar, over the list as shown.
@@ -1097,15 +1197,22 @@
     });
     if (state.activeId && !ids.has(state.activeId)) {
       state.activeId = null;
+      state.previewRequest += 1;
+      state.previewLoading = false;
+      state.previewError = "";
+      state.previewErrorId = null;
+      state.previewRetryFocus = false;
       els.previewPane.classList.remove("is-open");
       els.previewEmpty.hidden = false;
       els.previewContent.hidden = true;
+      renderPreviewError();
     }
   }
 
   async function loadState() {
     if (state.syncing || state.authLost || !state.sessionToken) return;
     state.syncing = true;
+    renderListError();
     if (!state.initialized) {
       state.refreshing = true;
       setSync("loading", "Reading");
@@ -1116,13 +1223,22 @@
     } catch (error) {
       if (error.message !== "unauthorized") {
         state.stale = state.initialized;
+        if (!state.initialized) state.refreshing = false;
+        state.listError = error.message;
         setSync("error", "Read failed");
-        els.listStatus.textContent = error.message;
         els.restart.hidden = false;
+        renderListError();
         renderList();
       }
     } finally {
       state.syncing = false;
+      renderListError();
+      if (state.listError && state.listRetryFocus) {
+        const retryFocused = document.activeElement === els.retryMail;
+        state.listRetryFocus = false;
+        if (!usableFocus() || retryFocused)
+          els.retryMail.focus({ preventScroll: true });
+      }
     }
     watchState();
   }
@@ -1152,7 +1268,17 @@
   }
   function applyState(data) {
     // Immediate reads and the long-poll overlap; never let an older answer win.
-    if (!data || Number(data.seq) <= state.seq) return false;
+    if (state.authLost || !state.sessionToken || !data || Number(data.seq) < state.seq)
+      return false;
+    if (state.initialized && Number(data.seq) === state.seq) {
+      const recovering = state.stale || Boolean(state.listError);
+      state.stale = false;
+      renderSyncStatus();
+      if (recovering) renderList();
+      clearListError();
+      els.restart.hidden = true;
+      return false;
+    }
     state.seq = Number(data.seq);
     state.etag = text(data.etag);
     const next = {
@@ -1171,6 +1297,7 @@
     };
     const snapshot = JSON.stringify(next);
     const changed = snapshot !== state.snapshot;
+    const recovering = state.stale || Boolean(state.listError);
     Object.assign(state, next, { initialized: true, stale: false, snapshot });
     reconcileMessageState();
     renderOutbox();
@@ -1184,20 +1311,15 @@
         "Unclassified";
       els.previewCategory.dataset.category = active.category || "unknown";
     }
-    setSync(
-      state.accounts.some((account) => account.status === "error")
-        ? "error"
-        : "ok",
-      state.accounts.some((account) => account.status === "error")
-        ? "Some accounts have errors"
-        : state.refreshing
-          ? "Syncing"
-          : "Synced",
-    );
+    renderSyncStatus();
     if (changed) {
       renderScope();
       renderJobs();
+    } else if (recovering) {
+      renderList();
     }
+    clearListError();
+    els.restart.hidden = true;
     return true;
   }
   async function refresh() {
@@ -1529,6 +1651,17 @@
     closeSidebar();
   });
   els.refresh.addEventListener("click", refresh);
+  els.retryMail.addEventListener("click", () => {
+    if (state.syncing || state.authLost) return;
+    state.listRetryFocus = true;
+    loadState();
+  });
+  els.retryPreview.addEventListener("click", () => {
+    const id = state.activeId;
+    if (!id || state.previewLoading || state.authLost) return;
+    state.previewRetryFocus = true;
+    openMessage(id, { retry: true });
+  });
   els.restart.addEventListener("click", () => window.location.reload());
   async function openAccountForm(account = null) {
     await loadSetup();

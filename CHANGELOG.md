@@ -9,6 +9,11 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- Transient mail-list and message-preview failures offer explicit retry controls without restarting or
+  replacing the session. Recovery keeps filters, selected rows, scroll and drafts; late preview results
+  cannot overwrite another message, and retries do not steal focus after the user starts typing elsewhere.
+  Slow failed previews clear their loading note, while expired sessions retain the launcher recovery path.
+
 - Opening mail and explicitly marking it read or unread now share one ordered background queue, so an
   earlier automatic read cannot overwrite a later unread action. Pending flags remain temporary overlays;
   failed writes restore the confirmed state even if a background refresh ran while the write was pending.
