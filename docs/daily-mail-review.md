@@ -25,6 +25,8 @@ real mail as part of this review.
   provider adapters, workflow state, cache, images, send receipts and mail-operation failures.
 - 61 classification/policy/learning checks passed. These test implementation contracts and
   synthetic learning behavior, not the accuracy of a deployed model on a user's mailbox.
+- 206 model package/worker, service and update checks passed. Nine optional model-runtime
+  checks skipped because sentence-transformers, torch, transformers or onnxruntime are absent.
 - `check_mail_ui.py` passed composition, saved drafts, attachments, reply-all/forward setup,
   uncertain-send recovery and Trash/Restore against synthetic mail.
 - `check_desktop_ui.py` passed eight viewport/theme combinations, HTTP actions, undo, local
@@ -63,6 +65,9 @@ Existing controls were traced and exercised:
 - Tracked credential-filename and matching history inspection found no committed token/client
   credential JSON, `.env` or SQLite paths. This is a bounded inspection, not proof no secret
   ever appeared under another name. A dedicated secrets scanner was not installed.
+- Privacy documentation had stale preview-cache limits. It now matches the code: 300 server
+  previews, 150 details per open page, 30 Gmail/10 Microsoft or IMAP bodies read ahead per
+  account, and a server body-text limit of 262,144 characters (not bytes).
 
 No exploitable security vulnerability is confirmed by these checks. This is not a penetration
 test or a guarantee of absence; browser rendering and native OS integration have distinct

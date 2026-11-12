@@ -245,8 +245,10 @@ the app. The same `app-icon.icns` is the [desktop app](#download-the-app)'s icon
 ## Privacy
 
 The UI explicitly extends the old CLI's IDs/counts-only output rule: subjects, senders and bodies appear in
-the **local browser's memory**. The process retains at most 128 previews (including the newest 10 per Microsoft/IMAP account read ahead), each with at most 256 KiB of body
-text plus up to 50 image references. Image blobs are released when switching messages or losing the session.
+the **local browser's memory**. The process retains at most 300 previews (including the newest 30 Gmail or
+10 Microsoft/IMAP bodies per account read ahead); each open page caches at most 150 opened or prefetched
+message details. Each server preview has at most 262,144 body-text characters
+plus up to 50 image references. Image blobs are released when switching messages or losing the session.
 External images load directly in the browser without a referrer or the workbench bearer token; the remote
 host sees the browser's IP and image URL, and its own cookie/cache policies apply. Bodies are never
 written to disk. The list is: `cache.sqlite` keeps subject, sender, date, read/star state, category and IDs of
