@@ -112,7 +112,7 @@ class Workbench:
         self.outbox, self.outbox_worker = deque(), None
         self.outbox_jobs: dict[str, dict] = {}
         self.pending_leave: dict[str, str] = {}  # message key -> job id
-        self.pending_flags: dict[str, tuple[str, bool]] = {}  # message key -> (field, value)
+        self.pending_flags: dict[str, dict[str, tuple[str, bool]]] = {}
         self.limit, self.refreshing, self.last_refresh = 100, False, None
         self.stop = threading.Event()
         self.model_error = None
@@ -183,8 +183,7 @@ class Workbench:
         with self.lock:
             rows = [dict(m) for k, m in self.messages.items() if k not in self.pending_leave]
             for row in rows:
-                if row["id"] in self.pending_flags:
-                    field, value = self.pending_flags[row["id"]]
+                for field, (_request_id, value) in self.pending_flags.get(row["id"], {}).items():
                     row[field] = value
             states = self.state.read([m["id"] for m in rows])
             for row in rows:
@@ -800,10 +799,9 @@ class Workbench:
                 if action in LEAVES_FOLDER:
                     self.pending_leave[key] = request_id
                 else:
-                    self.pending_flags[key] = (
-                        "unread" if action in ("read", "unread") else "starred",
-                        action in ("unread", "star"),
-                    )
+                    field = "unread" if action in ("read", "unread") else "starred"
+                    value = action in ("unread", "star")
+                    self.pending_flags.setdefault(key, {})[field] = (request_id, value)
             self.outbox_jobs[request_id] = {
                 "id": request_id,
                 "action": action,
@@ -840,7 +838,12 @@ class Workbench:
                     for item in selected:
                         if self.pending_leave.get(item["id"]) == request_id:
                             del self.pending_leave[item["id"]]
-                        self.pending_flags.pop(item["id"], None)
+                        overlays = self.pending_flags.get(item["id"], {})
+                        for field, (pending_id, _value) in list(overlays.items()):
+                            if pending_id == request_id:
+                                del overlays[field]
+                        if not overlays:
+                            self.pending_flags.pop(item["id"], None)
                     self.outbox_jobs.pop(request_id, None)
                     self._touch()
             self.mail_store.finish(request_id, result)
