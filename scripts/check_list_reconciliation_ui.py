@@ -70,7 +70,10 @@ def main() -> int:
                 page = browser.new_page(viewport={"width": 1440, "height": 900})
                 until.page = page
                 errors = []
-                page.on("pageerror", lambda error, errors=errors: errors.append(str(error)))
+                page.on(
+                    "pageerror",
+                    lambda error, errors=errors: errors.append(getattr(error, "stack", str(error))),
+                )
                 if os.environ.get("EMAIL_TOWN_UI_BASELINE_ASSETS") == "1":
 
                     def baseline_asset(body):

@@ -420,8 +420,31 @@ h1 {
   width: 32px;
   min-height: 40px;
 }
+.account-filter {
+  align-items: flex-start;
+}
 .account-filter span:first-child {
   overflow-wrap: anywhere;
+}
+.account-label {
+  display: grid;
+  min-width: 0;
+}
+.account-status {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.nav-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nav-metrics .unread-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
 }
 .local-note {
   margin: 24px 12px 0;
@@ -587,6 +610,9 @@ kbd {
 .list-heading > span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+#listTitle {
+  flex-shrink: 0;
 }
 .list-context {
   min-width: 0;
@@ -1490,7 +1516,7 @@ dialog::backdrop {
   content: "✓";
   font-weight: 700;
 }
-/* Name over "8 done · 1 wrong", the loaded count on the right; the dot and ✓ sit on the name's line. */
+/* Name over scoped unread/classification facts, with the loaded count on the right. */
 .category-filter {
   align-items: flex-start;
 }
@@ -1505,13 +1531,14 @@ dialog::backdrop {
   color: var(--muted);
   font-size: 12px;
   font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.category-stats > span + span::before {
+  content: " · ";
 }
 .category-filter .count {
   margin-left: auto;
   line-height: 20px;
-}
-.category-wrong {
-  color: var(--danger);
 }
 .unread-badge {
   color: var(--muted);

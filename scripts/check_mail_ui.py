@@ -1,12 +1,14 @@
 """Real local-server mail workbench fixture checks (synthetic provider only).
 
 Run: uv run --with playwright python scripts/check_mail_ui.py
+WebKit: EMAIL_TOWN_UI_ENGINE=webkit uv run --with playwright python scripts/check_mail_ui.py
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import tempfile
 import threading
@@ -144,7 +146,8 @@ def main():
     thread.start()
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            engine = os.environ.get("EMAIL_TOWN_UI_ENGINE", "chromium")
+            browser = getattr(playwright, engine).launch()
             for theme, width in (("light", 390), ("dark", 390), ("light", 1440), ("dark", 1440)):
                 if readers:
                     for record in readers[-1].records:
@@ -281,7 +284,7 @@ def main():
         server.shutdown()
         server.server_close()
         manager.close()
-    print(f"mail UI fixture passed; captures in {out}")
+    print(f"mail UI fixture passed ({engine}); captures in {out}")
 
 
 if __name__ == "__main__":

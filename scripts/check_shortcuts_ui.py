@@ -250,6 +250,13 @@ def main() -> int:
                         lambda before=before: manager.snapshot()["messages"][1]["done"] is not before,
                         "d marks the open message done or reopens it",
                     )
+                    expect(page.locator("#previewDoneButton")).to_have_text("Reopen")
+                    page.keyboard.press("d")
+                    until(
+                        lambda before=before: manager.snapshot()["messages"][1]["done"] is before,
+                        "a second d restores the pending message",
+                    )
+                    expect(page.locator("#previewDoneButton")).to_have_text("Mark done")
                     # A key queued behind a running action keeps the target it was pressed on:
                     # s starts a write, e (queued) is pressed on m2, j opens m3 before e runs.
                     page.keyboard.press("s")

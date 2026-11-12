@@ -19,6 +19,13 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- Inbox now opens on Pending mail. Done removes a message from that view and places it in the clearly named
+  Completed view; Reopen restores it without archiving, deleting, or removing category tags. Date, account,
+  category, completion, and search filters compose, while titles state the resulting scope. Loaded unread
+  counts now follow that scope for date sections, accounts, categories, and the active folder. Category
+  statistics distinguish automatic classifications, user corrections, and awaiting classification instead
+  of presenting "0 wrong" as evidence of accuracy. An all-done Pending view offers a View completed action,
+  and configured empty folders no longer suggest adding an account.
 - Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
   Gmail bodies after a list loads, and, whenever you open a message, the three below it and the one above in
   one batched request. Opened and prefetched bodies are kept (300 on the server, 150 in the page), the

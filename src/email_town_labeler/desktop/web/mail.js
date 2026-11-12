@@ -565,13 +565,18 @@
     // As in Gmail, the selection outlives actions that leave messages in place (read, unread, star);
     // messages that leave the folder drop out of it, and out of the list, before the server answers.
     const leaving = LEAVES_FOLDER.includes(action) ? new Set(chosen) : null;
+    const focusIndex = Math.max(
+      0,
+      (host.filteredMessages?.() || host.state.messages).findIndex((message) => leaving?.has(message.id)),
+    );
     if (leaving) {
       chosen.forEach((id) => host.state.selected.delete(id));
       host.state.messages = host.state.messages.filter((m) => !leaving.has(m.id));
       host.reconcileMessageState(); // closes the reading pane if its message left
-      host.renderList();
+      host.renderScope();
     }
     if (advance) host.openMessage(advance);
+    if (leaving) host.ensureListFocus(focusIndex);
     let job;
     local.posting = true; // keyboard actions wait for this, so the server receives them in key order
     try {
@@ -659,7 +664,7 @@
     const show = (unread) => {
       message.unread = unread;
       if (host.state.activeId === id) $("previewUnread").hidden = !unread;
-      host.renderList?.();
+      host.renderScope();
       render();
     };
     show(false);
@@ -929,31 +934,34 @@
       local.detailId = null;
       clearDetail();
     }
-    // Unread count on the open folder and in the title, as Gmail shows "Inbox (3)". Loaded mail only.
-    const unread = host.state.messages.filter((m) => m.unread).length;
+    // Only the active folder has a loaded snapshot; its unread count follows every other active filter.
+    const unread = (host.filteredMessages?.() || host.state.messages).filter((m) => m.unread).length;
+    const folder =
+      { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
+        host.state.folder
+      ] || "Mail";
     document.querySelectorAll("[data-mail-folder]").forEach((button) => {
       const active = button.dataset.mailFolder === host.state.folder;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
+      if (active)
+        button.setAttribute("aria-label", `${folder}, ${unread} unread loaded in current filters`);
+      else button.removeAttribute("aria-label");
       let badge = button.querySelector(".folder-count");
       if (active && unread && !badge) {
         badge = document.createElement("span");
         badge.className = "folder-count";
+        badge.setAttribute("aria-hidden", "true");
         button.append(badge);
       }
       if (badge) {
         badge.hidden = !(active && unread);
         badge.textContent = active && unread ? String(unread) : "";
-        badge.title = active && unread ? `${unread} unread loaded` : "";
+        badge.title = active && unread ? `${unread} unread loaded in current filters` : "";
       }
     });
-    const folder =
-      { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
-        host.state.folder
-      ] || "Mail";
-    document.title = unread
-      ? `${folder} (${unread}) · Email Town`
-      : `${folder} · Email Town`;
+    const view = host.state.filters.done === "done" ? "Completed" : folder;
+    document.title = unread ? `${view} (${unread}) · Email Town` : `${view} · Email Town`;
   }
   host.render = render;
   // A send, or a bulk action still being handed to the outbox (a few ms): the next key action waits.
