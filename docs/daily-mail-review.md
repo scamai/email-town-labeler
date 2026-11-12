@@ -174,7 +174,7 @@ Signed/notarized installation on the owner's Mac remains blocked by its locked l
 `notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
 replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
 acceptance needs an Accessibility-authorized execution context. A later remote-access preflight was
-also refused by the local signing agent; deployment needs that access restored. The [release procedure](releasing.md) requires the company identity, Apple notarization,
+also refused by the SSH key agent; deployment needs that access restored. The [release procedure](releasing.md) requires the company identity, Apple notarization,
 and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
 mail round trips remain separate gates. These results do not yet establish a complete replacement for
 the owner's existing mail client.
@@ -199,11 +199,16 @@ lower priority than the reproduced workflow/state defects:
 Static scanning cannot establish alignment, text contrast, focus order or complete recovery
 flows. Those require the rendered and interaction checks in the acceptance matrix.
 
-## Recovery follow-ups
+## Recovery acceptance
 
-Read-only tracing identified two P2 recovery improvements to validate separately from list
-stability: the initial state-fetch error offers a full page restart rather than an in-place
-retry, and a preview that times out during cached-account startup has no explicit retry button.
-After initialization, state polling retries after three seconds and retains prior mail; a
-browser regression should assert that the stale indicator clears after service recovery.
-Per-account errors are isolated and sanitized, but reconnect needs real-provider acceptance.
+[PR #57](https://github.com/scamai/email-town-labeler/pull/57) adds explicit list and preview retries
+without restarting or replacing the current session. Eight synthetic scenarios pass in each of
+Chromium and WebKit: initial/background HTTP503 recovery, preserved filters/selection/scroll/drafts,
+preview retry, old failure/success responses, and state/preview HTTP401. Independent lead probes caught
+a loading note left behind after a slow failure and focus stolen from search when a retry completed;
+both were fixed, with held success/failure cases checking continued search and compose editing.
+
+The tests observe real LocalServer responses and browser DOM/state, including consumed held requests.
+They do not simulate an actual DNS/TLS outage, provider credential expiry, OS process restart or a
+real second-Gmail grant. Expired local sessions still require the launcher, and mailbox grant renewal
+still requires provider authorization. This feature adds no automatic send or mailbox-mutation retry.

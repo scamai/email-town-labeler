@@ -275,7 +275,11 @@ are not used to classify another account.
 
 ## Recovery and verification
 
-Expired authorization: **⋯ → Reauthorize this mailbox**. Network failure: restore connectivity and refresh/wait.
+Expired mailbox authorization: **⋯ → Reauthorize this mailbox**. If the local app session expires, reopen
+Email Town from its launcher. For transient list failures, **Retry mail load** keeps the current session,
+filters, selection and drafts; a failed preview offers **Retry message**. These controls retry reads,
+not uncertain sends. Recovery clears the stale notice without taking focus from an editor you moved to.
+Restore connectivity before retrying, or let the background sync recover.
 Unavailable OS vault: IMAP enrollment stops without plaintext fallback. Model failure: preview and manual
 classification remain available.
 
@@ -285,6 +289,7 @@ uv run --extra dev --with playwright playwright install chromium webkit
 uv run --extra dev --with playwright python scripts/check_desktop_ui.py
 uv run --extra dev --with playwright python scripts/check_mail_ui.py
 uv run --extra dev --with playwright python scripts/check_layout_ui.py
+uv run --extra dev --with playwright python scripts/check_recovery_ui.py
 uv run --extra dev --with playwright python scripts/check_completion_ui.py
 uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
 # Also run WebKit; this does not replace native macOS acceptance:
