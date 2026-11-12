@@ -230,6 +230,7 @@ def main() -> int:
                 expect(page.get_by_role("button", name="View completed", exact=True)).to_be_visible()
                 page.screenshot(path=str(out / f"{engine}-empty-pending.png"))
                 page.get_by_role("button", name="View completed", exact=True).click()
+                expect(page.locator("#messageList")).to_be_focused()
                 expect(rows).to_have_count(6)
                 expect(page.locator('[data-done-filter="done"]')).to_have_attribute("aria-pressed", "true")
                 expect(rows.first.locator(".category-badge")).to_have_text("Updates")
@@ -247,6 +248,36 @@ def main() -> int:
                 assert "Add an account" not in page.locator(".empty-state").inner_text()
                 page.locator('[data-mail-folder="inbox"]').click()
                 expect(rows.filter(has_text="Today updates")).to_have_count(1)
+
+                # Exercise failure/paused UI through the real state endpoint; provider failure
+                # isolation itself is covered by the manager tests. Healthy-account mail remains.
+                original_snapshot = manager.snapshot
+                unavailable = {"paused": False}
+                beta_id = account_ids["Beta fixture"]
+
+                def unavailable_snapshot(original=original_snapshot, mode=unavailable, account_id=beta_id):
+                    data = original()
+                    data["messages"] = [m for m in data["messages"] if m["account_id"] != account_id]
+                    for account in data["accounts"]:
+                        if account["id"] == account_id:
+                            account["enabled"] = not mode["paused"]
+                            account["status"] = "error"  # A paused account may retain its last error.
+                    data["etag"] += ":fixture-paused" if mode["paused"] else ":fixture-error"
+                    return data
+
+                manager.snapshot = unavailable_snapshot
+                try:
+                    page.locator(f'[data-account-filter="{beta_id}"]').click()
+                    manager._touch()
+                    expect(page.locator(".empty-state h3")).to_have_text("Mail could not be loaded")
+                    page.locator('[data-account-filter="all"]').click()
+                    expect(rows.filter(has_text="Today updates")).to_have_count(1)
+                    page.locator(f'[data-account-filter="{beta_id}"]').click()
+                    unavailable["paused"] = True
+                    manager._touch()
+                    expect(page.locator(".empty-state h3")).to_have_text("Accounts in this view are paused")
+                finally:
+                    manager.snapshot = original_snapshot
                 assert not errors, errors
                 print(f"{engine}: pending, Completed, composed scopes, unread and classification counts pass")
             finally:

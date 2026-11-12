@@ -698,9 +698,23 @@
       const h = document.createElement("h3");
       const p = document.createElement("p");
       const hasCompleted = filteredMessages("done").some((message) => message.done);
+      const scopedAccounts = state.accounts.filter(
+        (account) => state.filters.account === "all" || account.id === state.filters.account,
+      );
+      const hasAccountMail = state.messages.some(
+        (message) => state.filters.account === "all" || message.account_id === state.filters.account,
+      );
       if (!state.accounts.length) {
         h.textContent = "No accounts connected";
         p.textContent = "Add an account to load mail into this workbench.";
+      } else if (!hasAccountMail && scopedAccounts.some(
+        (account) => account.enabled !== false && account.status === "error",
+      )) {
+        h.textContent = "Mail could not be loaded";
+        p.textContent = "Check accounts marked Error, then refresh. This does not mean the folder is empty.";
+      } else if (!hasAccountMail && scopedAccounts.length && scopedAccounts.every((account) => account.enabled === false)) {
+        h.textContent = "Accounts in this view are paused";
+        p.textContent = "Resume an account from its menu to load mail.";
       } else if (!state.messages.length) {
         h.textContent = `No mail in ${folderName}`;
         p.textContent = "This folder is empty for the connected accounts.";
@@ -720,6 +734,7 @@
         completed.addEventListener("click", () => {
           state.filters.done = "done";
           renderScope();
+          els.messageList.focus({ preventScroll: true });
         });
         empty.append(completed);
       }
