@@ -20,6 +20,7 @@
 
   function render(detail) {
     clear();
+    if (window.EmailTownHtmlView?.formatted(detail)) return; // shown inline in the formatted view
     const images = Array.isArray(detail.images) ? detail.images.slice(0, 50) : [];
     if (!images.length) return;
     const version = generation;

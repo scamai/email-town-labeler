@@ -203,6 +203,28 @@
   white-space: pre-wrap; /* "Reading message…" and errors arrive as plain text */
   overflow-wrap: anywhere;
 }
+/* Formatted view: the sender's layout in a sandboxed frame, on white as the sender designed it. */
+.email-body.is-formatted {
+  max-width: none;
+  white-space: normal;
+}
+.format-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.email-frame {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
 .email-text,
 .email-signature {
   white-space: pre-wrap;

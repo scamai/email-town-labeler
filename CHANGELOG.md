@@ -7,7 +7,18 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Added
+
+- Messages with an HTML version open formatted, as in Gmail: the sender's layout, buttons and inline
+  images instead of a text version full of "Image" placeholders. The HTML is sanitized to an allowlist and
+  shown in a sandboxed frame that cannot run scripts, submit forms or connect anywhere except to load
+  images. External images stay hidden until **Show images**; links open in the system browser; **Plain
+  text** switches back. Keyboard shortcuts keep working after clicking into a message.
+
 ### Fixed
+
+- Opening a message no longer fails when its automatic mark-read lands while the body is being read:
+  the preview uses the body it just loaded instead of looking the cache up a second time.
 
 - Transient mail-list and message-preview failures offer explicit retry controls without restarting or
   replacing the session. Recovery keeps filters, selected rows, scroll and drafts; late preview results

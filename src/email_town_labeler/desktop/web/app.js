@@ -334,6 +334,7 @@
   }
   function handleUnauthorized() {
     window.EmailTownImages?.clear();
+    window.EmailTownHtmlView?.clear();
     state.authLost = true;
     state.sessionToken = "";
     sessionStorage.removeItem("email-town-session");
@@ -981,6 +982,8 @@
     }
     els.previewDate.title = formatDate(message.date);
     // Only say "Reading message…" when it really is a wait: a cached or prefetched body is drawn first.
+    window.EmailTownHtmlView?.clear();
+    els.previewBody.classList.remove("is-formatted");
     els.previewBody.textContent = "";
     const readingNote = setTimeout(() => {
       if (
@@ -1003,8 +1006,12 @@
       clearTimeout(readingNote);
       if (state.activeId === id && state.previewRequest === request) {
         const body = text(data.body || "(No plain-text body)");
-        if (window.EmailTownReader) window.EmailTownReader.renderBody(els.previewBody, body);
-        else els.previewBody.textContent = body;
+        const renderPlain = (target) => {
+          if (window.EmailTownReader) window.EmailTownReader.renderBody(target, body);
+          else target.textContent = body;
+        };
+        if (window.EmailTownHtmlView) window.EmailTownHtmlView.render(els.previewBody, data, renderPlain);
+        else renderPlain(els.previewBody);
         setOriginalLink(data.url || message.url);
         clearPreviewError(request);
         prefetchAround(id);

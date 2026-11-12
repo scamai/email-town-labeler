@@ -1,6 +1,7 @@
 // The reading pane, laid out as in Gmail: a plain-text body with clickable links, the quoted
 // history at the end folded behind "•••", a dimmed signature; sender name/address, avatar, dates and
-// sizes for the header and attachment cards. Mail text only ever reaches the page as textContent.
+// sizes for the header and attachment cards. Mail text only ever reaches the page as textContent; the
+// formatted HTML view is a separate sandboxed document (htmlview.js).
 (() => {
   "use strict";
 

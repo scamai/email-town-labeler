@@ -1,4 +1,4 @@
-"""Bounded image references for the plaintext reader; never render sender HTML."""
+"""Bounded image references for the plain-text reader (the formatted view is htmlview.py)."""
 
 from html.parser import HTMLParser
 from ipaddress import ip_address
