@@ -7,6 +7,11 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Fixed
+
+- Repeated Up/Down or j/k navigation keeps the opened message visible in the list and focuses its
+  replacement row after a redraw, instead of leaving scrolling and focus on detached elements.
+
 ### Changed
 
 - Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
