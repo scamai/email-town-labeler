@@ -14,6 +14,10 @@ contain breaking changes; they are called out.
   cannot overwrite another message, and retries do not steal focus after the user starts typing elsewhere.
   Slow failed previews clear their loading note, while expired sessions retain the launcher recovery path.
 
+- Background syncing and queued mail actions keep the list in place: routine sync no longer inserts
+  a notice above the list, and long progress text no longer expands the footer or hides shortcuts.
+  Full progress text remains available on hover, with a visible syncing status in narrow windows.
+
 - Opening mail and explicitly marking it read or unread now share one ordered background queue, so an
   earlier automatic read cannot overwrite a later unread action. Pending flags remain temporary overlays;
   failed writes restore the confirmed state even if a background refresh ran while the write was pending.
