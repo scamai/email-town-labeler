@@ -229,7 +229,10 @@ python3 scripts/install_macos_workbench.py
 
 ## 恢复与验证
 
-登录过期：账户旁“⋯”→“Reauthorize this mailbox”（重新授权）。网络故障：恢复网络后刷新，或等待下一轮同步。
+邮箱授权过期：账户旁“⋯”→“Reauthorize this mailbox”（重新授权）。本地应用会话过期时，从启动器重新打开 Email Town。
+暂时加载失败可点 **Retry mail load**，保留当前会话、筛选、选择和草稿；预览失败可点 **Retry message**。
+这些按钮只重试读取，不重试结果不确定的发送。恢复时会清除过期提示，也不会抢走你已移到输入框的焦点。
+网络故障需先恢复连接，再重试或等待后台同步。
 系统钥匙串不可用时 IMAP 连接会停止，不降级为明文密码文件。模型失败时仍可查看邮件并手动分类。
 
 本机测试命令：
@@ -240,6 +243,8 @@ uv run --extra dev --with playwright playwright install chromium webkit
 uv run --extra dev --with playwright python scripts/check_desktop_ui.py
 uv run --extra dev --with playwright python scripts/check_mail_ui.py
 uv run --extra dev --with playwright python scripts/check_layout_ui.py
+uv run --extra dev --with playwright python scripts/check_recovery_ui.py
+uv run --extra dev --with playwright python scripts/check_outbox_layout_ui.py
 uv run --extra dev --with playwright python scripts/check_completion_ui.py
 uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
 # Also run WebKit; this does not replace native macOS acceptance:

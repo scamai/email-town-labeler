@@ -13,6 +13,7 @@ mail as fixtures or transmit real mail to coding agents.
 | P1 | Routine navigation recreates every list row | In a 40-message fixture, 20 Down presses remove 800 row nodes | Unchanged rows retain identity, focus, geometry and scroll; changed rows update without whole-list teardown |
 | P1 | Queued flags overwrite each other | On an unread message, queue read then star while provider writes are blocked: snapshot becomes unread=true/starred=true | Independent fields retain their queued state; older requests cannot remove newer overlays |
 | P1 | Automatic read overtakes later explicit unread | Separate queues can write unread then stale read, leaving provider and UI read | PR #55 shares one ordered outbox; final intent and immediate failure rollback verified |
+| P1 | Routine progress moves the mail list | Twenty queued reads grow the narrow footer by 149 px; inline syncing adds another 34 px above the list | Single-line footer preserves full status, visible narrow syncing and shortcut controls; routine sync no longer inserts a list row |
 | P1 | Unread work is unclear in sidebar sections | Category stats show total/done/“wrong”, not unread | Explicit unread counts with documented account/folder/filter scope |
 | P1 | “0 wrong” suggests unsupported accuracy | Counter only observes manual category changes; there is no reviewed denominator | Say corrected/manual/automatic/pending as appropriate; do not imply unreviewed predictions are correct |
 
@@ -96,12 +97,17 @@ Existing controls were traced and exercised:
   when an earlier version finishes sending.
 - IMAP uses TLS and UID-scoped mutations; the app does not broadly expunge a mailbox. Microsoft
   API requests use immutable IDs on reads and writes, avoiding the ordinary move-ID change.
-- Installed dependency audit reported no known vulnerabilities in 36 audited dependencies.
-  The local development package is not published on PyPI and was excluded by the scanner;
-  optional runtime/build extras absent from this environment are not covered by this result.
-- Tracked credential-filename and matching history inspection found no committed token/client
-  credential JSON, `.env` or SQLite paths. This is a bounded inspection, not proof no secret
-  ever appeared under another name. A dedicated secrets scanner was not installed.
+- The Linux baseline dependency audit reported no known vulnerabilities in 36 audited dependencies.
+  A second audit covered all 63 third-party packages in the actual macOS build environment, including
+  its app/model/build dependencies: no known vulnerabilities and no skipped packages. These exact
+  installed versions were exported as pinned requirements and checked with `pip-audit --no-deps
+  --disable-pip --strict`; the local project package was excluded. This does not audit native system
+  libraries or optional runtimes outside those environments.
+- Tracked credential-filename/history inspection found no committed token/client credential JSON,
+  `.env` or SQLite paths. Gitleaks 8.30.1 additionally scanned all 76 reachable commits (2.10 MB) in
+  the non-shallow repository with default rules, an empty ignore file, allow-comments disabled and
+  redacted output: no leaks found. The tool's release checksum was verified. This is a bounded scanner
+  result, not proof that no secret exists under an unrecognized format.
 - Privacy documentation had stale preview-cache limits. It now matches the code: 300 server
   previews, 150 details per open page, 30 Gmail/10 Microsoft or IMAP bodies read ahead per
   account, and a server body-text limit of 262,144 characters (not bytes).
@@ -155,17 +161,22 @@ while keeping mailbox folders, account identity and category tags visible. Filte
 compose and report their scope. High-frequency operations should update state without
 animation or list teardown; all essential controls must work with keyboard and narrow layouts.
 
-The browser content is exercised in WebKit and Chromium on Linux. The [three-platform desktop run](https://github.com/scamai/email-town-labeler/actions/runs/43182995849)
+The browser content is exercised in WebKit and Chromium on Linux. The [three-platform desktop run](https://github.com/scamai/email-town-labeler/actions/runs/43191205293)
 passed native package builds and window/TLS smokes on macOS, Windows and Linux at source
-`426f6d7`. A separate arm64 build on an accessible Mac passed the bundled self-check (9/9), model
+`96c7fe6` (PR #58, including recovery and stable progress). A separate earlier arm64 build at
+`426f6d7` on an accessible Mac passed the bundled self-check (9/9), model
 worker, HTTPS, real Cocoa window, single-instance reuse, authenticated shutdown and child-process cleanup
-with an isolated temporary home. The workflow's release-attachment job is intentionally skipped for
+with an isolated temporary home. Three tiny ONNX inference tests that lacked runtimes on Linux also
+passed on the Mac (two classifier pooling cases and one sequence graph); they exercise implementation,
+not real-mail classification accuracy. Test-only dependencies were added after the app binary was built.
+The workflow's release-attachment job is intentionally skipped for
 manual runs; unsigned CI macOS artifacts are not official release installers.
 
 Signed/notarized installation on the owner's Mac remains blocked by its locked login keychain;
-`notarytool` returned `keychainLocked`. The new build is prepared, but the installed app has not been
-replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
-acceptance needs an Accessibility-authorized execution context. The [release procedure](releasing.md) requires the company identity, Apple notarization,
+`notarytool` returned `keychainLocked`. The latest unsigned CI build is available, but a final signed release is not prepared and the
+installed app has not been replaced. The remote test process also reports `AXIsProcessTrusted() == false`, so native keyboard
+acceptance needs an Accessibility-authorized execution context. A later remote-access preflight was
+also refused by the SSH key agent; deployment needs that access restored. The [release procedure](releasing.md) requires the company identity, Apple notarization,
 and installed-app Accessibility verification. File pickers, real OAuth return paths and second-account
 mail round trips remain separate gates. These results do not yet establish a complete replacement for
 the owner's existing mail client.
@@ -190,11 +201,37 @@ lower priority than the reproduced workflow/state defects:
 Static scanning cannot establish alignment, text contrast, focus order or complete recovery
 flows. Those require the rendered and interaction checks in the acceptance matrix.
 
-## Recovery follow-ups
+## Recovery acceptance
 
-Read-only tracing identified two P2 recovery improvements to validate separately from list
-stability: the initial state-fetch error offers a full page restart rather than an in-place
-retry, and a preview that times out during cached-account startup has no explicit retry button.
-After initialization, state polling retries after three seconds and retains prior mail; a
-browser regression should assert that the stale indicator clears after service recovery.
-Per-account errors are isolated and sanitized, but reconnect needs real-provider acceptance.
+[PR #57](https://github.com/scamai/email-town-labeler/pull/57) adds explicit list and preview retries
+without restarting or replacing the current session. Eight synthetic scenarios pass in each of
+Chromium and WebKit: initial/background HTTP503 recovery, preserved filters/selection/scroll/drafts,
+preview retry, old failure/success responses, and state/preview HTTP401. Independent lead probes caught
+a loading note left behind after a slow failure and focus stolen from search when a retry completed;
+both were fixed, with held success/failure cases checking continued search and compose editing.
+
+The tests observe real LocalServer responses and browser DOM/state, including consumed held requests.
+They do not simulate an actual DNS/TLS outage, provider credential expiry, OS process restart or a
+real second-Gmail grant. Expired local sessions still require the launcher, and mailbox grant renewal
+still requires provider authorization. This feature adds no automatic send or mailbox-mutation retry.
+
+## Progress-layout acceptance
+
+[PR #58](https://github.com/scamai/email-town-labeler/pull/58) fixes two additional causes of list movement after row reconciliation:
+at 390 px, 20 queued read operations expanded the footer from 40 to 189 px, shrinking the list by
+149 px; routine inline syncing inserted a 34 px notice above the list. The footer now keeps long
+status text on one line with ellipsis and retains the full text in its hover title. Its container
+can shrink without widening the app, and shortcut controls remain visible. Routine syncing uses
+the existing header and a footer fallback, so narrow layouts still show progress when the header
+indicator is hidden. Classifier download, error and stale-data notices remain available.
+
+`check_outbox_layout_ui.py` exercises 54 synthetic state/viewport/engine combinations: 0, 1 and
+20 pending jobs, refreshing on/off and returning to idle, at 1440, 1000 and 390 px in WebKit and
+Chromium. It checks real DOM geometry, focus, scroll, overflow, status text and shortcut interaction,
+and captures 12 rendered states. Old assets reproduce the geometry failures; an independent
+390 px probe caught and verified the visible-sync fallback. These fixtures drive LocalServer
+snapshots; they do not measure real provider latency or an actual blocked provider queue.
+
+The final progress candidate `908a50c` passed 797 tests with nine absent optional-runtime skips,
+Ruff, distributions, fresh installed-wheel CLI and non-root Docker checks. Progress, recovery,
+reconciliation and navigation passed in both browser engines after integrating the recovery changes.
