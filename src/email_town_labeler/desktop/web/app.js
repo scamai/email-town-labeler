@@ -332,6 +332,27 @@
       throw new Error(data.error || `Request failed (${response.status})`);
     return data;
   }
+  // What the user did, for desktop.log: event names, 8-character message-key prefixes, counts and
+  // command words only (the server drops anything else). Sent in batches; never subjects or addresses.
+  const uiQueue = [];
+  let uiTimer = null;
+  const k8 = (id) => String(id || "").slice(0, 8) || "-";
+  function uiLog(type, data = {}) {
+    uiQueue.push({ type, ms: Math.round(performance.now()), ...data });
+    if (uiQueue.length > 200) uiQueue.splice(0, uiQueue.length - 200);
+    if (!uiTimer) uiTimer = setTimeout(flushUiLog, 1000);
+  }
+  function flushUiLog() {
+    clearTimeout(uiTimer);
+    uiTimer = null;
+    if (!uiQueue.length || !state.sessionToken) return;
+    const events = uiQueue.splice(0, 50);
+    api("/api/ui-log", { method: "POST", body: JSON.stringify({ events }), keepalive: true }).catch(
+      () => {},
+    );
+    if (uiQueue.length) uiTimer = setTimeout(flushUiLog, 200);
+  }
+  window.addEventListener("pagehide", flushUiLog);
   function handleUnauthorized() {
     window.EmailTownImages?.clear();
     window.EmailTownHtmlView?.clear();
@@ -862,7 +883,10 @@
       toggleSelected(row.dataset.messageId, event.target.checked);
       return;
     }
-    openMessage(row.dataset.messageId);
+    // A shortcut (j/k) opens by clicking the row's button from script; a person's click is trusted.
+    openMessage(row.dataset.messageId, {
+      via: event.isTrusted ? `click:${event.target.closest("[class]")?.classList[0] || "row"}` : "key",
+    });
   });
 
   // One body request per message, shared by the reading pane and the reply/attachment code, kept for
@@ -906,7 +930,16 @@
       }
     }, 150);
   }
-  function openMessage(id, { retry = false } = {}) {
+  function openMessage(id, { retry = false, via = "code" } = {}) {
+    const message = state.messages.find((m) => m.id === id);
+    uiLog("open", {
+      id: k8(id),
+      via: retry ? "retry" : via,
+      was: state.activeId === id ? "same" : k8(state.activeId),
+      unread: Boolean(message?.unread),
+      selected: state.selected.size,
+      in_selection: state.selected.has(id),
+    });
     state.activeId = id;
     renderList();
     els.messageList.querySelector(
@@ -1045,9 +1078,14 @@
   function stepPreview(step) {
     const ids = filteredMessages().map((m) => m.id);
     const next = ids[ids.indexOf(state.activeId) + step];
-    if (next) openMessage(next);
+    if (next) openMessage(next, { via: step < 0 ? "newer-arrow" : "older-arrow" });
   }
   function toggleSelected(id, checked) {
+    uiLog(checked ? "select" : "deselect", {
+      id: k8(id),
+      active: state.activeId === id,
+      selected_after: state.selected.size + (checked && !state.selected.has(id) ? 1 : 0) - (!checked && state.selected.has(id) ? 1 : 0),
+    });
     if (checked) state.selected.add(id);
     else state.selected.delete(id);
     renderList();
@@ -1304,6 +1342,17 @@
       modelError: data.model_error || "",
       modelStatus: data.model_status || null,
     };
+    // The server's answer changing a flag the page already showed: what a list refresh or queued write did.
+    if (state.initialized) {
+      const before = new Map(state.messages.map((m) => [m.id, m]));
+      const flips = [];
+      next.messages.forEach((m) => {
+        const old = before.get(m.id);
+        if (old && old.unread !== m.unread)
+          flips.push(`${k8(m.id)}:${m.unread ? "unread" : "read"}${m.id === state.activeId ? ":open" : ""}`);
+      });
+      if (flips.length) uiLog("state-flags", { seq: Number(data.seq), changes: flips.slice(0, 20) });
+    }
     const snapshot = JSON.stringify(next);
     const changed = snapshot !== state.snapshot;
     const recovering = state.stale || Boolean(state.listError);
@@ -1817,6 +1866,8 @@
   // exposing the session token or other credentials globally.
   window.EmailTownMailHost = {
     api,
+    uiLog,
+    k8,
     fetchBinary: async (path, { signal } = {}) => {
       const headers = { "X-Email-Town": "local" };
       if (state.sessionToken)

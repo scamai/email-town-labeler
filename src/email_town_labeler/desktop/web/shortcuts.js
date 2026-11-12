@@ -279,7 +279,14 @@
     else if (lower === "r" && !event.shiftKey) handled = compose("reply");
     else if (lower === "a" && !event.shiftKey) handled = compose("reply-all");
     else if (lower === "f" && !event.shiftKey) handled = compose("forward");
-    if (handled) event.preventDefault();
+    if (handled) {
+      event.preventDefault();
+      host()?.uiLog?.("key", {
+        key: (event.shiftKey && key.length === 1 ? "shift+" : "") + key,
+        active: host().k8(host().state.activeId),
+        selected: host().state.selected?.size || 0,
+      });
+    }
   }
 
   document.addEventListener("keydown", onKey);

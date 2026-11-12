@@ -449,13 +449,15 @@ def test_bulk_action_logs_where_its_time_went(tmp_path, caplog):
             w, w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})["job_id"]
         )
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("mail action")]
-    assert len(lines) == 1, lines
+    assert len(lines) == 2, lines  # queued, then finished
+    shorts = ",".join(i[:8] for i in ids)
+    assert lines[0] == f"mail action archive queued: 2 message(s) {shorts}"
     assert re.fullmatch(
-        r"mail action archive: 2 messages, 2 ok, 0 failed in \d+ ms \(waiting for the account \d+ ms, "
-        r"provider calls \d+ ms, slowest call \d+ ms\)",
-        lines[0],
+        rf"mail action archive: 2 messages, 2 ok \[{shorts}\], 0 failed \[\] in \d+ ms \(waiting for the "
+        r"account \d+ ms, provider calls \d+ ms, slowest call \d+ ms\)",
+        lines[1],
     ), lines
-    assert not any(i in lines[0] for i in ids)
+    assert not any(i in line for i in ids for line in lines)  # key prefixes only, never whole keys
     w.close()
 
 

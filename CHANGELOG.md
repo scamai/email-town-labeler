@@ -15,6 +15,11 @@ contain breaking changes; they are called out.
   images. External images stay hidden until **Show images**; links open in the system browser; **Plain
   text** switches back. Keyboard shortcuts keep working after clicking into a message.
 
+- `desktop.log` records what happened to each message, by an 8-character key prefix: opens and how
+  (click, keys, Shift+J, auto-advance), selection, shortcut keys, mailbox actions with per-message results,
+  each open-to-read decision, and read/star changes reported by the mailbox on sync. Page events are
+  filtered to short tokens, so no subject, address or text can reach the log.
+
 ### Fixed
 
 - Opening a message no longer fails when its automatic mark-read lands while the body is being read:

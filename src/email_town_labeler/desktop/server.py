@@ -34,6 +34,28 @@ APP_CSP = (
 )
 SLOW_GET_MS = 500  # GETs are logged only when slower than this; /api/state is a long poll and never logged
 log = logging.getLogger("email_town_labeler.desktop.http")
+ui_log = logging.getLogger("email_town_labeler.desktop.ui")
+# What the page may write into desktop.log: event names, message-key prefixes, counts and command words.
+UI_TOKEN = re.compile(r"[A-Za-z0-9_.:+/#*?=-]{1,40}")
+UI_FIELDS = 12
+
+
+def ui_line(event) -> str:
+    """One page event as a log line, or "" when it carries anything but short tokens (never mail text)."""
+    if not isinstance(event, dict) or not UI_TOKEN.fullmatch(str(event.get("type", ""))):
+        return ""
+    parts = [str(event["type"])]
+    for name, value in list(event.items())[:UI_FIELDS]:
+        if name == "type" or not UI_TOKEN.fullmatch(str(name)):
+            continue
+        values = value if isinstance(value, list) else [value]
+        values = [v for v in values[:20] if isinstance(v, (str, int, float, bool)) or v is None]
+        cleaned = [str(v) for v in values if UI_TOKEN.fullmatch(str(v))]
+        if cleaned and len(cleaned) == len(values):
+            parts.append(f"{name}={','.join(cleaned)}")
+        else:
+            parts.append(f"{name}=?")
+    return " ".join(parts)
 
 
 class LocalServer(ThreadingHTTPServer):
@@ -100,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
         super().handle_one_request()
         command, raw = getattr(self, "command", None), getattr(self, "path", "") or ""
         path = urlsplit(raw).path
-        if not command or not path.startswith("/api/") or path == "/api/state":
+        if not command or not path.startswith("/api/") or path in ("/api/state", "/api/ui-log"):
             return
         ms = (time.perf_counter() - started) * 1000
         if command == "POST" or ms >= SLOW_GET_MS:
@@ -324,6 +346,13 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.mail_store.delete_draft(data.get("id", ""))
             elif path == "/api/prefetch":
                 result = manager.prefetch(data.get("ids"))
+            elif path == "/api/ui-log":
+                events = data.get("events")
+                for event in events[:50] if isinstance(events, list) else []:
+                    line = ui_line(event)
+                    if line:
+                        ui_log.info("%s", line)
+                result = {"ok": True}
             elif path == "/api/mark-read":
                 result = manager.mark_read(data.get("id", ""), data.get("read", True))
             elif path == "/api/action":
