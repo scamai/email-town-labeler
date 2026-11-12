@@ -9,6 +9,9 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- Queued read/unread and star actions on the same message keep their latest state while earlier
+  actions finish, including failures and background refreshes, instead of flashing back to old flags.
+
 - Repeated Up/Down or j/k navigation keeps the opened message visible in the list and focuses its
   replacement row after a redraw, instead of leaving scrolling and focus on detached elements.
 

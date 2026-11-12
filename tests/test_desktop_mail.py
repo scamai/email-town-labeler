@@ -462,23 +462,168 @@ def test_bulk_action_logs_where_its_time_went(tmp_path, caplog):
 class GatedReader(MailReader):
     """Holds every provider write until the test opens the gate: an outbox still working."""
 
-    def __init__(self, records, **kw):
+    def __init__(self, records, *, fail_actions=(), **kw):
         super().__init__(records, **kw)
         self.gate = threading.Event()
+        self.fail_actions = set(fail_actions)
+        self.started, self.release = {}, {}
+
+    def sequence(self, *actions):
+        self.started = {action: threading.Event() for action in actions}
+        self.release = {action: threading.Event() for action in actions}
 
     def mutate(self, mid, action):
-        assert self.gate.wait(3), "gate never opened"
+        if action in self.release:
+            self.started[action].set()
+            assert self.release[action].wait(3), f"{action} gate never opened"
+        else:
+            assert self.gate.wait(3), "gate never opened"
+        if action in self.fail_actions:
+            self.writes.append((mid, action))
+            raise providers.ProviderError("Fixture failure")
         super().mutate(mid, action)
 
 
-def setup_outbox(tmp_path, *, fail_write=False):
+def setup_outbox(tmp_path, *, fail_write=False, fail_actions=()):
     w, readers, first, second = _workbench(tmp_path)
-    readers[first] = GatedReader([_record("a"), _record("b")], fail_write=fail_write)
+    records = [{**_record("a"), "label_ids": ["UNREAD"]}, _record("b")]
+    readers[first] = GatedReader(records, fail_write=fail_write, fail_actions=fail_actions)
     readers[second] = MailReader([])
     w._refresh()
     w.refresh = lambda **kwargs: None
     ids = [m["id"] for m in w.snapshot()["messages"]]
     return w, readers[first], ids
+
+
+def flag_request(w, key, action):
+    return w.mail_action({"request_id": uuid.uuid4().hex, "ids": [key], "action": action})["job_id"]
+
+
+def flag_state(w, key):
+    row = next(m for m in w.snapshot()["messages"] if m["id"] == key)
+    return row["unread"], row["starred"]
+
+
+def release_writes(reader):
+    reader.gate.set()
+    for gate in reader.release.values():
+        gate.set()
+
+
+def test_outbox_keeps_different_field_overlays_across_a_stale_refresh(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    key = ids[0]
+    aid = w.messages[key]["account_id"]
+    listed, release_list, published = threading.Event(), threading.Event(), threading.Event()
+
+    def stale_list(limit):
+        rows = [dict(r, label_ids=list(r["label_ids"])) for r in reader.records]
+        listed.set()
+        assert release_list.wait(3), "stale list gate never opened"
+        return rows[:limit], len(rows) > limit
+
+    touch = w._touch
+
+    def touch_after_publish():
+        touch()
+        if listed.is_set() and w.account_status.get(aid, {}).get("status") == "classifying":
+            published.set()
+
+    reader.list = stale_list
+    reader.sequence("read", "star")
+    w._touch = touch_after_publish
+    syncing = threading.Thread(target=w._refresh)
+    try:
+        syncing.start()
+        assert listed.wait(3)
+        first = flag_request(w, key, "read")
+        second = flag_request(w, key, "star")
+        assert flag_state(w, key) == (False, True)
+        release_list.set()
+        assert reader.started["read"].wait(3)
+        assert published.wait(3)
+        assert flag_state(w, key) == (False, True)
+
+        reader.release["read"].set()
+        assert reader.started["star"].wait(3)
+        assert finished(w, first)["status"] == "complete"
+        assert flag_state(w, key) == (False, True)
+        assert [action for _mid, action in reader.writes] == ["read"]
+
+        reader.release["star"].set()
+        assert finished(w, second)["status"] == "complete"
+        syncing.join(3)
+        assert not syncing.is_alive()
+        assert flag_state(w, key) == (False, True)
+        assert [action for _mid, action in reader.writes] == ["read", "star"]
+        assert w.pending_flags == {} and w.snapshot()["outbox"] == []
+    finally:
+        release_list.set()
+        release_writes(reader)
+        syncing.join(3)
+        w.close()
+
+
+@pytest.mark.parametrize("second_fails", [False, True])
+@pytest.mark.parametrize(
+    "first_action,second_action,field,first_value,second_value",
+    [
+        ("read", "unread", "unread", False, True),
+        ("star", "unstar", "starred", True, False),
+    ],
+)
+def test_outbox_same_field_keeps_latest_intent_until_it_finishes(
+    tmp_path, first_action, second_action, field, first_value, second_value, second_fails
+):
+    w, reader, ids = setup_outbox(tmp_path, fail_actions={second_action} if second_fails else set())
+    key = ids[0]
+    reader.sequence(first_action, second_action)
+    expected = {"unread": True, "starred": False, field: second_value}
+    try:
+        first = flag_request(w, key, first_action)
+        assert reader.started[first_action].wait(3)
+        second = flag_request(w, key, second_action)
+        assert flag_state(w, key) == (expected["unread"], expected["starred"])
+
+        reader.release[first_action].set()
+        assert reader.started[second_action].wait(3)
+        assert finished(w, first)["status"] == "complete"
+        assert flag_state(w, key) == (expected["unread"], expected["starred"])
+
+        reader.release[second_action].set()
+        assert finished(w, second)["status"] == ("failed" if second_fails else "complete")
+        expected[field] = first_value if second_fails else second_value
+        assert flag_state(w, key) == (expected["unread"], expected["starred"])
+        assert [action for _mid, action in reader.writes] == [first_action, second_action]
+        assert w.pending_flags == {} and w.snapshot()["outbox"] == []
+    finally:
+        release_writes(reader)
+        w.close()
+
+
+@pytest.mark.parametrize("second_fails", [False, True])
+def test_outbox_earlier_failure_preserves_later_overlay_and_final_truth(tmp_path, second_fails):
+    failures = {"read"} | ({"star"} if second_fails else set())
+    w, reader, ids = setup_outbox(tmp_path, fail_actions=failures)
+    key = ids[0]
+    reader.sequence("read", "star")
+    try:
+        first = flag_request(w, key, "read")
+        assert reader.started["read"].wait(3)
+        second = flag_request(w, key, "star")
+        reader.release["read"].set()
+        assert reader.started["star"].wait(3)
+        assert finished(w, first)["status"] == "failed"
+        assert flag_state(w, key) == (True, True)
+
+        reader.release["star"].set()
+        assert finished(w, second)["status"] == ("failed" if second_fails else "complete")
+        assert flag_state(w, key) == (True, not second_fails)
+        assert [action for _mid, action in reader.writes] == ["read", "star"]
+        assert w.pending_flags == {} and w.snapshot()["outbox"] == []
+    finally:
+        release_writes(reader)
+        w.close()
 
 
 def test_bulk_action_hides_messages_at_once_and_reports_progress(tmp_path):
