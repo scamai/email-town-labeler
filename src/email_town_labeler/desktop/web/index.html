@@ -84,37 +84,34 @@
             </button>
           </div>
           <nav class="filter-nav" aria-label="Date range">
-            <button
-              class="nav-item is-active"
-              data-type-filter="all"
-              type="button"
-            >
-              <span>All dates</span><span class="count" id="countAll">—</span>
+            <button class="nav-item is-active" data-type-filter="all" type="button">
+              <span>All dates</span>
+              <span class="nav-metrics">
+                <span class="unread-count" id="unreadAll">—</span>
+                <span class="count" id="countAll">—</span>
+              </span>
             </button>
             <button class="nav-item" data-type-filter="today" type="button">
-              <span>Today</span><span class="count" id="countToday">—</span>
+              <span>Today</span>
+              <span class="nav-metrics">
+                <span class="unread-count" id="unreadToday">—</span>
+                <span class="count" id="countToday">—</span>
+              </span>
             </button>
             <button class="nav-item" data-type-filter="backlog" type="button">
-              <span>Earlier · unfinished</span
-              ><span class="count" id="countBacklog">—</span>
+              <span>Earlier</span>
+              <span class="nav-metrics">
+                <span class="unread-count" id="unreadBacklog">—</span>
+                <span class="count" id="countBacklog">—</span>
+              </span>
             </button>
           </nav>
           <div class="sidebar-section">
             <div class="section-label"><span>Completion</span></div>
             <div class="segmented-control" role="group" aria-label="Completion">
-              <button
-                class="segment is-active"
-                data-done-filter="all"
-                type="button"
-              >
-                All
-              </button>
-              <button class="segment" data-done-filter="pending" type="button">
-                Open
-              </button>
-              <button class="segment" data-done-filter="done" type="button">
-                Done
-              </button>
+              <button class="segment" data-done-filter="all" type="button">All</button>
+              <button class="segment is-active" data-done-filter="pending" type="button">Pending</button>
+              <button class="segment" data-done-filter="done" type="button">Completed</button>
             </div>
           </div>
           <div class="sidebar-section">
@@ -162,20 +159,20 @@
                 data-mail-folder="inbox"
                 type="button"
               >
-                Inbox
+                <span class="folder-label">Inbox</span>
               </button>
               <button class="folder-tab" data-mail-folder="sent" type="button">
-                Sent
+                <span class="folder-label">Sent</span>
               </button>
               <button
                 class="folder-tab"
                 data-mail-folder="archive"
                 type="button"
               >
-                Archive
+                <span class="folder-label">Archive</span>
               </button>
               <button class="folder-tab" data-mail-folder="trash" type="button">
-                Trash
+                <span class="folder-label">Trash</span>
               </button>
             </div>
           </section>

@@ -83,7 +83,7 @@
     demo: false,
     filters: {
       type: "all",
-      done: "all",
+      done: "pending",
       account: "all",
       category: "all",
       search: "",
@@ -294,33 +294,42 @@
     renderList();
   }
 
-  function filteredMessages() {
+  function filteredMessages(omit = "") {
     const query = state.filters.search.trim().toLowerCase();
     const today = localMidnight();
     const tomorrow = localMidnight(1);
     return state.messages.filter((message) => {
       const date = Number(message.date) || 0;
       const typeOk =
+        omit === "type" ||
         state.filters.type === "all" ||
         (state.filters.type === "today"
           ? date >= today && date < tomorrow
-          : date < today && !message.done);
+          : date < today);
       const doneOk =
+        omit === "done" ||
         state.filters.done === "all" ||
         (state.filters.done === "done" ? message.done : !message.done);
       const accountOk =
+        omit === "account" ||
         state.filters.account === "all" ||
         message.account_id === state.filters.account;
       const categoryOk =
+        omit === "category" ||
         state.filters.category === "all" ||
         message.category === state.filters.category;
       const queryOk =
         !query ||
-        `${message.subject || ""} ${message.sender || ""}`
-          .toLowerCase()
-          .includes(query);
+        `${message.subject || ""} ${message.sender || ""}`.toLowerCase().includes(query);
       return typeOk && doneOk && accountOk && categoryOk && queryOk;
     });
+  }
+  function scopeStats(messages) {
+    return {
+      total: messages.length,
+      unread: messages.filter((message) => message.unread).length,
+      done: messages.filter((message) => message.done).length,
+    };
   }
   function syncFilterButtons() {
     document.querySelectorAll("[data-type-filter]").forEach((button) => {
@@ -338,129 +347,168 @@
   function renderFilters() {
     const focus = saveFocus();
     els.accountFilters.replaceChildren();
-    [{ id: "all", name: "All accounts" }, ...state.accounts].forEach(
-      (account) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `account-filter${state.filters.account === account.id ? " is-active" : ""}`;
-        button.dataset.accountFilter = account.id;
-        button.setAttribute(
-          "aria-pressed",
-          String(state.filters.account === account.id),
-        );
-        const name = document.createElement("span");
-        name.textContent = text(account.name);
-        button.append(name);
-        if (account.id !== "all") {
-          const status = document.createElement("span");
-          status.className = "count";
-          status.textContent =
-            account.enabled === false
-              ? "Paused"
-              : account.status === "error"
-                ? "Error"
-                : "";
-          button.append(status);
+    const accountScope = filteredMessages("account");
+    [{ id: "all", name: "All accounts" }, ...state.accounts].forEach((account) => {
+      const messages =
+        account.id === "all"
+          ? accountScope
+          : accountScope.filter((message) => message.account_id === account.id);
+      const { total, unread, done } = scopeStats(messages);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `account-filter${state.filters.account === account.id ? " is-active" : ""}`;
+      button.dataset.accountFilter = account.id;
+      button.setAttribute("aria-pressed", String(state.filters.account === account.id));
+      const label = document.createElement("span");
+      label.className = "account-label";
+      const name = document.createElement("span");
+      name.textContent = text(account.name);
+      const line = document.createElement("span");
+      line.className = "category-stats unread-count";
+      line.textContent = `${unread} unread`;
+      label.append(name, line);
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = String(total);
+      button.append(label, count);
+      let status = "";
+      if (account.id !== "all") {
+        status = account.enabled === false ? "Paused" : account.status === "error" ? "Error" : "";
+        if (status) {
+          const badge = document.createElement("span");
+          badge.className = "account-status";
+          badge.textContent = status;
+          label.append(badge);
         }
-        if (account.id === "all") els.accountFilters.append(button);
-        else {
-          const entry = document.createElement("div");
-          entry.className = "account-entry";
-          const manage = document.createElement("button");
-          manage.type = "button";
-          manage.className = "icon-button";
-          manage.textContent = "⋯";
-          manage.dataset.focusKey = `manage-${account.id}`;
-          manage.setAttribute("aria-label", `Manage ${account.name}`);
-          manage.addEventListener("click", () =>
-            showAccountManagement(account.id),
-          );
-          entry.append(button, manage);
-          els.accountFilters.append(entry);
-        }
-      },
-    );
-    $("accountCount").textContent = state.accounts.length
-      ? String(state.accounts.length)
-      : "—";
+      }
+      const summary = `${text(account.name)}: ${total} loaded in current scope, ${unread} unread, ${done} completed${status ? `, ${status}` : ""}`;
+      button.setAttribute("aria-label", summary);
+      button.title = summary;
+      if (account.id === "all") els.accountFilters.append(button);
+      else {
+        const entry = document.createElement("div");
+        entry.className = "account-entry";
+        const manage = document.createElement("button");
+        manage.type = "button";
+        manage.className = "icon-button";
+        manage.textContent = "⋯";
+        manage.dataset.focusKey = `manage-${account.id}`;
+        manage.setAttribute("aria-label", `Manage ${account.name}`);
+        manage.addEventListener("click", () => showAccountManagement(account.id));
+        entry.append(button, manage);
+        els.accountFilters.append(entry);
+      }
+    });
+    $("accountCount").textContent = state.accounts.length ? String(state.accounts.length) : "—";
+
     els.categoryFilters.replaceChildren();
     const stats = categoryStats();
-    [{ id: "all", name: "All categories" }, ...state.categories].forEach(
-      (category) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = `category-filter${state.filters.category === category.id ? " is-active" : ""}`;
-        button.dataset.categoryFilter = category.id;
-        button.setAttribute(
-          "aria-pressed",
-          String(state.filters.category === category.id),
-        );
-        // Per category, over the loaded messages: how many, how many done, how many the classifier
-        // put here that you moved elsewhere ("wrong"; mail you have not checked is not counted).
-        const { total, done, wrong } = stats.get(category.id) || { total: 0, done: 0, wrong: 0 };
-        const label = document.createElement("span");
-        label.className = "category-label";
-        const name = document.createElement("span");
-        name.textContent = text(category.name);
-        label.append(name);
-        if (total || wrong) {
-          const line = document.createElement("span");
-          line.className = "category-stats";
-          line.textContent = `${done} done`;
-          if (wrong || category.id === "all") {
-            const bad = document.createElement("span");
-            bad.className = wrong ? "category-wrong" : "";
-            bad.textContent = ` · ${wrong} wrong`;
-            line.append(bad);
-          }
-          label.append(line);
-        }
-        const count = document.createElement("span");
-        count.className = "count";
-        count.textContent = String(total);
-        button.append(label, count);
-        const summary = `${text(category.name)}: ${total} loaded, ${done} done, ${wrong} wrong`;
-        button.setAttribute("aria-label", summary);
-        button.title = `${summary}. Wrong: classified here, then moved by you to another category.`;
-        els.categoryFilters.append(button);
-      },
-    );
-    $("categoryCount").textContent = state.categories.length
-      ? String(state.categories.length)
-      : "—";
+    const appendStat = (line, className, value) => {
+      const part = document.createElement("span");
+      part.className = className;
+      part.textContent = value;
+      line.append(part);
+    };
+    [{ id: "all", name: "All categories" }, ...state.categories].forEach((category) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `category-filter${state.filters.category === category.id ? " is-active" : ""}`;
+      button.dataset.categoryFilter = category.id;
+      button.setAttribute("aria-pressed", String(state.filters.category === category.id));
+      const entry = stats.get(category.id) || {};
+      const total = entry.total || 0;
+      const unread = entry.unread || 0;
+      const done = entry.done || 0;
+      const automatic = entry.automatic || 0;
+      const corrected = (entry.corrected || 0) + (entry.correctedAway || 0);
+      const awaiting = entry.awaiting || 0;
+      const label = document.createElement("span");
+      label.className = "category-label";
+      const name = document.createElement("span");
+      name.textContent = text(category.name);
+      label.append(name);
+      if (total || corrected) {
+        const line = document.createElement("span");
+        line.className = "category-stats";
+        if (total) appendStat(line, "unread-count", `${unread} unread`);
+        if (automatic) appendStat(line, "automatic-count", `${automatic} automatic`);
+        if (corrected) appendStat(line, "correction-count", `${corrected} corrected`);
+        if (awaiting) appendStat(line, "awaiting-count", `${awaiting} awaiting classification`);
+        label.append(line);
+      }
+      const count = document.createElement("span");
+      count.className = "count";
+      count.textContent = String(total);
+      button.append(label, count);
+      const summary = `${text(category.name)}: ${total} loaded in current scope, ${unread} unread, ${done} completed; ${automatic} automatic classifications not corrected; ${corrected} user corrections; ${awaiting} awaiting classification`;
+      button.setAttribute("aria-label", summary);
+      button.title = summary;
+      els.categoryFilters.append(button);
+    });
+    $("categoryCount").textContent = state.categories.length ? String(state.categories.length) : "—";
     syncFilterButtons();
     restoreFocus(focus);
     if (window.EmailTownMailHost?.render) window.EmailTownMailHost.render();
   }
-  // {category id → {total, done, wrong}} over the loaded messages, plus "all" for the totals.
   function categoryStats() {
     const stats = new Map();
     const bump = (id, key) => {
-      const entry = stats.get(id) || { total: 0, done: 0, wrong: 0 };
+      const entry = stats.get(id) || {
+        total: 0,
+        unread: 0,
+        done: 0,
+        automatic: 0,
+        corrected: 0,
+        correctedAway: 0,
+        awaiting: 0,
+      };
       entry[key] += 1;
       stats.set(id, entry);
     };
-    for (const message of state.messages) {
-      for (const id of [message.category || "unknown", "all"]) {
+    for (const message of filteredMessages("category")) {
+      const current = message.category || "unknown";
+      for (const id of [current, "all"]) {
         bump(id, "total");
+        if (message.unread) bump(id, "unread");
         if (message.done) bump(id, "done");
+        if (["model", "mailbox"].includes(message.source)) bump(id, "automatic");
+        if (message.source === "pending") bump(id, "awaiting");
       }
-      if (message.auto_category && message.auto_category !== message.category)
-        for (const id of [message.auto_category, "all"]) bump(id, "wrong");
+      if (message.auto_category && message.auto_category !== current) {
+        bump(current, "corrected");
+        bump(message.auto_category, "correctedAway");
+        bump("all", "corrected");
+      }
     }
     return stats;
   }
   function renderCounts() {
     const today = localMidnight();
     const tomorrow = localMidnight(1);
-    $("countAll").textContent = state.messages.length || "0";
-    $("countToday").textContent = state.messages.filter(
-      (message) =>
-        Number(message.date) >= today && Number(message.date) < tomorrow,
-    ).length;
-    $("countBacklog").textContent = state.messages.filter(
-      (message) => Number(message.date) < today && !message.done,
-    ).length;
+    const scoped = filteredMessages("type");
+    const views = {
+      all: { label: "All dates", test: () => true },
+      today: {
+        label: "Today",
+        test: (message) => Number(message.date) >= today && Number(message.date) < tomorrow,
+      },
+      backlog: { label: "Earlier", test: (message) => Number(message.date) < today },
+    };
+    for (const [type, view] of Object.entries(views)) {
+      const { total, unread, done } = scopeStats(scoped.filter(view.test));
+      const suffix = type[0].toUpperCase() + type.slice(1);
+      $(`count${suffix}`).textContent = String(total);
+      $(`unread${suffix}`).textContent = `${unread} unread`;
+      const summary = `${view.label}: ${total} loaded in current scope, ${unread} unread, ${done} completed`;
+      const button = document.querySelector(`[data-type-filter="${type}"]`);
+      button.setAttribute("aria-label", summary);
+      button.title = summary;
+    }
+  }
+  function renderScope() {
+    renderCounts();
+    renderFilters();
+    renderList();
   }
   function renderMailboxNotice() {
     const truncated = state.accounts.filter((account) => account.truncated);
@@ -580,34 +628,36 @@
     const focus = saveFocus();
     const messages = filteredMessages();
     const hasLoading = state.refreshing && !state.messages.length;
-    els.listTitle.textContent =
-      state.filters.type === "today"
-        ? "Today"
-        : state.filters.type === "backlog"
-          ? "Earlier"
-          : {
-              inbox: "Inbox",
-              sent: "Sent",
-              archive: "Archive",
-              trash: "Trash",
-            }[state.folder] || "Inbox";
     const folderName =
       { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
         state.folder
       ] || "Inbox";
+    const completionName = { all: "All completion states", done: "Completed", pending: "Pending" }[
+      state.filters.done
+    ];
+    els.listTitle.textContent = state.filters.done === "done" ? "Completed" : folderName;
     const categoryName =
       state.filters.category === "all"
         ? ""
         : categoryById(state.filters.category)?.name;
-    if (categoryName) els.listTitle.textContent = categoryName;
-    $("listContext").textContent = [
+    const dateName = { all: "", today: "Today", backlog: "Earlier" }[state.filters.type];
+    const query = state.filters.search.trim();
+    const context = [
       state.filters.account === "all"
         ? "All accounts"
         : accountById(state.filters.account)?.name,
-      categoryName || state.filters.type !== "all" ? folderName : "",
+      folderName,
+      completionName,
+      dateName,
+      categoryName,
+      query ? `Search: “${query}”` : "",
     ]
       .filter(Boolean)
       .join(" / ");
+    $("listContext").textContent = context;
+    $("listContext").title = context;
+    $("listContext").setAttribute("aria-label", context);
+    els.messageList.setAttribute("aria-label", `${els.listTitle.textContent}: ${context}`);
     $("syncIndicator").title = state.lastRefresh
       ? `Last sync ${formatDate(state.lastRefresh)}`
       : "";
@@ -646,12 +696,48 @@
       const empty = document.createElement("div");
       empty.className = "empty-state";
       const h = document.createElement("h3");
-      h.textContent = state.messages.length ? "No messages match these filters" : "No mail yet";
       const p = document.createElement("p");
-      p.textContent = state.messages.length
-        ? "Try clearing a filter or search term."
-        : "Add an account to load mail into this workbench.";
+      const hasCompleted = filteredMessages("done").some((message) => message.done);
+      const scopedAccounts = state.accounts.filter(
+        (account) => state.filters.account === "all" || account.id === state.filters.account,
+      );
+      const hasAccountMail = state.messages.some(
+        (message) => state.filters.account === "all" || message.account_id === state.filters.account,
+      );
+      if (!state.accounts.length) {
+        h.textContent = "No accounts connected";
+        p.textContent = "Add an account to load mail into this workbench.";
+      } else if (!hasAccountMail && scopedAccounts.some(
+        (account) => account.enabled !== false && account.status === "error",
+      )) {
+        h.textContent = "Mail could not be loaded";
+        p.textContent = "Check accounts marked Error, then refresh. This does not mean the folder is empty.";
+      } else if (!hasAccountMail && scopedAccounts.length && scopedAccounts.every((account) => account.enabled === false)) {
+        h.textContent = "Accounts in this view are paused";
+        p.textContent = "Resume an account from its menu to load mail.";
+      } else if (!state.messages.length) {
+        h.textContent = `No mail in ${folderName}`;
+        p.textContent = "This folder is empty for the connected accounts.";
+      } else if (state.filters.done === "pending" && hasCompleted) {
+        h.textContent = "No pending mail";
+        p.textContent = "Everything in this scope is completed.";
+      } else {
+        h.textContent = "No messages match these filters";
+        p.textContent = "Try clearing a filter or search term.";
+      }
       empty.append(h, p);
+      if (state.filters.done === "pending" && hasCompleted) {
+        const completed = document.createElement("button");
+        completed.type = "button";
+        completed.className = "button button-secondary button-small";
+        completed.textContent = "View completed";
+        completed.addEventListener("click", () => {
+          state.filters.done = "done";
+          renderScope();
+          els.messageList.focus({ preventScroll: true });
+        });
+        empty.append(completed);
+      }
       els.messageList.replaceChildren(empty);
       restoreFocus(focus);
       return;
@@ -864,6 +950,11 @@
 
   async function performAction(ids, action, category) {
     if (!ids.length) return;
+    const affected = new Set(ids);
+    const focusIndex = Math.max(
+      0,
+      filteredMessages().findIndex((message) => affected.has(message.id)),
+    );
     try {
       const result = await api("/api/action", {
         method: "POST",
@@ -879,7 +970,6 @@
           if (action === "done") message.done = true;
           if (action === "reopen") message.done = false;
           if (action === "category") {
-            // As the next snapshot will say: keep what classification chose, for the "wrong" count.
             if (["model", "mailbox"].includes(message.source))
               message.auto_category = message.category;
             message.category = category;
@@ -888,9 +978,8 @@
         }
       });
       state.selected.clear();
-      renderFilters(); // the sidebar's per-category done / wrong counts
-      renderCounts();
-      renderList();
+      renderScope();
+      ensureListFocus(focusIndex);
       if (state.activeId) {
         const current = state.messages.find(
           (message) => message.id === state.activeId,
@@ -1106,9 +1195,7 @@
           : "Synced",
     );
     if (changed) {
-      renderFilters();
-      renderCounts();
-      renderList();
+      renderScope();
       renderJobs();
     }
     return true;
@@ -1309,30 +1396,15 @@
     const close = event.target.closest("[data-close-dialog]");
     if (close) close.closest("dialog")?.close();
     const type = event.target.closest("[data-type-filter]");
-    if (type) {
-      state.filters.type = type.dataset.typeFilter;
-      syncFilterButtons();
-      renderList();
-    }
+    if (type) state.filters.type = type.dataset.typeFilter;
     const done = event.target.closest("[data-done-filter]");
-    if (done) {
-      state.filters.done = done.dataset.doneFilter;
-      syncFilterButtons();
-      renderList();
-    }
+    if (done) state.filters.done = done.dataset.doneFilter;
     const account = event.target.closest("[data-account-filter]");
-    if (account) {
-      state.filters.account = account.dataset.accountFilter;
-      renderFilters();
-      renderList();
-    }
+    if (account) state.filters.account = account.dataset.accountFilter;
     const category = event.target.closest("[data-category-filter]");
-    if (category) {
-      state.filters.category = category.dataset.categoryFilter;
-      renderFilters();
-      renderList();
-    }
+    if (category) state.filters.category = category.dataset.categoryFilter;
     if (type || done || account || category) {
+      renderScope();
       if (window.innerWidth < 1200) els.previewPane.classList.remove("is-open");
       if (window.innerWidth < 768) closeSidebar();
     }
@@ -1535,19 +1607,18 @@
   els.accountForm.addEventListener("submit", submitAccount);
   els.search.addEventListener("input", () => {
     state.filters.search = els.search.value;
-    renderList();
+    renderScope();
   });
   els.clearFilters.addEventListener("click", () => {
     state.filters = {
       type: "all",
-      done: "all",
+      done: "pending",
       account: "all",
       category: "all",
       search: "",
     };
     els.search.value = "";
-    renderFilters();
-    renderList();
+    renderScope();
   });
   els.selectAll.addEventListener("change", () => {
     if (els.selectAll.checked) {
@@ -1619,6 +1690,8 @@
     openMessage,
     accountById,
     renderList,
+    renderScope,
+    ensureListFocus,
     reconcileMessageState,
     messageDetail,
     filteredMessages,

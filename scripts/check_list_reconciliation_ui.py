@@ -70,7 +70,10 @@ def main() -> int:
                 page = browser.new_page(viewport={"width": 1440, "height": 900})
                 until.page = page
                 errors = []
-                page.on("pageerror", lambda error, errors=errors: errors.append(str(error)))
+                page.on(
+                    "pageerror",
+                    lambda error, errors=errors: errors.append(getattr(error, "stack", str(error))),
+                )
                 if os.environ.get("EMAIL_TOWN_UI_BASELINE_ASSETS") == "1":
 
                     def baseline_asset(body):
@@ -286,6 +289,20 @@ def main() -> int:
                 page.locator("#refreshButton").focus()
                 page.keyboard.press("Escape")
                 expect(rows.nth(4).locator(".row-open")).to_be_focused()
+                # The final unread badge disappearing must not resize the narrow folder header.
+                page.set_viewport_size({"width": 390, "height": 900})
+                geometry = page.evaluate("""() => {
+                  const host = window.EmailTownMailHost;
+                  const box = () => ({header: document.querySelector('.mail-operations').getBoundingClientRect().height,
+                    listTop: document.getElementById('messageList').getBoundingClientRect().top});
+                  host.state.messages.forEach(message => { message.unread = true; });
+                  host.renderScope();
+                  const before = box();
+                  host.state.messages.forEach(message => { message.unread = false; });
+                  host.renderScope();
+                  return {before, after: box()};
+                }""")
+                assert geometry["before"] == geometry["after"], (engine, "unread badge moved list", geometry)
                 assert not errors, errors
                 print(f"{engine}: identity, focus, scroll, Done/undo, bulk and held responses pass")
             finally:

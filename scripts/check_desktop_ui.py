@@ -1,13 +1,15 @@
 """Exercise the actual desktop server/UI using synthetic mail only.
 
 Run: uv run --with playwright python scripts/check_desktop_ui.py
-Install the test browser once with: uv run --with playwright playwright install chromium
+WebKit: EMAIL_TOWN_UI_ENGINE=webkit uv run --with playwright python scripts/check_desktop_ui.py
+Install engines with: uv run --with playwright playwright install chromium webkit
 Captures go to a temporary directory, never to a mailbox or the repository.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import tempfile
@@ -116,7 +118,8 @@ def main():
     results = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch()
+            engine = os.environ.get("EMAIL_TOWN_UI_ENGINE", "chromium")
+            browser = getattr(p, engine).launch()
             for theme in ("light", "dark"):
                 for width in (390, 768, 1280, 1440):
                     context = browser.new_context(
@@ -256,7 +259,7 @@ def main():
             browser.close()
         (out / "results.json").write_text(json.dumps(results, indent=2))
         print(
-            f"UI PASS: 8 viewport/theme combinations; real HTTP actions, undo, local category, reload, keyboard, auth. Captures: {out}"
+            f"UI PASS ({engine}): 8 viewport/theme combinations; real HTTP actions, undo, local category, reload, keyboard, auth. Captures: {out}"
         )
     finally:
         server.shutdown()
