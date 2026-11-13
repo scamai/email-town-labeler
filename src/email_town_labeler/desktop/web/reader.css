@@ -217,11 +217,14 @@
   color: var(--muted);
   font-size: 12px;
 }
+/* No frame line: the message reads as part of the pane, as in Gmail. The frame's own 16px padding is
+   pulled back so its text lines up with the sender name above; in a dark theme it is a white sheet. */
 .email-frame {
   display: block;
-  width: 100%;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
   min-height: 120px;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 8px;
   background: #fff;
 }
