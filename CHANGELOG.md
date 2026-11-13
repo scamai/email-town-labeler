@@ -7,6 +7,12 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Added
+
+- Builds can ship Google sign-in: `scripts/build_app.py --google-client <Desktop OAuth client JSON>` puts the
+  company project's client into the app (never into the public repository), so connecting a Gmail account
+  needs no client file of the user's own. While the project is unverified, only its test users can sign in.
+
 ### Changed
 
 - The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the

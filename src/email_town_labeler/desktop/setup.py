@@ -10,18 +10,42 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from ..config import Paths
 from ..gmail.auth import _write_private
 
-# Filled in once the project's own Google Cloud / Microsoft Entra registrations exist. Empty means
-# "this copy has no shipped sign-in": the UI then offers the user's own client file or app passwords.
-GOOGLE_CLIENT: dict[str, str] = {}  # {"client_id": "...apps.googleusercontent.com", "client_secret": "..."}
-MICROSOFT_CLIENT_ID = ""
+# The sign-in clients this copy ships with, read from `sign_in.json` beside this file. That file is
+# written into the package by `scripts/build_app.py --google-client <downloaded JSON>` and is never
+# committed (.gitignore): the repository is public, and a source checkout without it simply has no
+# shipped sign-in. Empty means the UI offers the user's own client file or app passwords instead.
+SIGN_IN_FILE = Path(__file__).with_name("sign_in.json")
+
+
+def _shipped_sign_in(path: Path = SIGN_IN_FILE) -> tuple[dict[str, str], str]:
+    """(Google client, Microsoft client ID) from the shipped file; empty values when absent or invalid."""
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}, ""
+    google = data.get("google") if isinstance(data, dict) else None
+    client = {}
+    if (
+        isinstance(google, dict)
+        and isinstance(google.get("client_id"), str)
+        and _GOOGLE_CLIENT_ID.fullmatch(google["client_id"])
+        and isinstance(google.get("client_secret"), str)
+        and 8 <= len(google["client_secret"]) <= 200
+    ):
+        client = {"client_id": google["client_id"], "client_secret": google["client_secret"]}
+    microsoft = data.get("microsoft") if isinstance(data, dict) else ""
+    return client, microsoft if isinstance(microsoft, str) else ""
+
 
 GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _GOOGLE_CLIENT_ID = re.compile(r"[0-9]{6,40}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com")
+GOOGLE_CLIENT, MICROSOFT_CLIENT_ID = _shipped_sign_in()
 
 # Suggested IMAP/SMTP settings by address domain. They pre-fill editable fields; nothing is hidden.
 # `use: "microsoft"` routes the address to Microsoft sign-in (Outlook.com no longer accepts app passwords).

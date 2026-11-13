@@ -11,3 +11,6 @@ client_secret*.json
 token*.json
 *.sqlite*
 /data/
+
+# shipped sign-in clients are injected at build time (scripts/build_app.py), never committed
+src/email_town_labeler/desktop/sign_in.json
