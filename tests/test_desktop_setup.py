@@ -110,3 +110,25 @@ def test_microsoft_uses_the_shipped_client_id_when_none_is_typed(tmp_path, monke
     workbench._connect("job2", "Microsoft", "microsoft", {"provider": "microsoft", "client_id": "own-id"})
     assert asked == ["11111111-2222-3333-4444-555555555555", "own-id"]
     workbench.close()
+
+
+def test_shipped_sign_in_file_is_read_and_validated(tmp_path):
+    """build_app.py writes desktop/sign_in.json into the package; a source checkout has none."""
+    shipped = tmp_path / "sign_in.json"
+    assert setup._shipped_sign_in(shipped) == ({}, "")  # absent: no shipped sign-in
+    good = {"client_id": DESKTOP["installed"]["client_id"], "client_secret": "fixture-secret-123"}
+    shipped.write_text(json.dumps({"google": good, "microsoft": "ms-app-id"}))
+    assert setup._shipped_sign_in(shipped) == (good, "ms-app-id")
+    for bad in (
+        "not json",
+        json.dumps([]),
+        json.dumps({"google": {**good, "client_id": "not-a-google-id"}}),
+        json.dumps({"google": {**good, "client_secret": "short"}}),
+    ):
+        shipped.write_text(bad)
+        assert setup._shipped_sign_in(shipped)[0] == {}, bad
+
+
+def test_source_checkout_ships_no_sign_in_file():
+    """The repository is public: the shipped client must only ever exist inside a built app."""
+    assert not setup.SIGN_IN_FILE.exists(), "sign_in.json left in the source tree; delete it"

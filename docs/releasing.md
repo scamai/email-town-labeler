@@ -14,11 +14,18 @@ keychain, and a notarytool keychain profile for the same team. The pipeline foll
 Python interpreter the same way.
 
 ```bash
-python scripts/build_app.py                       # dist/Email Town.app (unsigned)
+python scripts/build_app.py --google-client ~/path/to/client_secret_<id>.json   # dist/Email Town.app (unsigned)
 export EMAIL_TOWN_SIGN_IDENTITY="Developer ID Application: Reality Inc. (BB4TFKG82B)"
 export EMAIL_TOWN_NOTARY_PROFILE=AC_NOTARY        # created once with: xcrun notarytool store-credentials
 python scripts/release_macos.py --output dist/release
 ```
+
+`--google-client` (or `EMAIL_TOWN_GOOGLE_CLIENT_FILE`) is the Desktop OAuth client JSON of the company's public
+Google Cloud project (`scamai-email-town`, External audience, scope `gmail.modify`). The build copies it into
+the package as `desktop/sign_in.json`, deletes it from the source tree afterwards, and fails if the app does not
+carry it; the repository is public, so the file is git-ignored and never committed. Without it, the app ships
+no Google sign-in and users import their own client file or use app passwords. Until Google verifies the
+project, only its test users (Google Auth Platform → Audience, at most 100) can sign in.
 
 The result is `dist/release/Email-Town-<version>-macos-<arch>.dmg` and `release-receipt.json`. Add
 `--no-notarize` to sign and image a build without submitting it to Apple; its receipt says it is not notarized.
