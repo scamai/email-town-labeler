@@ -16,6 +16,9 @@ contain breaking changes; they are called out.
 - The workbench guide says which mailboxes a downloaded copy can connect today (app passwords: Gmail, iCloud,
   Yahoo, QQ and others) and which wait for a shipped sign-in client (Google browser sign-in, Microsoft).
 
+- desktop.log records Done, Reopen, category corrections and their undo: which control (`via=preview`,
+  `toolbar`, `category-dialog`), which messages by key prefix, and that the mailbox was not changed.
+
 ### Changed
 
 - The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the

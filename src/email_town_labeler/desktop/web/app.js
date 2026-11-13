@@ -1140,7 +1140,16 @@
     renderList();
   }
 
-  async function performAction(ids, action, category) {
+  async function performAction(ids, action, category, via = "toolbar") {
+    uiLog("workflow-action", {
+      action,
+      via,
+      ...(category ? { category } : {}),
+      ids: ids.slice(0, 20).map(k8),
+      count: ids.length,
+      active: k8(state.activeId),
+      includes_active: ids.includes(state.activeId),
+    });
     if (!ids.length) return;
     const affected = new Set(ids);
     const focusIndex = Math.max(
@@ -1909,7 +1918,8 @@
   );
   els.previewDone.addEventListener("click", () => {
     const message = state.messages.find((item) => item.id === state.activeId);
-    if (message) performAction([message.id], message.done ? "reopen" : "done");
+    if (message)
+      performAction([message.id], message.done ? "reopen" : "done", undefined, "preview");
   });
   els.previewCategoryButton.addEventListener("click", () => {
     if (state.activeId) showCategoryDialog([state.activeId]);
@@ -1917,7 +1927,7 @@
   els.categoryForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const ids = JSON.parse(els.categoryDialog.dataset.ids || "[]");
-    performAction(ids, "category", els.categorySelect.value);
+    performAction(ids, "category", els.categorySelect.value, "category-dialog");
     els.categoryDialog.close();
   });
   els.loadMore.addEventListener("click", async () => {

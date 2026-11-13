@@ -1057,6 +1057,14 @@ class Workbench:
             if any(k not in self.messages for k in ids):
                 raise ValueError("The list changed. Select the messages again.")
             before = self.state.edit(ids, data.get("action"), data.get("category"))
+            # Local only: Done / Reopen / category never touch the mailbox, so this line is their whole record.
+            log.info(
+                "workflow %s%s: %d message(s) %s (local, mailbox unchanged)",
+                data.get("action"),
+                f" {data.get('category')}" if data.get("action") == "category" else "",
+                len(ids),
+                shorts(ids),
+            )
             token = secrets.token_urlsafe(24)
             self.undos[token] = before
             while len(self.undos) > 50:
@@ -1071,6 +1079,7 @@ class Workbench:
                 raise ValueError("Undo expired. Review the messages again.")
             self.state.undo(before)
             self.undos.pop(token)
+            log.info("workflow undo: %d message(s) %s restored", len(before), shorts(r["id"] for r in before))
             self._touch()
         return {"ok": True}
 
