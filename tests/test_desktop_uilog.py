@@ -98,3 +98,20 @@ def test_list_refresh_logs_flags_the_mailbox_changed(served, caplog):
         workbench._refresh()
     state = "unread" if before else "read"
     assert f"mailbox changed 1 flag(s): {key[:8]} {state}" in caplog.text
+
+
+def test_done_reopen_category_and_undo_are_logged_as_local_edits(served, caplog):
+    _server, workbench = served
+    row = workbench.snapshot()["messages"][0]
+    key = row["id"]
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        token = workbench.action({"ids": [key], "action": "done"})["undo"]
+        workbench.undo(token)
+        workbench.action({"ids": [key], "action": "category", "category": "promotional"})
+    assert f"workflow done: 1 message(s) {key[:8]} (local, mailbox unchanged)" in caplog.text
+    assert f"workflow undo: 1 message(s) {key[:8]} restored" in caplog.text
+    assert f"workflow category promotional: 1 message(s) {key[:8]}" in caplog.text
+    assert row["subject"] not in caplog.text
+    assert ui_line({"type": "workflow-action", "action": "done", "via": "preview", "ids": [key[:8]]}) == (
+        f"workflow-action action=done via=preview ids={key[:8]}"
+    )
