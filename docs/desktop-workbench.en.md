@@ -130,16 +130,24 @@ a different mailbox. Each additional mailbox needs its own user authorization.
 
 ## Process mail
 
-Inbox opens on **Pending**. Marking a message done removes it from Pending; **Completed** finds it with
-its category tags intact, and **Reopen** returns it to Pending. Completion is local: it does not archive,
-delete, move, or mark the provider message read. An all-done Pending view offers **View completed**.
+Three panes, as in Outlook: folders and filters, the message list, the reading pane. Drag either pane
+border (or focus it and press ←/→) to resize; double-click restores the default. Widths are kept per
+device.
 
-Filter across all or individual accounts by Today, Earlier, category, completion, or subject/sender search.
-These filters compose; **Clear search and filters** returns to the default Pending view. The list header
-states the scope. Open a plaintext preview, change its local category, or batch-edit and undo.
-Date sections, accounts and categories show loaded totals and explicit unread counts, applying the other
-active filters. Only the active folder has a loaded unread count; other folders are not reported as zero.
-Category statistics distinguish automatic classifications, user corrections and awaiting classification.
+The folder pane lists Inbox, Drafts, Sent, Archive, Trash and **Done**. A folder shows its pending mail;
+marking a message done moves it to **Done**, with its category tags intact, and **Reopen** returns it.
+Completion is local: it does not archive, delete, move, or mark the provider message read. An all-done
+folder offers **View completed**.
+
+Below the folders, categories and accounts each show one number: their unread mail in the current scope.
+Choose a category to filter by it and again (or its chip in the list header) to clear it. With one
+account, there is no "All accounts" entry and rows carry no account name. The list header holds the date
+range (All / Today / Earlier), a chip per active filter, and the message count; search sits in the top
+bar. Filters compose; **Clear search and filters** returns to the default view. Each row is two fixed
+lines: the sender's name and the time; the subject, its category and the star. Unread rows are bold with
+a blue bar at the left edge. Totals, completion and classification sources (sorted automatically,
+corrected by you, awaiting classification) are in each entry's tooltip and accessible name. Only the
+active folder has a loaded unread count; other folders are not reported as zero.
 They do not measure accuracy or establish that unreviewed classifications are correct. Failed or paused
 accounts are distinguished from genuinely empty folders.
 Completion survives restart; undo tokens live only in the current process. Selection is limited to loaded,

@@ -266,7 +266,7 @@ def main() -> int:
                 assert page.evaluate(identical), f"{engine}: out-of-order response replaced rows"
 
                 # Done removes a focused pending row; focus advances. Undo restores the active row.
-                page.locator('[data-done-filter="pending"]').click()
+                assert page.evaluate("window.EmailTownMailHost.state.filters.done") == "pending"
                 rows.nth(11).locator(".row-open").click()
                 rows.nth(11).locator(".row-open").focus()
                 completed_id = rows.nth(11).get_attribute("data-message-id")
@@ -280,7 +280,6 @@ def main() -> int:
                 page.screenshot(path=str(out / f"{engine}-after-undo.png"))
 
                 # Bulk read updates preserve selection and every unaffected row/control.
-                page.locator('[data-done-filter="all"]').click()
                 for index in range(3):
                     rows.nth(index).locator(".row-check").click()
                 page.locator("#bulkMore > summary").click()
@@ -315,11 +314,11 @@ def main() -> int:
                 page.locator("#refreshButton").focus()
                 page.keyboard.press("Escape")
                 expect(rows.nth(4).locator(".row-open")).to_be_focused()
-                # The final unread badge disappearing must not resize the narrow folder header.
+                # The final unread count disappearing must not resize the narrow list header.
                 page.set_viewport_size({"width": 390, "height": 900})
                 geometry = page.evaluate("""() => {
                   const host = window.EmailTownMailHost;
-                  const box = () => ({header: document.querySelector('.mail-operations').getBoundingClientRect().height,
+                  const box = () => ({header: document.querySelector('#selectionToolbar').getBoundingClientRect().height,
                     listTop: document.getElementById('messageList').getBoundingClientRect().top});
                   host.state.messages.forEach(message => { message.unread = true; });
                   host.renderScope();

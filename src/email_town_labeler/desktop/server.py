@@ -183,6 +183,7 @@ class Handler(BaseHTTPRequestHandler):
             "/mail.js": ("mail.js", "text/javascript; charset=utf-8"),
             "/images.js": ("images.js", "text/javascript; charset=utf-8"),
             "/htmlview.js": ("htmlview.js", "text/javascript; charset=utf-8"),
+            "/panes.js": ("panes.js", "text/javascript; charset=utf-8"),
             "/shortcuts.js": ("shortcuts.js", "text/javascript; charset=utf-8"),
             "/selection.js": ("selection.js", "text/javascript; charset=utf-8"),
             "/rowactions.js": ("rowactions.js", "text/javascript; charset=utf-8"),

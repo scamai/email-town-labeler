@@ -6,7 +6,7 @@
 // The sandbox omits allow-scripts, and WebKit then also refuses listeners this page attaches inside the
 // frame. So nothing here listens in the frame: the frame never keeps keyboard focus (the shortcuts stay
 // with the app), copying reads the frame's selection from this page, and the height is measured when the
-// frame has loaded (after its images) and when the window resizes.
+// frame has loaded (after its images) and when the window or the reading pane's width changes.
 (() => {
   "use strict";
   const host = window.EmailTownMailHost;
@@ -47,6 +47,17 @@
   };
 
   window.addEventListener("resize", () => requestAnimationFrame(fit));
+  // A dragged pane border changes the reading pane's width without a window resize.
+  const pane = document.getElementById("previewBody");
+  if (pane && "ResizeObserver" in window) {
+    let width = 0;
+    new ResizeObserver(([entry]) => {
+      const next = Math.round(entry.contentRect.width);
+      if (next === width) return; // the frame's own height change resizes the body too
+      width = next;
+      requestAnimationFrame(fit);
+    }).observe(pane);
+  }
   // Clicking into the message (to select text, or on a link) moves focus into the frame, where keys
   // would never reach the shortcuts. Hand focus back; the click itself and the selection are unaffected.
   window.addEventListener("blur", () =>

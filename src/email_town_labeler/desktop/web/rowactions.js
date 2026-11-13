@@ -1,4 +1,4 @@
-// Row controls as in Gmail: a star toggle on every writable row, and Archive / Trash / Mark read-unread
+// Row controls as in Gmail: a star toggle at the end of every writable row's subject line, and Archive / Trash / Mark read-unread
 // on hover or keyboard focus. Keyed rows retain their controls; labels and actions follow current state.
 (() => {
   "use strict";
@@ -61,7 +61,7 @@
     let star = row.querySelector(".row-star");
     if (!star) {
       star = button("row-star", "star", "Star (S)", "star", "star");
-      row.querySelector(".row-check")?.after(star);
+      row.querySelector(".row-meta")?.append(star);
     }
     syncButton(
       star,

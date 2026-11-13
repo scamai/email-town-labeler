@@ -123,33 +123,34 @@ def main() -> int:
                 expect(rows).to_have_count(5)
                 page.screenshot(path=str(out / f"{engine}-inbox.png"))
 
-                expect(page.locator('[data-done-filter="pending"]')).to_have_attribute("aria-pressed", "true")
+                expect(page.locator('[data-mail-folder="inbox"]')).to_have_attribute("aria-pressed", "true")
                 expect(rows).to_have_count(5)
                 expect(page.locator("#listTitle")).to_have_text("Inbox")
                 expect(page.locator("#listContext")).to_contain_text("Pending")
                 assert "Earlier completed" not in rows.all_inner_texts()
-                expect(page.locator("#countAll")).to_have_text("5")
-                expect(page.locator("#unreadAll")).to_have_text("3 unread")
-                expect(page.locator("#countToday")).to_have_text("4")
-                expect(page.locator("#countBacklog")).to_have_text("1")
+
+                def date_label(kind, page=page):
+                    return page.locator(f'[data-type-filter="{kind}"]').get_attribute("aria-label")
+
+                assert "3 unread of 5 loaded" in date_label("all"), date_label("all")
+                assert "of 4 loaded" in date_label("today")
+                assert "of 1 loaded" in date_label("backlog")
 
                 alpha = page.locator("[data-account-filter]").filter(has_text="Alpha fixture")
                 beta = page.locator("[data-account-filter]").filter(has_text="Beta fixture")
-                expect(alpha.locator(".count")).to_have_text("3")
-                expect(alpha.locator(".unread-count")).to_have_text("2 unread")
-                expect(beta.locator(".count")).to_have_text("2")
-                expect(beta.locator(".unread-count")).to_have_text("1 unread")
-                assert "3 loaded" in alpha.get_attribute("aria-label")
-                assert "2 unread" in alpha.get_attribute("aria-label")
+                expect(alpha.locator(".nav-count")).to_have_text("2")  # the entry shows its unread mail
+                expect(beta.locator(".nav-count")).to_have_text("1")
+                assert "2 unread of 3 loaded" in alpha.get_attribute("aria-label")
+                assert "1 unread of 2 loaded" in beta.get_attribute("aria-label")
 
-                updates = page.locator('[data-category-filter="updates"]')
-                expect(updates.locator(".count")).to_have_text("2")
-                expect(updates.locator(".unread-count")).to_have_text("2 unread")
-                assert "automatic" in updates.get_attribute("aria-label")
-                assert "correction" in updates.get_attribute("aria-label")
+                updates = page.locator('#categoryFilters [data-category="updates"]')
+                expect(updates.locator(".nav-count")).to_have_text("2")
+                assert "2 unread of 2 loaded" in updates.get_attribute("aria-label")
+                assert "sorted automatically" in updates.get_attribute("aria-label")
+                assert "corrected by you" in updates.get_attribute("aria-label")
                 assert "wrong" not in page.locator("#categoryFilters").inner_text().lower()
-                unknown = page.locator('[data-category-filter="unknown"]')
-                expect(unknown.locator(".awaiting-count")).to_have_text("1 awaiting classification")
+                unknown = page.locator('#categoryFilters [data-category="unknown"]')
+                assert "1 awaiting classification" in unknown.get_attribute("aria-label")
 
                 alpha.click()
                 expect(rows).to_have_count(3)
@@ -169,12 +170,14 @@ def main() -> int:
                 expect(page.locator(".empty-state")).to_contain_text("No messages match")
                 page.locator("#searchInput").fill("no synthetic match")
                 expect(page.locator("#listContext")).to_contain_text("no synthetic match")
+                expect(page.locator("#filterChips")).to_contain_text("no synthetic match")
 
                 page.locator("#clearFiltersButton").click()
                 expect(rows).to_have_count(5)
-                expect(page.locator('[data-done-filter="pending"]')).to_have_attribute("aria-pressed", "true")
+                expect(page.locator('[data-done-filter="done"]')).to_have_attribute("aria-pressed", "false")
                 expect(page.locator('[data-account-filter="all"]')).to_have_attribute("aria-pressed", "true")
-                expect(page.locator('[data-category-filter="all"]')).to_have_attribute("aria-pressed", "true")
+                expect(page.locator('#categoryFilters [aria-pressed="true"]')).to_have_count(0)
+                expect(page.locator("#filterChips .filter-chip")).to_have_count(0)
                 expect(page.locator("#searchInput")).to_have_value("")
                 account_ids = {account["name"]: account["id"] for account in manager.accounts.all()}
 
@@ -193,7 +196,7 @@ def main() -> int:
                 target = rows.filter(has_text="Today updates")
                 target.locator(".row-open").click()
                 expect(target).not_to_have_class(re.compile(r"\bis-unread\b"))
-                expect(page.locator("#unreadAll")).to_have_text("2 unread")
+                assert "2 unread of" in date_label("all")
                 record = readers["Alpha fixture"].record("m1")
                 until(
                     lambda record=record: "UNREAD" not in record["labels"],
@@ -214,10 +217,9 @@ def main() -> int:
                 page.locator("#previewDoneButton").click()
                 expect(completed).to_have_count(0)
                 assert before == (record["folder"], list(record["labels"]), record["category"])
-                page.locator('[data-done-filter="pending"]').click()
+                page.locator('[data-mail-folder="inbox"]').click()  # a folder leaves the Done view
                 expect(rows.filter(has_text="Today updates")).to_have_count(1)
-                page.locator('[data-done-filter="all"]').click()
-                expect(rows).to_have_count(6)
+                expect(rows).to_have_count(5)
                 check_reply_sender("Other account updates", "Beta fixture")
                 page.screenshot(path=str(out / f"{engine}-all-scopes.png"))
 
@@ -238,7 +240,7 @@ def main() -> int:
                 page.locator("#previewMore > summary").click()
                 page.locator("#previewDoneButton").click()
                 expect(rows).to_have_count(5)
-                page.locator('[data-done-filter="pending"]').click()
+                page.locator('[data-mail-folder="inbox"]').click()
                 expect(rows.filter(has_text="Today updates")).to_have_count(1)
 
                 # A configured but empty folder must not suggest adding another account.

@@ -20,7 +20,7 @@
             class="icon-button mobile-only"
             id="sidebarToggle"
             type="button"
-            aria-label="Open filters and accounts"
+            aria-label="Open folders and accounts"
             aria-expanded="false"
           >
             ☰
@@ -28,15 +28,36 @@
           <img
             class="brand-mark"
             src="/logo.svg"
-            width="36"
-            height="36"
+            width="28"
+            height="28"
             alt=""
             aria-hidden="true"
           />
-          <div>
-            <h1>Email Town</h1>
-            <p>On-device mail workbench</p>
-          </div>
+          <h1>Email Town</h1>
+        </div>
+        <div class="topbar-search">
+          <label class="search-field"
+            ><span class="sr-only">Search mail</span
+            ><svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 5 5" /></svg
+            ><input
+              id="searchInput"
+              type="search"
+              placeholder="Search subject or sender ( / )"
+              autocomplete="off"
+          /></label>
+          <button
+            class="icon-button"
+            id="clearFiltersButton"
+            type="button"
+            title="Clear search and filters"
+            aria-label="Clear search and filters"
+          >
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
         <div class="topbar-actions">
           <span class="sync-indicator" id="syncIndicator" role="status"
@@ -44,14 +65,15 @@
             ><span id="syncText">Connecting</span></span
           >
           <button
-            class="button button-secondary"
+            class="icon-button"
             id="refreshButton"
             type="button"
+            title="Refresh"
+            aria-label="Refresh"
           >
-            Refresh
-          </button>
-          <button class="button button-quiet" id="draftsButton" type="button">
-            Drafts
+            <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" />
+            </svg>
           </button>
           <button
             class="button button-primary"
@@ -63,10 +85,10 @@
         </div>
       </header>
 
-      <div class="workspace">
-        <aside class="sidebar" id="sidebar" aria-label="Filters and accounts">
-          <div class="sidebar-heading">
-            <h2>Views</h2>
+      <div class="workspace" id="workspace">
+        <aside class="sidebar" id="sidebar" aria-label="Folders and accounts">
+          <div class="sidebar-heading mobile-only">
+            <h2>Mail</h2>
             <button
               class="text-button mobile-only"
               id="mobileRefreshButton"
@@ -78,138 +100,74 @@
               class="icon-button mobile-only"
               id="sidebarClose"
               type="button"
-              aria-label="Close filters and accounts"
+              aria-label="Close folders and accounts"
             >
               ×
             </button>
           </div>
-          <nav class="filter-nav" aria-label="Date range">
-            <button class="nav-item is-active" data-type-filter="all" type="button">
-              <span>All dates</span>
-              <span class="nav-metrics">
-                <span class="unread-count" id="unreadAll">—</span>
-                <span class="count" id="countAll">—</span>
-              </span>
+          <nav class="filter-nav" aria-label="Mailbox folder">
+            <button class="nav-item is-active" data-mail-folder="inbox" type="button">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h5l2 3h4l2-3h5 M5 5h14l2 8v6H3v-6z" /></svg><span class="folder-label">Inbox</span>
             </button>
-            <button class="nav-item" data-type-filter="today" type="button">
-              <span>Today</span>
-              <span class="nav-metrics">
-                <span class="unread-count" id="unreadToday">—</span>
-                <span class="count" id="countToday">—</span>
-              </span>
+            <button class="nav-item" id="draftsButton" type="button">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z M13 7l4 4" /></svg><span class="folder-label">Drafts</span>
             </button>
-            <button class="nav-item" data-type-filter="backlog" type="button">
-              <span>Earlier</span>
-              <span class="nav-metrics">
-                <span class="unread-count" id="unreadBacklog">—</span>
-                <span class="count" id="countBacklog">—</span>
-              </span>
+            <button class="nav-item" data-mail-folder="sent" type="button">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12 20 4l-6 16-3-7z M11 13l9-9" /></svg><span class="folder-label">Sent</span>
+            </button>
+            <button class="nav-item" data-mail-folder="archive" type="button">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11H4z M3 4h18v4H3z M10 12h4" /></svg><span class="folder-label">Archive</span>
+            </button>
+            <button class="nav-item" data-mail-folder="trash" type="button">
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></svg><span class="folder-label">Trash</span>
+            </button>
+            <button
+              class="nav-item"
+              data-done-filter="done"
+              type="button"
+              title="Mail you marked done on this device"
+            >
+              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><span class="folder-label">Done</span>
             </button>
           </nav>
           <div class="sidebar-section">
-            <div class="section-label"><span>Completion</span></div>
-            <div class="segmented-control" role="group" aria-label="Completion">
-              <button class="segment" data-done-filter="all" type="button">All</button>
-              <button class="segment is-active" data-done-filter="pending" type="button">Pending</button>
-              <button class="segment" data-done-filter="done" type="button">Completed</button>
-            </div>
+            <div class="section-label"><span>Categories</span></div>
+            <div id="categoryFilters" class="filter-list"></div>
           </div>
           <div class="sidebar-section">
             <div class="section-label">
-              <span
-                >Accounts <span id="accountCount" class="muted">—</span></span
-              >
+              <span>Accounts</span>
               <button
-                class="text-button"
+                class="icon-button section-add"
                 id="addAccountButton"
                 type="button"
+                title="Add account"
                 aria-label="Add account"
               >
-                + Add
+                +
               </button>
             </div>
             <div id="accountFilters" class="filter-list"></div>
           </div>
-          <div class="sidebar-section">
-            <div class="section-label">
-              <span>Categories</span
-              ><span id="categoryCount" class="muted">—</span>
-            </div>
-            <div id="categoryFilters" class="filter-list"></div>
-          </div>
-          <p class="local-note">
-            Categories and completion stay on this device. Mail actions sync to
-            your original mailboxes.
-          </p>
         </aside>
+        <div
+          class="splitter"
+          data-split="sidebar"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize folder pane"
+          tabindex="0"
+        ></div>
         <button
           class="sidebar-backdrop"
           id="sidebarBackdrop"
           type="button"
-          aria-label="Close filters and accounts"
+          aria-label="Close folders and accounts"
           tabindex="-1"
           hidden
         ></button>
 
         <main class="message-pane" aria-label="Unified mail list">
-          <section class="mail-operations" aria-label="Mailbox operations">
-            <div class="folder-tabs" role="group" aria-label="Mailbox folder">
-              <button
-                class="folder-tab is-active"
-                data-mail-folder="inbox"
-                type="button"
-              >
-                <span class="folder-label">Inbox</span>
-              </button>
-              <button class="folder-tab" data-mail-folder="sent" type="button">
-                <span class="folder-label">Sent</span>
-              </button>
-              <button
-                class="folder-tab"
-                data-mail-folder="archive"
-                type="button"
-              >
-                <span class="folder-label">Archive</span>
-              </button>
-              <button class="folder-tab" data-mail-folder="trash" type="button">
-                <span class="folder-label">Trash</span>
-              </button>
-            </div>
-          </section>
-          <div class="pane-header">
-            <div class="list-tools">
-              <label class="search-field"
-                ><span class="sr-only">Search mail</span
-                ><svg
-                  class="control-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <circle cx="10.5" cy="10.5" r="6.5" />
-                  <path d="m16 16 5 5" /></svg
-                ><input
-                  id="searchInput"
-                  type="search"
-                  placeholder="Search subject or sender ( / )"
-                  autocomplete="off"
-              /></label>
-              <button
-                class="icon-button"
-                id="clearFiltersButton"
-                type="button"
-                title="Clear search and filters"
-                aria-label="Clear search and filters"
-              >
-                <svg
-                  class="control-icon"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                >
-                  <path d="m6 6 12 12M18 6 6 18" />
-                </svg>
-              </button>
-            </div>
-          </div>
           <div class="toolbar" id="selectionToolbar" hidden>
             <label class="check-wrap"
               ><input id="selectAll" type="checkbox" /><span class="sr-only"
@@ -234,9 +192,15 @@
                 </button>
               </div>
             </details>
-            <h2 class="list-heading">
-              <span id="listTitle">Inbox</span
-              ><span class="list-context" id="listContext">All accounts</span>
+            <div class="segmented-control" role="group" aria-label="Date range">
+              <button class="segment is-active" data-type-filter="all" type="button">All</button>
+              <button class="segment" data-type-filter="today" type="button">Today</button>
+              <button class="segment" data-type-filter="backlog" type="button">Earlier</button>
+            </div>
+            <div class="filter-chips" id="filterChips"></div>
+            <h2 class="sr-only">
+              <span id="listTitle">Inbox</span>
+              <span id="listContext">All accounts</span>
             </h2>
             <span class="selection-count" id="selectionCount">0 messages</span>
             <button
@@ -344,6 +308,14 @@
             </button>
           </div>
         </main>
+        <div
+          class="splitter"
+          data-split="list"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize message list"
+          tabindex="0"
+        ></div>
 
         <section
           class="preview-pane"
@@ -874,5 +846,6 @@
     <script src="rowactions.js" defer></script>
     <script src="reader.js" defer></script>
     <script src="shortcuts.js" defer></script>
+    <script src="panes.js" defer></script>
   </body>
 </html>

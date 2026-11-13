@@ -7,6 +7,19 @@ contain breaking changes; they are called out.
 
 ## [Unreleased]
 
+### Changed
+
+- The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the
+  synthetic fixture at 1440 px), so about twice as many messages fit. Folders, including Drafts and a **Done**
+  folder that replaces the Pending / Completed / All switch, move from tabs to the folder pane. Search
+  moves to the top bar. The list header becomes one row: date range, filter chips, count. Rows are two
+  fixed lines with an avatar that turns into the checkbox, the sender's name without the address, and the
+  category on the subject line; unread rows are bold with a blue edge bar. Each folder, category and
+  account shows one number, its unread mail; the "automatic", "awaiting classification" and per-entry
+  "N unread" texts, the duplicate "All accounts" entry and the per-row account name with one account, the
+  "Unclassified" chip and the scope breadcrumb are gone.
+- Both pane borders can be dragged (or moved with ←/→) to resize; widths are kept per device.
+
 ### Added
 
 - Messages with an HTML version open formatted, as in Gmail: the sender's layout, buttons and inline
