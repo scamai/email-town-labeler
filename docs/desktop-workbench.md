@@ -108,6 +108,24 @@ email-town-labeler desktop --no-browser
 | 其他邮箱（iCloud、Yahoo、QQ…） | TLS IMAP/SMTP + 应用专用密码 | 输入邮箱地址后，常见服务商会自动填好服务器设置并给出生成应用专用密码的链接；其他服务商需填写服务器 |
 | 已有 Email Town 目录 | 填写该账户的 `--home` 绝对目录 | 该目录包含自己的有效 Gmail 授权 |
 
+### 下载版现在能连哪些邮箱
+
+从 Releases 页面下载的应用（到 v0.1.6 为止）**没有内置 Google 登录客户端，也没有内置 Microsoft 应用 ID**，
+所以“Google / Gmail”和“Microsoft / Outlook”两个按钮对普通用户还用不了。能直接用的是应用专用密码这条路：
+
+| 邮箱 | 下载版能不能直接用 | 怎么做 |
+|---|---|---|
+| Gmail（个人） | 能，用应用专用密码 | 先在 Google 账户开启两步验证，到 [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) 生成 16 位应用专用密码；在 Email Town 里点 **Accounts → +** → **Other email**，填 Gmail 地址和这个密码。这条路不保留 Gmail 标签 |
+| Gmail（公司 Google Workspace） | 看管理员 | 同上；如果管理员关闭了 IMAP 或应用专用密码，就连不上，需要找管理员 |
+| iCloud、Yahoo、AOL、Fastmail、Zoho、QQ 邮箱 | 能 | **Other email** → 填地址，应用会自动填好服务器并给出生成应用专用密码（QQ 叫“授权码”）的链接 |
+| Outlook.com / Hotmail / Microsoft 365 | 暂时不能 | 需要自己在 Microsoft Entra 注册公共客户端应用，把应用 ID 填进 **Use your own Microsoft app registration**；普通用户做不了，等后续版本内置 |
+| 网易 163 / 126 | 不能 | 需要 IMAP ID 握手，尚未支持 |
+
+点“Google / Gmail”浏览器登录（不需要应用专用密码、也不用开两步验证），要等发布版内置 Google 登录客户端，并通过 Google 对
+`gmail.modify` 权限的审核。在那之前，用 `scripts/build_app.py --google-client` 构建的内部版本只允许项目里登记的测试用户登录，
+且每 7 天要在账户的“⋯”里重新授权一次（[原因](google-cloud-setup.md#4-audience-testing-vs-production-external-only)）。
+非 Google 邮箱完全不受 Google 审核影响。
+
 已内置 Gmail、iCloud、Yahoo、AOL、Fastmail、Zoho、QQ 邮箱的建议设置，可在“Server settings”中修改。Outlook.com、Hotmail、Live
 地址会引导到 Microsoft 登录，因为 Outlook.com 已不再接受应用专用密码。网易 163/126 需要 IMAP ID 握手，目前尚未支持。
 
