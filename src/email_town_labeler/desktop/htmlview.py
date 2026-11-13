@@ -22,6 +22,7 @@ from urllib.parse import quote, unquote, urlsplit
 from .images import MAX_IMAGE_BYTES, RASTER_TYPES, remote_image_url
 
 MAX_HTML = 262144
+BLANK_PIXEL = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
 
 # Tags kept as they are (attributes filtered).
 ALLOWED = frozenset(
@@ -255,7 +256,9 @@ class _Sanitizer(HTMLParser):
             if src:
                 kept.append(("src", src))
             else:
-                kept.append(("data-blocked", ""))
+                # A transparent pixel keeps the sender's layout (width/height) without the engine's
+                # broken-image frame; the alt text stays for screen readers.
+                kept += [("src", BLANK_PIXEL), ("data-blocked", "")]
         rendered = "".join(f' {n}="{escape(v, quote=True)}"' for n, v in kept)
         self.out.append(f"<{tag}{rendered}>")
         if closed and tag not in VOID:
@@ -298,11 +301,11 @@ class _Sanitizer(HTMLParser):
 
 BASE_CSS = (
     "html{color-scheme:light;background:#fff}"
-    "body{margin:0;padding:4px 0 16px;color:#202124;background:#fff;"
+    "body{margin:0;padding:16px;color:#202124;background:#fff;"
     "font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
     "overflow-wrap:anywhere}"
     "img{max-width:100%;height:auto}"
-    "img[data-blocked]{display:inline-block;color:#5f6368;font-size:12px}"
+    "img[data-blocked]{background:#f1f3f4}"
     "table{max-width:100%}"
     "pre{white-space:pre-wrap}"
     "a{color:#1a73e8}"

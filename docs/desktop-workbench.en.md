@@ -166,7 +166,8 @@ HTTPS external images stay hidden until **Show images** (formatted) or **Load ex
 text) is clicked for that message. This can tell the sender the message was opened. Unsupported sources, SVGs and oversized inline files can be viewed
 through the original message or downloaded attachments. Gmail and Outlook links open the original message.
 
-Opening a message marks it read in its mailbox, as Gmail does: the row loses its bold and blue dot at once, and the
+Staying on a message for 1.5 seconds marks it read in its mailbox, as Gmail's reading pane does (passing
+over it with j/k does not): the row loses its bold and blue dot at once, and the
 write follows in the background (a failed write puts the row back). **Mark unread** keeps it unread until you open it
 again. Accounts without mail-management permission, or paused, are left unchanged. The open folder's tab shows its
 unread count for the current filters.

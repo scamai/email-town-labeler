@@ -548,6 +548,11 @@
       allowed: allowed(action, chosen),
     });
     if (!allowed(action, chosen)) return;
+    // An explicit read/unread on the open message settles it: the delayed open-to-read must not undo it.
+    if (["read", "unread"].includes(action) && chosen.includes(host.state.activeId)) {
+      local.explicitFlag = host.state.activeId;
+      host.holdUnread(host.state.activeId, null);
+    }
     const names = unique(
       chosen.map(
         (id) =>
@@ -661,22 +666,30 @@
       )
       .forEach((node) => node.remove());
   }
-  // As in Gmail: a message you open is read. Shown at once, written to the mailbox in the background.
-  // Once per open: a detail reload after another action (e.g. "Mark unread") must not read it again;
-  // only opening a different message and coming back does.
+  // As in Gmail's reading pane: a message you stay on is read. Passing over it with j/k is not reading
+  // it, so the read is written only after READ_AFTER_MS on the same message. Once per open: a detail
+  // reload after another action must not read it again, and an explicit Mark read/unread on the open
+  // message settles it for this open; only opening a different message and coming back starts over.
+  const READ_AFTER_MS = 1500;
   async function markReadOnOpen(id) {
     const log = (decision, extra = {}) =>
       host.uiLog?.("auto-read", { id: host.k8(id), decision, ...extra });
     if (local.autoRead === id) return log("skip:already-handled-this-open");
     local.autoRead = id;
+    const opened = local.opened;
+    await new Promise((resolve) => setTimeout(resolve, READ_AFTER_MS));
+    if (host.state.activeId !== id || local.opened !== opened) return log("skip:left-within-1.5s");
+    if (local.explicitFlag === id) return log("skip:user-set-read-state");
     const message = host.state.messages.find((m) => m.id === id);
     if (!message?.unread) return log("skip:not-unread");
     if (!accountFor(message.account_id)?.capabilities?.write) return log("skip:read-only-account");
     log("mark-read");
-    const show = (unread) => {
-      message.unread = unread;
-      if (host.state.activeId === id) $("previewUnread").hidden = !unread;
+    const show = (unread, seq = null) => {
+      host.holdUnread(id, unread === null ? null : unread, seq);
+      const current = host.state.messages.find((m) => m.id === id);
+      if (host.state.activeId === id && current) $("previewUnread").hidden = !current.unread;
       host.renderScope();
+      host.renderList();
       render();
     };
     show(false);
@@ -685,11 +698,16 @@
         method: "POST",
         body: JSON.stringify({ id, read: true }),
       });
-      log(result.ok ? "done" : "refused", { changed: Boolean(result.changed) });
-      if (!result.ok) show(true);
+      log(result.ok ? "done" : "refused", { changed: Boolean(result.changed), seq: result.seq ?? "-" });
+      if (!result.ok) {
+        show(true); // put the row back, then let the server's state decide again
+        host.holdUnread(id, null);
+      } else if (result.changed && Number.isFinite(result.seq)) show(false, result.seq);
+      else host.holdUnread(id, null);
     } catch (_) {
       log("failed");
-      show(true);
+      host.holdUnread(id, null);
+      await host.loadState(); // the server's state, not a guess
     }
   }
   async function loadDetail(id) {
@@ -943,6 +961,7 @@
       host.uiLog?.("open-changed", { from: host.k8(local.opened), to: host.k8(id) });
       local.opened = id; // a new open: allow one open-to-read for it
       local.autoRead = null;
+      local.explicitFlag = null;
     }
     if (id && id !== local.detailId) loadDetail(id);
     if (!id) {

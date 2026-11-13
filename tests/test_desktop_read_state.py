@@ -111,7 +111,7 @@ def test_open_marks_read_now_writes_in_background_and_a_stale_list_does_not_undo
     syncing = threading.Thread(target=workbench._refresh)
     syncing.start()
     assert listed.wait(5)  # a sync has read UNREAD and holds the account
-    assert workbench.mark_read(key) == {"ok": True, "changed": True}
+    assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
     assert _row(workbench, key)["unread"] is False  # shown read before the mailbox confirms
     release.set()  # the stale list now publishes UNREAD; the write waits for the account
     syncing.join(5)
@@ -157,7 +157,7 @@ def test_an_explicit_mark_unread_wins_over_open_to_read(tmp_path):
     workbench.refresh = lambda **kwargs: None
     key = message_key(first, "one")
     reader.sequence("read")
-    assert workbench.mark_read(key) == {"ok": True, "changed": True}
+    assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
     assert reader.started["read"].wait(5)  # the open is in flight before the explicit unread
     workbench.mail_action({"request_id": "explicit_unread_456", "ids": [key], "action": "unread"})
     assert _row(workbench, key)["unread"] is True
@@ -201,7 +201,7 @@ def test_open_queued_before_explicit_unread_cannot_write_after_it(tmp_path):
 
     workbench.reader_locks[first] = AutomaticReadGate()
     try:
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         workbench.mail_action({"request_id": "explicit_unread_123", "ids": [key], "action": "unread"})
         assert second_write.wait(5), "both provider writes did not finish"
         assert _until(lambda: workbench.mail_store.receipt("explicit_unread_123")["status"] == "complete")
@@ -222,7 +222,7 @@ def test_repeated_opens_share_one_queued_write_and_one_optimistic_intent(tmp_pat
     key = message_key(first, "one")
     reader.sequence("read")
     try:
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert reader.started["read"].wait(5)
         for _ in range(3):
             assert workbench.mark_read(key) == {"ok": True, "changed": False}
@@ -251,10 +251,10 @@ def test_reopen_after_explicit_unread_is_the_latest_queued_intent(tmp_path):
     key = message_key(first, "one")
     reader.sequence("read", "unread")
     try:
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert reader.started["read"].wait(5)
         workbench.mail_action({"request_id": "explicit_unread_012", "ids": [key], "action": "unread"})
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert workbench.mark_read(key) == {"ok": True, "changed": False}
         assert _row(workbench, key)["unread"] is False
 
@@ -285,7 +285,7 @@ def test_open_and_explicit_unread_keep_latest_intent_through_failures(tmp_path, 
     key = message_key(first, "one")
     reader.sequence("read", "unread")
     try:
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert reader.started["read"].wait(5)
         workbench.mail_action({"request_id": "explicit_unread_789", "ids": [key], "action": "unread"})
         assert _row(workbench, key)["unread"] is True
@@ -336,7 +336,7 @@ def test_failed_open_restores_unread_immediately_after_stale_publication(tmp_pat
     try:
         syncing.start()
         assert observer.publication_waiting.wait(5)  # UNREAD is captured; publication is separate
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert reader.started["read"].wait(5)
         observer.release_publication.set()
         assert observer.published.wait(5)
@@ -368,7 +368,7 @@ def test_epoch_rejects_a_pre_write_list_after_successful_open(tmp_path):
     try:
         syncing.start()
         assert observer.publication_waiting.wait(5)  # the provider write can finish independently now
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert observer.outbox_empty.wait(5)
         assert "UNREAD" not in reader.records[0]["label_ids"]
 
@@ -393,7 +393,7 @@ def test_external_read_state_changes_are_accepted_after_the_outbox_finishes(tmp_
     key = message_key(first, "one")
     observer = RefreshObserver(workbench, first, gate_publication=False)
     try:
-        assert workbench.mark_read(key) == {"ok": True, "changed": True}
+        assert workbench.mark_read(key).items() >= {"ok": True, "changed": True}.items()
         assert observer.outbox_empty.wait(5)
         assert _row(workbench, key)["unread"] is False
 

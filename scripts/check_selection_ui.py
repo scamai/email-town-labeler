@@ -9,6 +9,7 @@ bulk action on a range landing in the fixture mailbox. WebKit (the macOS app's e
 
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import threading
@@ -97,7 +98,11 @@ def main() -> int:
                 expect(selected).to_have_count(1)
                 expect(subject).to_have_text("Fixture message 1")
 
-                # Select by state: Message 1 was opened, so it is read; the other six are unread.
+                # Select by state: Message 1 stayed open past the 1.5 s read delay, so it is read; the
+                # other six are unread.
+                expect(rows.filter(has_text="Fixture message 1").first).not_to_have_class(
+                    re.compile(r"\bis-unread\b")
+                )
                 page.locator("#selectMenu > summary").click()
                 expect(page.locator("[data-select='unread']")).to_be_visible()
                 page.screenshot(path=str(out / f"{engine}-menu.png"))

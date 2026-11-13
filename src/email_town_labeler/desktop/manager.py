@@ -718,7 +718,10 @@ class Workbench:
                     "action": "read" if read else "unread",
                 }
             )
-        return {"ok": True, "changed": True}
+        with self.lock:
+            # Every snapshot numbered above this one carries the queued read flag: the page holds its
+            # own "read" until it sees one, so an older answer still in flight cannot flip it back.
+            return {"ok": True, "changed": True, "seq": self.seq}
 
     def account_capabilities(self, aid):
         reader = self.readers.get(aid)

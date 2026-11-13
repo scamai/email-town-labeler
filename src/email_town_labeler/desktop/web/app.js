@@ -334,6 +334,13 @@
   }
   // What the user did, for desktop.log: event names, 8-character message-key prefixes, counts and
   // command words only (the server drops anything else). Sent in batches; never subjects or addresses.
+  const flagHolds = new Map(); // message id -> { unread, seq }: see applyState
+  function holdUnread(id, unread, seq = null) {
+    if (unread === null) flagHolds.delete(id);
+    else flagHolds.set(id, { unread, seq });
+    const message = state.messages.find((m) => m.id === id);
+    if (message && unread !== null) message.unread = unread;
+  }
   const uiQueue = [];
   let uiTimer = null;
   const k8 = (id) => String(id || "").slice(0, 8) || "-";
@@ -1342,6 +1349,17 @@
       modelError: data.model_error || "",
       modelStatus: data.model_status || null,
     };
+    // A read flag the page set itself (opening a message) holds until a snapshot newer than the server's
+    // acknowledgement arrives: a long-poll answer generated before the write must not undo it.
+    next.messages.forEach((m) => {
+      const hold = flagHolds.get(m.id);
+      if (!hold) return;
+      if (hold.seq !== null && Number(data.seq) > hold.seq) flagHolds.delete(m.id);
+      else if (m.unread !== hold.unread) {
+        uiLog("flag-held", { id: k8(m.id), seq: Number(data.seq), until: hold.seq ?? "ack" });
+        m.unread = hold.unread;
+      }
+    });
     // The server's answer changing a flag the page already showed: what a list refresh or queued write did.
     if (state.initialized) {
       const before = new Map(state.messages.map((m) => [m.id, m]));
@@ -1868,6 +1886,7 @@
     api,
     uiLog,
     k8,
+    holdUnread,
     fetchBinary: async (path, { signal } = {}) => {
       const headers = { "X-Email-Town": "local" };
       if (state.sessionToken)

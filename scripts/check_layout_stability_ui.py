@@ -14,6 +14,7 @@ WebKit (the macOS app's engine) and Chromium. --report lists every shift instead
 
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import threading
@@ -146,6 +147,10 @@ def main() -> int:
                     if width >= 1200:  # the reading pane, with its own buttons, folds and cards
                         page.locator(".message-row .row-open").first.click()
                         expect(page.locator("[data-compose-mode='reply']")).to_be_visible()
+                        # Opening reads the message after 1.5 s; the counts change then, not on hover.
+                        expect(page.locator(".message-row").first).not_to_have_class(
+                            re.compile(r"\bis-unread\b")
+                        )
                     rest = page.locator(".app-footer").bounding_box()
                     neutral = (rest["x"] + rest["width"] / 2, rest["y"] + rest["height"] / 2)
                     page.mouse.move(*neutral)

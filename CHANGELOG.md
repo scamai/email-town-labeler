@@ -22,6 +22,13 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- Passing over messages with j/k no longer reads them: as in Gmail's reading pane, a message is marked read
+  after 1.5 s on it. Mark unread on the open message sticks for that open, even inside the delay.
+- A state answer produced just before an open's mark-read could arrive after it and show the open message
+  unread again for a moment (seen in a real session's log); the page now holds its read flag until a newer
+  answer arrives.
+- The formatted view has no frame line, its text lines up with the sender, and hidden external images leave
+  a blank space instead of a broken-image box.
 - Opening a message no longer fails when its automatic mark-read lands while the body is being read:
   the preview uses the body it just loaded instead of looking the cache up a second time.
 
