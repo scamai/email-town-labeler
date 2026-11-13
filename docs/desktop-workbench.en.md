@@ -114,6 +114,25 @@ mailboxes. The display name is optional: left empty, the account is listed by it
 | Other email (iCloud, Yahoo, QQ…) | Verified TLS IMAP/SMTP with an app password | Type the address: known providers fill the server settings and link to where the app password is created. Others need the server names. |
 | Existing Email Town folder | Explicit absolute `--home` directory | Its own valid Gmail token |
 
+### What a downloaded copy can connect today
+
+The app on the Releases page (through v0.1.6) **ships no Google sign-in client and no Microsoft app ID**, so the
+**Google / Gmail** and **Microsoft / Outlook** buttons are not usable for most people yet. App passwords work now:
+
+| Mailbox | Works in the downloaded app? | How |
+|---|---|---|
+| Gmail (personal) | Yes, with an app password | Turn on 2-Step Verification, create a 16-character app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords), then in Email Town choose **Accounts → +** → **Other email** and enter the address and that password. Gmail labels are not kept this way |
+| Gmail (Google Workspace) | Depends on the administrator | As above; if the administrator turned off IMAP or app passwords, it cannot connect |
+| iCloud, Yahoo, AOL, Fastmail, Zoho, QQ Mail | Yes | **Other email** → type the address; the server settings are filled in and the dialog links to where the app password (QQ: authorization code) is created |
+| Outlook.com / Hotmail / Microsoft 365 | Not yet | Needs your own public-client registration in Microsoft Entra, entered under **Use your own Microsoft app registration**; a later version will ship one |
+| NetEase 163 / 126 | No | Needs an IMAP ID handshake that is not implemented |
+
+Browser sign-in with **Google / Gmail** (no app password, no 2-Step Verification needed) arrives once a release ships
+the Google sign-in client and Google has verified the `gmail.modify` scope. Until then, builds made with
+`scripts/build_app.py --google-client` let only the project's registered test users sign in, and they reauthorize
+from the account's **⋯** menu every 7 days ([why](google-cloud-setup.md#4-audience-testing-vs-production-external-only)).
+Non-Google mailboxes do not depend on Google's review at all.
+
 Suggested settings exist for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and QQ Mail; they stay editable under
 **Server settings**. Outlook.com, Hotmail and Live addresses are routed to Microsoft sign-in, because Outlook.com
 no longer accepts app passwords. NetEase (163/126) needs an IMAP ID handshake that is not implemented yet.

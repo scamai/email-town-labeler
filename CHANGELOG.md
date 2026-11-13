@@ -13,6 +13,9 @@ contain breaking changes; they are called out.
   company project's client into the app (never into the public repository), so connecting a Gmail account
   needs no client file of the user's own. While the project is unverified, only its test users can sign in.
 
+- The workbench guide says which mailboxes a downloaded copy can connect today (app passwords: Gmail, iCloud,
+  Yahoo, QQ and others) and which wait for a shipped sign-in client (Google browser sign-in, Microsoft).
+
 ### Changed
 
 - The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the
