@@ -23,7 +23,7 @@
   --category-promotional-dot: #db3f7f;
   --category-travel-dot: #0b98b4;
   --category-updates-dot: #b08600;
-  --category-unknown-dot: #8a96a6;
+  --category-unknown-dot: #748093;
   color-scheme: light dark;
   --bg: #f6f8fc;
   --surface: #fff;
@@ -266,27 +266,32 @@ button:disabled {
 .count {
   font-variant-numeric: tabular-nums;
 }
-/* ─── Application grid ─── */
+/* ─── Application grid ───
+   One alignment rule: every pane's content starts on its gutter (sidebar items at 20px, list rows and
+   list toolbar at 16px, the reading pane at 24px), and every row in a pane shares its height step. */
 .app-shell {
   height: 100dvh;
   min-height: 0;
   /* The page itself never scrolls: only the panes do. Anything that escapes a pane is clipped here
      instead of making the document taller, where a trackpad scroll would slide the whole app up. */
   overflow: clip;
+  --sidebar-w: 232px; /* pane widths: panes.js sets them from a drag */
+  --list-w: 420px;
   display: grid;
-  grid-template-rows: 64px minmax(0, 1fr) auto;
+  grid-template-rows: 52px minmax(0, 1fr) auto;
 }
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: calc(var(--sidebar-w) - 20px) minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 24px;
   gap: 16px;
+  padding: 0 16px 0 20px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
 .brand-lockup,
 .topbar-actions,
+.topbar-search,
 .dialog-heading,
 .dialog-actions,
 .section-label,
@@ -295,42 +300,125 @@ button:disabled {
   align-items: center;
 }
 .brand-lockup {
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 .brand-mark {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
 }
 h1 {
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.25;
+  white-space: nowrap;
 }
-.brand-lockup p {
+.topbar-search {
+  gap: 4px;
+  min-width: 0;
+  max-width: 640px;
+}
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
   color: var(--muted);
-  font-size: 12px;
+}
+.search-field:focus-within {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: 2px solid var(--accent-soft);
+}
+.search-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.topbar-search .icon-button {
+  width: 32px;
+  min-height: 32px;
+  flex-basis: 32px;
 }
 .topbar-actions {
   gap: 8px;
   flex-shrink: 0;
+  justify-content: flex-end;
 }
+.topbar-actions .icon-button {
+  width: 36px;
+  min-height: 36px;
+  flex-basis: 36px;
+}
+.topbar .button-primary {
+  min-height: 36px;
+}
+/* Three panes with draggable borders (panes.js); widths are per-viewer and kept between launches. */
 .workspace {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns: 224px minmax(360px, 0.85fr) minmax(440px, 1.15fr);
+  grid-template-columns: var(--sidebar-w) 0 var(--list-w) 0 minmax(360px, 1fr);
+}
+.splitter {
+  position: relative;
+  z-index: 2;
+  width: 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+/* An 8px grab area centred on the pane border; the border itself turns accent while dragging. */
+.splitter::before {
+  content: "";
+  position: absolute;
+  inset: 0 -4px;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0 -1px;
+  background: transparent;
+  transition: background-color 160ms var(--ease);
+}
+.splitter:hover::after,
+.splitter.is-dragging::after,
+.splitter:focus-visible::after {
+  background: var(--accent);
+}
+.splitter:focus-visible {
+  outline: none;
 }
 .sidebar {
-  padding: 16px 12px;
+  min-width: 0;
+  padding: 8px;
   border-right: 1px solid var(--line);
-  background: var(--surface);
+  background: var(--bg);
   overflow: auto;
   scrollbar-width: thin;
+}
+.sidebar-heading.mobile-only {
+  display: none;
 }
 .sidebar-heading {
   padding: 0 12px 8px;
   justify-content: space-between;
+  gap: 8px;
+}
+.sidebar-heading h2 {
+  margin-right: auto;
 }
 .sidebar-heading h2,
 .section-label {
@@ -341,28 +429,55 @@ h1 {
 .filter-nav,
 .filter-list {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
+/* Every sidebar entry: icon or dot, label, and its unread number at the right edge. */
 .nav-item,
 .account-filter,
 .category-filter {
   width: 100%;
-  min-height: 40px;
-  padding: 8px 12px;
+  min-height: 32px;
+  padding: 0 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--text);
   text-align: left;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.25;
+}
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.folder-label,
+.nav-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-count,
+.folder-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 .nav-item:hover,
-.account-filter:hover,
+.account-filter:not(.is-static):hover,
 .category-filter:hover {
   background: var(--surface-2);
 }
@@ -373,85 +488,49 @@ h1 {
   color: var(--accent);
   font-weight: 600;
 }
+.nav-item.is-active .nav-icon {
+  stroke: var(--accent);
+}
+.nav-item.is-active .folder-count,
+.account-filter.is-active .nav-count {
+  color: var(--accent);
+}
+.account-filter.is-static {
+  cursor: default;
+}
 .sidebar-section {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .section-label {
   justify-content: space-between;
-  min-height: 32px;
-  padding: 0 12px 4px;
+  min-height: 28px;
+  padding: 0 4px 0 12px;
 }
-.section-label .muted {
-  margin-left: 4px;
-  font-weight: 400;
-}
-.section-label .text-button {
-  padding: 4px;
-}
-.segmented-control {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 4px;
-  background: var(--surface-2);
-  border-radius: 6px;
-}
-.segment {
-  border: 0;
-  background: transparent;
+.section-add {
+  width: 24px;
+  min-height: 24px;
+  flex-basis: 24px;
+  font-size: 16px;
   color: var(--muted);
-  min-height: 32px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.segment.is-active {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-}
-.segment:hover {
-  color: var(--text);
 }
 .account-entry {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
+  grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
+  gap: 2px;
 }
-.account-entry .icon-button {
-  width: 32px;
-  min-height: 40px;
-}
-.account-filter {
-  align-items: flex-start;
-}
-.account-filter span:first-child {
-  overflow-wrap: anywhere;
-}
-.account-label {
-  display: grid;
-  min-width: 0;
+.account-manage {
+  width: 28px;
+  min-height: 28px;
+  flex-basis: 28px;
+  font-size: 16px;
+  color: var(--muted);
 }
 .account-status {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-.nav-metrics {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   flex-shrink: 0;
-}
-.nav-metrics .unread-count {
-  color: var(--muted);
+  color: var(--danger);
   font-size: 12px;
-  font-weight: 400;
-}
-.local-note {
-  margin: 24px 12px 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 12px;
+  font-weight: 600;
 }
 .app-footer {
   min-height: 32px;
@@ -549,7 +628,7 @@ kbd {
 .sync-indicator.is-loading .status-dot {
   background: var(--warning);
 }
-/* ─── Message list: one gutter, stable three-line rows ─── */
+/* ─── Message list ─── */
 .message-pane {
   min-width: 0;
   min-height: 0;
@@ -558,139 +637,82 @@ kbd {
   flex-direction: column;
   background: var(--surface);
 }
-.mail-operations {
-  padding: 0 var(--pane-gutter);
-  border-bottom: 1px solid var(--line);
-}
-.folder-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-.folder-tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-width: 0;
-  min-height: 40px;
-  padding: 4px 6px;
-  white-space: nowrap;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-.folder-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.folder-tab:hover {
-  background: var(--surface-2);
-}
-.folder-tab.is-active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-.folder-count {
-  display: inline-block;
-  flex-shrink: 0;
-  min-width: 20px;
-  margin-left: 0;
-  padding: 0 6px;
-  border-radius: 10px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12px;
-  line-height: 20px;
-}
-/* The list header is two slim rows (search; select + title + count) so the rows below get the height. */
-.pane-header {
-  padding: 8px var(--pane-gutter);
-}
-.pane-header .icon-button {
-  width: 32px;
-  min-height: 32px;
-  flex-basis: 32px;
-}
-.list-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-.list-heading > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-#listTitle {
-  flex-shrink: 0;
-}
-.list-context {
-  min-width: 0;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-.list-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.search-field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--control-border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--muted);
-}
-.search-field:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.search-field input {
-  width: 100%;
-  min-width: 0;
-  padding: 4px 0;
-  border: 0;
-  outline: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-}
+/* One slim header: select, date range, active filters, count. Its checkbox sits on the rows' avatar column. */
 .toolbar {
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   gap: 8px;
-  min-height: 36px;
-  padding: 2px var(--pane-gutter);
-  border-block: 1px solid var(--line);
-  background: var(--bg);
+  min-height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .check-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
   min-height: 32px;
-  font-size: 12px;
-  color: var(--muted);
+  flex-shrink: 0;
   cursor: pointer;
+}
+.select-menu summary {
+  width: 24px;
+  min-height: 28px;
+  padding: 0;
+  margin-left: -8px;
+}
+.segmented-control {
+  display: flex;
+  flex-shrink: 0;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+.segment {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.segment.is-active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.segment:hover {
+  color: var(--text);
+}
+.filter-chips {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 160px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.filter-chip:hover {
+  border-color: var(--accent);
 }
 .selection-count {
   margin-left: auto;
@@ -785,10 +807,11 @@ input[type="checkbox"] {
   --row-bg: var(--surface); /* the row's own colour, which its floating hover controls take too */
   position: relative; /* keeps the row's screen-reader preview (.sr-only, absolute) inside the list */
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 32px minmax(0, 1fr);
   gap: 12px;
-  align-items: start;
-  padding: 16px var(--pane-gutter);
+  align-items: center;
+  min-height: 60px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--row-bg);
   cursor: pointer;
@@ -800,45 +823,100 @@ input[type="checkbox"] {
 .message-row.is-focused {
   --row-bg: var(--accent-soft);
 }
-.message-row.is-focused {
-  box-shadow: inset 3px 0 var(--accent);
+/* Outlook's unread mark: a bar on the row's left edge, so read and unread text start at the same place. */
+.message-row.is-unread::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+}
+/* The avatar becomes the row's checkbox while pointing at the row, focusing it, or selecting. */
+.row-lead {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+.row-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: hsl(var(--avatar-hue, 210) var(--avatar-saturation) var(--avatar-lightness));
+  color: var(--on-avatar);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
 }
 .row-check {
-  align-self: start;
-  margin-top: 4px !important;
-  grid-column: 1;
-  grid-row: 1;
+  position: absolute;
+  inset: 0;
+  width: 18px;
+  height: 18px;
+  margin: auto !important;
+  opacity: 0;
 }
-.message-row > .row-content {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+.message-row:hover .row-check,
+.message-row:focus-within .row-check,
+.message-row.is-selected .row-check,
+.has-selection .row-check {
+  opacity: 1;
 }
-/* Gmail's row controls: a star under the checkbox; Archive / Trash / read-unread replace the time
-   on hover or keyboard focus, on devices that can hover. */
+.message-row:hover .row-avatar,
+.message-row:focus-within .row-avatar,
+.message-row.is-selected .row-avatar,
+.has-selection .row-avatar {
+  visibility: hidden;
+}
+@media (hover: none) {
+  .row-check {
+    opacity: 1;
+  }
+  .row-avatar {
+    visibility: hidden;
+  }
+}
 .row-star,
 .row-action {
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--muted);
+  flex-shrink: 0;
 }
-.row-star {
-  grid-column: 1;
-  grid-row: 2;
-  margin-left: -6px;
+.row-action {
+  width: 28px;
+  height: 28px;
 }
 .row-star svg,
+.row-action svg {
+  width: 16px;
+  height: 16px;
+}
 .row-action svg {
   width: 18px;
   height: 18px;
 }
 .row-star.is-starred {
   color: #e0a100;
+}
+/* An unstarred star appears only on the row being pointed at; its slot is always kept. */
+@media (hover: hover) {
+  .row-star:not(.is-starred) {
+    visibility: hidden;
+  }
+  .message-row:hover .row-star,
+  .message-row:focus-within .row-star {
+    visibility: visible;
+  }
 }
 .row-star:hover,
 .row-action:hover {
@@ -850,14 +928,14 @@ input[type="checkbox"] {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* The controls float over the end of the title line and the time stays in place, invisible: showing them
-   never changes the line's height or the sender's width, so pointing along the list moves nothing. */
+/* Archive / Trash / read-unread float over the end of the sender line, where the time is, on rows that
+   are pointed at or focused. The time stays in place, invisible, so nothing on the line moves. */
 .row-actions {
   position: absolute;
   top: 50%;
   right: 0;
   display: flex;
-  gap: 4px;
+  gap: 2px;
   padding-left: 8px;
   background: var(--row-bg);
   transform: translateY(-50%);
@@ -876,82 +954,84 @@ input[type="checkbox"] {
 .row-content {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
-.row-title {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-.row-title time {
-  flex-shrink: 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-.row-sender {
-  min-width: 0;
-  font-size: 13px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.row-open {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  width: 100%;
-  min-height: 24px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  font-size: 15px;
-  line-height: 1.5;
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
-/* Unread is heavier, not wider: the subject wraps over up to two lines, and a bolder face would wrap it
-   differently, so opening a message would resize its row and move the list under the pointer. A stroke
-   thickens the glyphs and keeps their widths. The sender and time sit on one line and use real bold. */
-.message-row.is-unread .row-subject {
-  -webkit-text-stroke: 0.04em currentColor;
-}
-.message-row.is-unread .row-sender,
-.message-row.is-unread .row-title time {
-  color: var(--text);
-  font-weight: 700;
-}
-/* The unread dot sits in the row's left margin, so read and unread text start at the same place. */
-.message-row.is-unread::before {
-  content: "";
-  position: absolute;
-  top: 22px; /* centred on the sender line: 16px padding + half its 19.5px line */
-  left: calc(var(--pane-gutter) / 2 - 4px);
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-}
+.row-title,
 .row-meta {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-  font-size: 12px;
+  min-width: 0;
+  height: 20px;
 }
-.row-account {
+.row-title time {
+  flex-shrink: 0;
+  margin-left: auto;
   color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.row-sender,
+.row-open {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
   white-space: nowrap;
+}
+.row-sender {
+  font-size: 14px;
+  color: var(--text);
+}
+.row-open {
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+}
+/* Unread: sender and subject in the heavier face and the text colour; everything is on one line each,
+   so the heavier face cannot rewrap a row and move the list. */
+.message-row.is-unread .row-sender,
+.message-row.is-unread .row-subject {
+  color: var(--text);
+  font-weight: 600;
+}
+.message-row.is-unread .row-title time {
+  color: var(--accent);
+  font-weight: 600;
+}
+.row-meta .category-badge {
+  flex-shrink: 0;
+  min-height: 20px;
+  max-width: 120px;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.row-account {
+  flex-shrink: 1;
+  max-width: 120px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Rows of a read-only account have no star button; their star is shown as a mark instead. */
+.row-starred-badge {
+  flex-shrink: 0;
+  color: #e0a100;
+  font-size: 14px;
+}
+.message-row:has(.row-star) .row-starred-badge {
+  display: none;
 }
 .source-badge,
 .category-badge,
@@ -1349,12 +1429,15 @@ dialog::backdrop {
 /* ─── Content-driven responsive layouts ─── */
 @media (max-width: 1199px) {
   .workspace {
-    grid-template-columns: 216px minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-w) 0 minmax(0, 1fr);
+  }
+  .splitter[data-split="list"] {
+    display: none;
   }
   .preview-pane {
     display: none;
     position: absolute;
-    inset: 0 0 0 216px;
+    inset: 0 0 0 var(--sidebar-w);
     z-index: 3;
   }
   .preview-pane.is-open {
@@ -1372,8 +1455,21 @@ dialog::backdrop {
     --pane-gutter: 16px;
   }
   .topbar {
-    padding: 8px 12px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 0 12px;
     gap: 8px;
+  }
+  .splitter {
+    display: none;
+  }
+  .topbar h1 {
+    display: none;
+  }
+  .toolbar {
+    padding: 0 12px;
+  }
+  .message-row {
+    padding-inline: 12px;
   }
   .topbar-actions {
     gap: 4px;
@@ -1385,13 +1481,8 @@ dialog::backdrop {
   .brand-lockup {
     gap: 8px;
   }
-  .brand-lockup p,
   .brand-mark {
     display: none;
-  }
-  h1 {
-    font-size: 15px;
-    white-space: nowrap;
   }
   .topbar .button {
     padding: 0 8px;
@@ -1417,7 +1508,9 @@ dialog::backdrop {
   .sidebar.is-open {
     transform: translateX(0);
   }
-  .sidebar-heading {
+  .sidebar-heading,
+  .sidebar-heading.mobile-only {
+    display: flex;
     min-height: 40px;
   }
   .message-pane {
@@ -1535,57 +1628,30 @@ dialog::backdrop {
   color: var(--category-ink, var(--muted));
   background: var(--category-surface, var(--surface-2));
 }
-.category-filter[data-category-filter]:not([data-category-filter="all"]) {
-  justify-content: flex-start;
-}
-.category-filter[data-category-filter]:not(
-    [data-category-filter="all"]
-  )::before {
+/* A category entry: its colour dot, its name, its unread number. */
+.category-filter::before {
   content: "";
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
+  width: 8px;
+  height: 8px;
+  margin-inline: 5px;
+  flex: 0 0 8px;
   border-radius: 50%;
   background: var(--category-dot, var(--category-ink));
 }
 /* "Unclassified" is the absence of a category: a ring, not another colour to tell apart. */
-.category-filter[data-category-filter="unknown"]:not([data-category-filter="all"])::before {
+.category-filter[data-category="unknown"]::before {
   background: transparent;
   box-shadow: inset 0 0 0 2px var(--category-dot);
 }
-/* A shared 3px inset selection rail; hue signals the selected category. */
-.category-filter.is-active:not([data-category-filter="all"]) {
+.category-filter.is-empty {
+  color: var(--muted);
+}
+.category-filter.is-active {
   color: var(--category-ink);
   background: var(--category-surface);
-  box-shadow: inset 3px 0 var(--category-dot, var(--category-ink));
 }
-.category-filter.is-active::after {
-  content: "✓";
-  font-weight: 700;
-}
-/* Name over scoped unread/classification facts, with the loaded count on the right. */
-.category-filter {
-  align-items: flex-start;
-}
-.category-filter::before {
-  margin-top: 5px;
-}
-.category-label {
-  display: grid;
-  min-width: 0;
-}
-.category-stats {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-  overflow-wrap: anywhere;
-}
-.category-stats > span + span::before {
-  content: " · ";
-}
-.category-filter .count {
-  margin-left: auto;
-  line-height: 20px;
+.category-filter.is-active .nav-count {
+  color: var(--category-ink);
 }
 .unread-badge {
   color: var(--muted);
@@ -1621,4 +1687,12 @@ dialog::backdrop {
 .message-image figcaption,
 .image-notice {
   font-size: 0.85rem;
+}
+/* While a pane border is dragged, nothing else takes the pointer (the message frame would swallow it). */
+body.is-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.is-resizing iframe {
+  pointer-events: none;
 }

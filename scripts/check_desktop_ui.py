@@ -67,7 +67,7 @@ def check_palette(page, categories):
     """Measure rendered selected filters, dots and matching real message badges."""
     measured = []
     for category in categories:
-        button = page.locator(f'[data-category-filter="{category}"]')
+        button = page.locator(f'#categoryFilters [data-category="{category}"]')
         button.click()
         expect(button).to_have_attribute("aria-pressed", "true")
         colors = button.evaluate("""el => ({ink:getComputedStyle(el).color,
@@ -75,11 +75,9 @@ def check_palette(page, categories):
             dot:getComputedStyle(el,'::before').backgroundColor,
             ring:getComputedStyle(el,'::before').boxShadow,
             token:getComputedStyle(el).getPropertyValue('--category-dot').trim(),
-            sidebar:getComputedStyle(document.querySelector('.sidebar')).backgroundColor,
-            selected:getComputedStyle(el,'::after').content})""")
+            sidebar:getComputedStyle(document.querySelector('.sidebar')).backgroundColor})""")
         ratio = contrast(colors["ink"], colors["surface"])
         assert ratio >= 4.5, (category, ratio)
-        assert "✓" in colors["selected"], category
         # The dot has its own clear hue (not the dark text ink), readable as a mark on the sidebar.
         assert colors["token"], (category, "no --category-dot token")
         if category == "unknown":  # "Unclassified" is a ring: a transparent fill and a coloured inset
@@ -97,7 +95,8 @@ def check_palette(page, categories):
             )
             assert badge == {k: colors[k] for k in ("ink", "surface")}
         measured.append({"category": category, "contrast": round(ratio, 2)})
-    page.locator('[data-category-filter="all"]').click()
+        button.click()  # the selected category again: every category
+        expect(button).to_have_attribute("aria-pressed", "false")
     page.locator("#sidebar").evaluate("el => el.scrollTop = 0")
     return measured
 
@@ -147,7 +146,7 @@ def main():
                         width,
                     )
                     if width == 390:
-                        assert page.locator(".topbar").bounding_box()["height"] == 64
+                        assert page.locator(".topbar").bounding_box()["height"] == 52
                     page.screenshot(path=str(out / f"{theme}-{width}.png"))
                     page.locator(".row-open").first.focus()
                     page.keyboard.press("Enter")

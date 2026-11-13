@@ -437,77 +437,73 @@
     });
   }
 
+  // The sidebar shows one number per entry: its unread mail in the current scope, as in Gmail and Outlook.
+  // Totals, classification sources and completion live in each entry's tooltip and accessible name.
+  function sidebarEntry(className, label, unread, summary) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    const name = document.createElement("span");
+    name.className = "nav-label";
+    name.textContent = text(label);
+    const count = document.createElement("span");
+    count.className = "nav-count";
+    count.textContent = unread ? String(unread) : "";
+    button.append(name, count);
+    button.setAttribute("aria-label", summary);
+    button.title = summary;
+    return button;
+  }
   function renderFilters() {
     const focus = saveFocus();
     els.accountFilters.replaceChildren();
     const accountScope = filteredMessages("account");
-    [{ id: "all", name: "All accounts" }, ...state.accounts].forEach((account) => {
+    const several = state.accounts.length > 1;
+    // With one account there is nothing to choose between: "All accounts" would repeat that account.
+    const entries = several ? [{ id: "all", name: "All accounts" }, ...state.accounts] : state.accounts;
+    entries.forEach((account) => {
       const messages =
         account.id === "all"
           ? accountScope
           : accountScope.filter((message) => message.account_id === account.id);
       const { total, unread, done } = scopeStats(messages);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `account-filter${state.filters.account === account.id ? " is-active" : ""}`;
-      button.dataset.accountFilter = account.id;
-      button.setAttribute("aria-pressed", String(state.filters.account === account.id));
-      const label = document.createElement("span");
-      label.className = "account-label";
-      const name = document.createElement("span");
-      name.textContent = text(account.name);
-      const line = document.createElement("span");
-      line.className = "category-stats unread-count";
-      line.textContent = `${unread} unread`;
-      label.append(name, line);
-      const count = document.createElement("span");
-      count.className = "count";
-      count.textContent = String(total);
-      button.append(label, count);
       let status = "";
-      if (account.id !== "all") {
+      if (account.id !== "all")
         status = account.enabled === false ? "Paused" : account.status === "error" ? "Error" : "";
-        if (status) {
-          const badge = document.createElement("span");
-          badge.className = "account-status";
-          badge.textContent = status;
-          label.append(badge);
-        }
+      const summary = `${text(account.name)}: ${unread} unread of ${total} loaded in current scope, ${done} completed${status ? `, ${status}` : ""}`;
+      const active = several && state.filters.account === account.id;
+      const button = sidebarEntry(`account-filter${active ? " is-active" : ""}`, account.name, unread, summary);
+      if (several) {
+        button.dataset.accountFilter = account.id;
+        button.setAttribute("aria-pressed", String(active));
+      } else button.classList.add("is-static");
+      if (status) {
+        const badge = document.createElement("span");
+        badge.className = "account-status";
+        badge.textContent = status;
+        button.querySelector(".nav-label").after(badge);
       }
-      const summary = `${text(account.name)}: ${total} loaded in current scope, ${unread} unread, ${done} completed${status ? `, ${status}` : ""}`;
-      button.setAttribute("aria-label", summary);
-      button.title = summary;
-      if (account.id === "all") els.accountFilters.append(button);
-      else {
-        const entry = document.createElement("div");
-        entry.className = "account-entry";
-        const manage = document.createElement("button");
-        manage.type = "button";
-        manage.className = "icon-button";
-        manage.textContent = "⋯";
-        manage.dataset.focusKey = `manage-${account.id}`;
-        manage.setAttribute("aria-label", `Manage ${account.name}`);
-        manage.addEventListener("click", () => showAccountManagement(account.id));
-        entry.append(button, manage);
-        els.accountFilters.append(entry);
+      if (account.id === "all") {
+        els.accountFilters.append(button);
+        return;
       }
+      const entry = document.createElement("div");
+      entry.className = "account-entry";
+      const manage = document.createElement("button");
+      manage.type = "button";
+      manage.className = "icon-button account-manage";
+      manage.textContent = "⋯";
+      manage.dataset.focusKey = `manage-${account.id}`;
+      manage.setAttribute("aria-label", `Manage ${account.name}`);
+      manage.title = `Manage ${account.name}`;
+      manage.addEventListener("click", () => showAccountManagement(account.id));
+      entry.append(button, manage);
+      els.accountFilters.append(entry);
     });
-    $("accountCount").textContent = state.accounts.length ? String(state.accounts.length) : "—";
 
     els.categoryFilters.replaceChildren();
     const stats = categoryStats();
-    const appendStat = (line, className, value) => {
-      const part = document.createElement("span");
-      part.className = className;
-      part.textContent = value;
-      line.append(part);
-    };
-    [{ id: "all", name: "All categories" }, ...state.categories].forEach((category) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `category-filter${state.filters.category === category.id ? " is-active" : ""}`;
-      button.dataset.categoryFilter = category.id;
-      button.setAttribute("aria-pressed", String(state.filters.category === category.id));
+    state.categories.forEach((category) => {
       const entry = stats.get(category.id) || {};
       const total = entry.total || 0;
       const unread = entry.unread || 0;
@@ -515,30 +511,15 @@
       const automatic = entry.automatic || 0;
       const corrected = (entry.corrected || 0) + (entry.correctedAway || 0);
       const awaiting = entry.awaiting || 0;
-      const label = document.createElement("span");
-      label.className = "category-label";
-      const name = document.createElement("span");
-      name.textContent = text(category.name);
-      label.append(name);
-      if (total || corrected) {
-        const line = document.createElement("span");
-        line.className = "category-stats";
-        if (total) appendStat(line, "unread-count", `${unread} unread`);
-        if (automatic) appendStat(line, "automatic-count", `${automatic} automatic`);
-        if (corrected) appendStat(line, "correction-count", `${corrected} corrected`);
-        if (awaiting) appendStat(line, "awaiting-count", `${awaiting} awaiting classification`);
-        label.append(line);
-      }
-      const count = document.createElement("span");
-      count.className = "count";
-      count.textContent = String(total);
-      button.append(label, count);
-      const summary = `${text(category.name)}: ${total} loaded in current scope, ${unread} unread, ${done} completed; ${automatic} automatic classifications not corrected; ${corrected} user corrections; ${awaiting} awaiting classification`;
-      button.setAttribute("aria-label", summary);
-      button.title = summary;
+      const active = state.filters.category === category.id;
+      const summary = `${text(category.name)}: ${unread} unread of ${total} loaded in current scope, ${done} completed; ${automatic} sorted automatically, ${corrected} corrected by you${awaiting ? `, ${awaiting} awaiting classification` : ""}`;
+      const button = sidebarEntry(`category-filter${active ? " is-active" : ""}${total ? "" : " is-empty"}`, category.name, unread, summary);
+      // Choosing the selected category again shows every category.
+      button.dataset.categoryFilter = active ? "all" : category.id;
+      button.dataset.category = category.id;
+      button.setAttribute("aria-pressed", String(active));
       els.categoryFilters.append(button);
     });
-    $("categoryCount").textContent = state.categories.length ? String(state.categories.length) : "—";
     syncFilterButtons();
     restoreFocus(focus);
     if (window.EmailTownMailHost?.render) window.EmailTownMailHost.render();
@@ -589,17 +570,50 @@
     };
     for (const [type, view] of Object.entries(views)) {
       const { total, unread, done } = scopeStats(scoped.filter(view.test));
-      const suffix = type[0].toUpperCase() + type.slice(1);
-      $(`count${suffix}`).textContent = String(total);
-      $(`unread${suffix}`).textContent = `${unread} unread`;
-      const summary = `${view.label}: ${total} loaded in current scope, ${unread} unread, ${done} completed`;
+      const summary = `${view.label}: ${unread} unread of ${total} loaded in current scope, ${done} completed`;
       const button = document.querySelector(`[data-type-filter="${type}"]`);
       button.setAttribute("aria-label", summary);
       button.title = summary;
     }
   }
+  // One removable chip per narrowing filter, so the way back is always next to the list.
+  function renderChips() {
+    const chips = [];
+    const chip = (label, clear) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "filter-chip";
+      button.textContent = label;
+      const x = document.createElement("span");
+      x.setAttribute("aria-hidden", "true");
+      x.textContent = "×";
+      button.append(x);
+      button.setAttribute("aria-label", `Remove filter: ${label}`);
+      button.addEventListener("click", () => {
+        clear();
+        renderScope();
+      });
+      chips.push(button);
+    };
+    if (state.filters.category !== "all")
+      chip(categoryById(state.filters.category)?.name || state.filters.category, () => {
+        state.filters.category = "all";
+      });
+    if (state.filters.account !== "all")
+      chip(accountById(state.filters.account)?.name || "Account", () => {
+        state.filters.account = "all";
+      });
+    const query = state.filters.search.trim();
+    if (query)
+      chip(`“${query}”`, () => {
+        els.search.value = "";
+        state.filters.search = "";
+      });
+    $("filterChips").replaceChildren(...chips);
+  }
   function renderScope() {
     renderCounts();
+    renderChips();
     renderFilters();
     renderList();
   }
@@ -621,14 +635,30 @@
     const next = text(value);
     if (node.textContent !== next) node.textContent = next;
   };
+  // "Maria Chen <maria@x>" -> { name: "Maria Chen", address: "maria@x" }; reader.js has the full parser
+  // but loads after this file, and a row must render either way.
+  function senderParts(value) {
+    const raw = text(value).trim();
+    const match = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/);
+    if (match) return { name: match[1].trim(), address: match[2].trim() };
+    return { name: "", address: raw };
+  }
+  // Outlook's row: an avatar (a checkbox when pointing at it or selecting), then two lines: the sender
+  // and the time; the subject, its category and the star. Fixed height, so the list never reflows.
   function createRow(message) {
     const row = document.createElement("article");
     row.className = "message-row";
     row.dataset.messageId = message.id;
+    const lead = document.createElement("div");
+    lead.className = "row-lead";
+    const avatar = document.createElement("span");
+    avatar.className = "row-avatar";
+    avatar.setAttribute("aria-hidden", "true");
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.className = "row-check";
     checkbox.dataset.focusKey = `select-${message.id}`;
+    lead.append(avatar, checkbox);
     const body = document.createElement("div");
     body.className = "row-content";
     const title = document.createElement("div");
@@ -637,27 +667,28 @@
     sender.className = "row-sender";
     const date = document.createElement("time");
     title.append(sender, date);
+    const meta = document.createElement("div");
+    meta.className = "row-meta";
     const subject = document.createElement("button");
     subject.type = "button";
     subject.dataset.focusKey = `open-${message.id}`;
     subject.className = "row-open row-subject";
-    const meta = document.createElement("div");
-    meta.className = "row-meta";
     const category = document.createElement("span");
     category.className = "category-badge";
-    const account = document.createElement("div");
+    const account = document.createElement("span");
     account.className = "row-account";
     const starred = document.createElement("span");
-    starred.className = "row-starred-badge unread-badge";
-    starred.textContent = "★ Starred";
+    starred.className = "row-starred-badge";
+    starred.textContent = "★";
+    starred.setAttribute("aria-label", "Starred");
     const unread = document.createElement("span");
     unread.className = "row-unread-label sr-only";
     unread.textContent = "Unread";
-    meta.append(category, account, starred, unread);
+    meta.append(subject, category, account, starred, unread);
     const snippet = document.createElement("div");
     snippet.className = "row-preview sr-only";
-    body.append(title, subject, meta, snippet);
-    row.append(checkbox, body);
+    body.append(title, meta, snippet);
+    row.append(lead, body);
     return row;
   }
   function syncRow(row, message) {
@@ -671,31 +702,40 @@
     const subject = row.querySelector(".row-open");
     subject.classList.toggle("row-status", Boolean(message.done));
     setText(subject, subjectText);
-    setText(row.querySelector(".row-sender"), message.sender || "Unknown sender");
+    subject.title = subjectText;
+    const who = senderParts(message.sender);
+    const senderNode = row.querySelector(".row-sender");
+    setText(senderNode, who.name || who.address || "Unknown sender");
+    senderNode.title = text(message.sender);
+    const avatar = row.querySelector(".row-avatar");
+    const reader = window.EmailTownReader;
+    if (reader) reader.avatar(avatar, who);
+    else setText(avatar, (who.name || who.address || "?")[0].toUpperCase());
     const dateValue = new Date(Number(message.date) || 0);
     const date = row.querySelector("time");
     date.title = formatDate(message.date);
     date.dateTime = dateValue.toISOString();
+    const thisYear = dateValue.getFullYear() === new Date().getFullYear();
     setText(
       date,
       new Intl.DateTimeFormat(
         "en-US",
         Number(message.date) >= localMidnight()
           ? { hour: "numeric", minute: "2-digit" }
-          : { month: "short", day: "numeric" },
+          : thisYear
+            ? { month: "short", day: "numeric" }
+            : { year: "2-digit", month: "numeric", day: "numeric" },
       ).format(dateValue),
     );
     const category = row.querySelector(".category-badge");
-    category.dataset.category = message.category || "unknown";
-    setText(
-      category,
-      categoryById(message.category)?.name || message.category || "Unclassified",
-    );
+    const categoryId = message.category || "unknown";
+    category.dataset.category = categoryId;
+    setText(category, categoryById(message.category)?.name || message.category || "Unclassified");
     category.title = `Classification: ${sourceName(message.source)}`;
-    setText(
-      row.querySelector(".row-account"),
-      accountById(message.account_id)?.name || "Unknown account",
-    );
+    category.hidden = categoryId === "unknown"; // no category is not worth a chip on every row
+    const account = row.querySelector(".row-account");
+    setText(account, accountById(message.account_id)?.name || "Unknown account");
+    account.hidden = state.accounts.length < 2;
     row.querySelector(".row-starred-badge").hidden = !message.starred;
     row.querySelector(".row-unread-label").hidden = !message.unread;
     setText(row.querySelector(".row-preview"), `Classification: ${sourceName(message.source)}`);
@@ -767,6 +807,7 @@
       ? `${state.selected.size} selected`
       : `${messages.length} messages`;
     $("clearSelectionButton").hidden = !state.selected.size;
+    els.messageList.classList.toggle("has-selection", state.selected.size > 0);
     els.selectAll.indeterminate =
       messages.some((m) => state.selected.has(m.id)) &&
       !messages.every((m) => state.selected.has(m.id));
@@ -995,6 +1036,7 @@
       accountById(message.account_id)?.name || "Unknown account",
     );
     els.previewSource.title = `Classification: ${sourceName(message.source)}`;
+    els.previewSource.hidden = state.accounts.length < 2;
     els.previewCategory.textContent = text(
       categoryById(message.category)?.name ||
         message.category ||
@@ -1597,15 +1639,26 @@
     if (type) state.filters.type = type.dataset.typeFilter;
     const done = event.target.closest("[data-done-filter]");
     if (done) state.filters.done = done.dataset.doneFilter;
+    // A folder shows its pending mail: choosing one leaves the Done view (mail.js loads the folder).
+    const folder = event.target.closest("[data-mail-folder]");
+    if (folder && state.filters.done === "done") state.filters.done = "pending";
     const account = event.target.closest("[data-account-filter]");
     if (account) state.filters.account = account.dataset.accountFilter;
     const category = event.target.closest("[data-category-filter]");
     if (category) state.filters.category = category.dataset.categoryFilter;
-    if (type || done || account || category) {
+    if (type || done || account || category || folder) {
       renderScope();
       if (window.innerWidth < 1200) els.previewPane.classList.remove("is-open");
       if (window.innerWidth < 768) closeSidebar();
     }
+  });
+  // Drafts opens a dialog from the folder pane; on a phone the pane closes behind it (focus stays in the
+  // dialog, so this does not go through closeSidebar, which focuses the menu button).
+  $("draftsButton").addEventListener("click", () => {
+    if (window.innerWidth >= 768 || !els.sidebar.classList.contains("is-open")) return;
+    els.sidebar.classList.remove("is-open");
+    els.sidebarToggle.setAttribute("aria-expanded", "false");
+    syncMobileSidebar();
   });
   function syncMobileSidebar() {
     const open =

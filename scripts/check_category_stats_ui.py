@@ -1,4 +1,4 @@
-"""Scoped category counts: unread, automatic classifications, and user corrections.
+"""Scoped category counts: unread (shown), automatic classifications and user corrections (named).
 
 Run: uv run --with playwright python scripts/check_category_stats_ui.py
 Checks immediate browser bookkeeping with long-poll responses held, then the persisted server snapshot
@@ -7,6 +7,7 @@ after reload. Counts describe facts, never classification accuracy. Synthetic ma
 
 from __future__ import annotations
 
+import re
 import sys
 import tempfile
 import threading
@@ -55,27 +56,19 @@ def main() -> int:
                 expect(page.locator(".message-row")).to_have_count(4)
 
                 def item(category, page=page):
-                    return page.locator(f"[data-category-filter='{category}']")
+                    return page.locator(f"#categoryFilters [data-category='{category}']")
 
-                def shows(category, count, *, unread=None, automatic=None, corrected=None, page=page):
-                    expect(item(category).locator(".count")).to_have_text(str(count))
-                    line = item(category).locator(".category-stats")
-                    if unread is None:
-                        expect(line).to_have_count(0)
-                        return
-                    expect(line.locator(".unread-count")).to_have_text(f"{unread} unread")
-                    if automatic:
-                        expect(line.locator(".automatic-count")).to_have_text(f"{automatic} automatic")
-                    else:
-                        expect(line.locator(".automatic-count")).to_have_count(0)
-                    if corrected:
-                        expect(line.locator(".correction-count")).to_have_text(f"{corrected} corrected")
-                    else:
-                        expect(line.locator(".correction-count")).to_have_count(0)
-                    label = item(category).get_attribute("aria-label")
-                    assert f"{count} loaded in current scope" in label
-                    assert f"{unread} unread" in label
-                    assert "wrong" not in label.lower()
+                # The entry shows one number, its unread mail; the rest is in its accessible name.
+                def shows(category, count, *, unread=0, automatic=0, corrected=0, page=page):
+                    expect(item(category).locator(".nav-count")).to_have_text(str(unread) if unread else "")
+                    expect(item(category)).to_have_attribute(
+                        "aria-label",
+                        re.compile(
+                            rf"\b{unread} unread of {count} loaded in current scope.*"
+                            rf"\b{automatic} sorted automatically, {corrected} corrected by you"
+                        ),
+                    )
+                    assert "wrong" not in item(category).get_attribute("aria-label").lower()
 
                 def open_row(subject, page=page):
                     page.locator(".message-row").filter(has_text=subject).locator(".row-open").click()
@@ -90,7 +83,6 @@ def main() -> int:
                     page.locator("#categorySelect").select_option(category)
                     page.locator("#categoryForm [type=submit]").click()
 
-                shows("all", 4, unread=4, automatic=4)
                 shows("updates", 4, unread=4, automatic=4)
                 shows("orders", 0)
 
@@ -103,8 +95,6 @@ def main() -> int:
                 recategorize("orders")
                 shows("updates", 2, unread=2, automatic=2, corrected=1)
                 shows("orders", 1, unread=0, corrected=1)
-                shows("all", 3, unread=2, automatic=2, corrected=1)
-                assert "user corrections" in item("updates").get_attribute("aria-label")
                 assert held, "no long-poll was held, so this did not isolate the page's own update"
                 page.screenshot(path=str(out / f"{engine}-sidebar.png"))
 
@@ -113,12 +103,10 @@ def main() -> int:
                 expect(page.locator(".message-row")).to_have_count(3)
                 shows("updates", 2, unread=2, automatic=2, corrected=1)
                 shows("orders", 1, unread=0, corrected=1)
-                shows("all", 3, unread=2, automatic=2, corrected=1)
 
                 open_row("Fixture message 2")
                 recategorize("updates")
                 shows("updates", 3, unread=2, automatic=2)
-                shows("all", 3, unread=2, automatic=2)
                 shows("orders", 0)
                 assert "wrong" not in page.locator("#categoryFilters").inner_text().lower()
                 assert not errors, errors

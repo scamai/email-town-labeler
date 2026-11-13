@@ -96,7 +96,10 @@ def main() -> int:
                 until(lambda: "UNREAD" in mailbox.record("m2")["labels"], "the hover unread control")
 
                 # The star toggles both ways and shows its state.
+                # An unstarred star shows on the row being pointed at (its slot is always there).
                 star = row("Fixture message 3").locator(".row-star")
+                expect(star).to_be_hidden()
+                row("Fixture message 3").hover()
                 star.click()
                 until(lambda: "STARRED" in mailbox.record("m3")["labels"], "the star stars")
                 expect(row("Fixture message 3").locator(".row-star")).to_have_attribute(

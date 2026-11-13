@@ -43,10 +43,12 @@ def bounds(page, selector: str) -> dict:
 
 
 def assert_list_geometry(page, label: str) -> None:
-    search = bounds(page, ".search-field")
+    # The select-all checkbox sits on the rows' avatar/checkbox column, so the header lines up with the rows.
+    select_all = bounds(page, "#selectAll")
     checkbox = page.locator(".message-row .row-check").first.bounding_box()
     assert checkbox is not None
-    assert abs(search["x"] - checkbox["x"]) <= 1, (label, search, checkbox)
+    centre = lambda box: box["x"] + box["width"] / 2
+    assert abs(centre(select_all) - centre(checkbox)) <= 1, (label, select_all, checkbox)
     # The list header must stay slim: the rows are what the pane is for (it once took ~40% of it).
     pane = bounds(page, ".message-pane")
     first_row = page.locator(".message-row").first.bounding_box()

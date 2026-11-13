@@ -210,6 +210,8 @@ def main():
                 expect(page.locator("#toast")).to_contain_text("Draft saved")
                 page.locator("#composeDialog [data-compose-close]").first.click()
                 expect(page.locator("#composeDialog")).to_be_hidden()
+                if page.locator("#sidebarToggle").is_visible():  # Drafts is in the folder pane
+                    page.locator("#sidebarToggle").click()
                 page.locator("#draftsButton").click()
                 expect(page.locator(".draft-item")).to_have_count(prior_drafts + 1)
                 page.locator(".draft-item .text-button").first.click()
@@ -267,6 +269,8 @@ def main():
                 page.locator("[data-mail-action='trash']").click()
                 expect(page.locator("#toast")).to_contain_text("failed", timeout=8000)
                 expect(page.locator("#composeTo")).to_be_enabled()
+                if page.locator("#sidebarToggle").is_visible():  # folders are in the folder pane
+                    page.locator("#sidebarToggle").click()
                 page.locator("[data-mail-folder='trash']").click()
                 expect(page.locator(".message-row")).to_have_count(1, timeout=8000)
                 page.screenshot(path=str(out / f"{theme}-{width}-trash.png"))
@@ -275,6 +279,8 @@ def main():
                 expect(page.locator(".message-row")).to_have_count(0, timeout=8000)
                 # A background poll may remove the row before the action receipt arrives.
                 expect(page.locator("#composeTo")).to_be_enabled()
+                if page.locator("#sidebarToggle").is_visible():  # folders are in the folder pane
+                    page.locator("#sidebarToggle").click()
                 page.locator("[data-mail-folder='inbox']").click()
                 expect(page.locator(".message-row")).to_have_count(2, timeout=8000)
                 assert not errors, errors

@@ -975,7 +975,9 @@
         host.state.folder
       ] || "Mail";
     document.querySelectorAll("[data-mail-folder]").forEach((button) => {
-      const active = button.dataset.mailFolder === host.state.folder;
+      // In the Done view the Done entry is the selected one, not the folder underneath it.
+      const active =
+        button.dataset.mailFolder === host.state.folder && host.state.filters.done !== "done";
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
       if (active)
