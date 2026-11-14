@@ -237,8 +237,9 @@ def main() -> int:
                 box = panel.bounding_box()
                 assert box and box["x"] >= 0 and box["x"] + box["width"] <= 320, box
                 assert box["y"] >= 0 and box["y"] + box["height"] <= 640, box
-                page.locator("#reopenButton").scroll_into_view_if_needed()
-                assert page.locator("#reopenButton").is_visible()
+                last = panel.locator("button").last
+                last.scroll_into_view_if_needed()
+                assert last.is_visible()
                 page.screenshot(path=str(out / f"{theme}-320-layout.png"))
                 page.keyboard.press("Escape")
                 page.locator("#sidebarToggle").click()

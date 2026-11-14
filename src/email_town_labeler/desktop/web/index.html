@@ -121,14 +121,6 @@
             <button class="nav-item" data-mail-folder="trash" type="button">
               <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13" /></svg><span class="folder-label">Trash</span>
             </button>
-            <button
-              class="nav-item"
-              data-done-filter="done"
-              type="button"
-              title="Mail you marked done on this device"
-            >
-              <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg><span class="folder-label">Done</span>
-            </button>
           </nav>
           <div class="sidebar-section">
             <div class="section-label"><span>Categories</span></div>
@@ -221,16 +213,9 @@
             <span class="sr-only" id="mailSelectionCount"></span>
             <button
               class="button button-secondary button-small"
-              id="markDoneButton"
-              type="button"
-              title="Mark complete on this device"
-            >
-              Mark done
-            </button>
-            <button
-              class="button button-secondary button-small"
               data-mail-action="archive"
               type="button"
+              title="Archive (E): done with it. It leaves the Inbox in your mailbox too."
             >
               Archive
             </button>
@@ -260,8 +245,6 @@
                 </button>
                 <button data-mail-action="star" type="button">Star</button>
                 <button data-mail-action="unstar" type="button">Unstar</button>
-                <span class="menu-label">On this device</span>
-                <button id="reopenButton" type="button">Reopen task</button>
               </div>
             </details>
           </div>
@@ -342,7 +325,7 @@
                 <button
                   class="icon-action"
                   data-single-action="archive"
-                  title="Archive (E)"
+                  title="Archive (E): done with it. It leaves the Inbox in your mailbox too."
                   aria-keyshortcuts="E"
                   type="button"
                 >
@@ -385,9 +368,6 @@
                       >Open original ↗</a
                     >
                     <span class="menu-label">On this device</span>
-                    <button id="previewDoneButton" type="button">
-                      Mark done
-                    </button>
                     <button id="previewCategoryButton" type="button">
                       Change category
                     </button>

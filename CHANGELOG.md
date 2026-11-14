@@ -21,6 +21,10 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- **Done is Archive.** The local Done folder, **Mark done** and **Reopen** are gone: being done with a message is
+  **Archive** (`e`, and now `d`), which leaves the Inbox in the mailbox too, as Gmail's Done does, so Email Town and
+  the mailbox never disagree. Mail marked done before shows in the Inbox again until it is archived.
+
 - The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the
   synthetic fixture at 1440 px), so about twice as many messages fit. Folders, including Drafts and a **Done**
   folder that replaces the Pending / Completed / All switch, move from tabs to the folder pane. Search

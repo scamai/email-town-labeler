@@ -217,7 +217,7 @@ def main() -> int:
                     page.keyboard.press("Escape")
                     expect(page.locator("#shortcutsDialog")).to_be_hidden()
 
-                    # Act: star (from inside the closed More menu), read state, done, archive, trash.
+                    # Act: star (from inside the closed More menu), read state, archive (d), trash.
                     page.keyboard.press("s")
                     until(lambda: "STARRED" in mailbox.record("m2")["labels"], "s stars the open message")
                     writes = len(mailbox.writes)
@@ -244,26 +244,13 @@ def main() -> int:
                         show=lambda writes=writes: mailbox.writes[writes:],
                     )
                     until(lambda: "UNREAD" not in mailbox.record("m2")["labels"], "Shift+I marks read")
-                    before = manager.snapshot()["messages"][1]["done"]  # local state persists across passes
-                    page.keyboard.press("d")
-                    until(
-                        lambda before=before: manager.snapshot()["messages"][1]["done"] is not before,
-                        "d marks the open message done or reopens it",
-                    )
-                    expect(page.locator("#previewDoneButton")).to_have_text("Reopen")
-                    page.keyboard.press("d")
-                    until(
-                        lambda before=before: manager.snapshot()["messages"][1]["done"] is before,
-                        "a second d restores the pending message",
-                    )
-                    expect(page.locator("#previewDoneButton")).to_have_text("Mark done")
                     # A key queued behind a running action keeps the target it was pressed on:
                     # s starts a write, e (queued) is pressed on m2, j opens m3 before e runs.
                     page.keyboard.press("s")
-                    page.keyboard.press("e")
+                    page.keyboard.press("d")  # d is archive too: "done with it" is one action
                     page.keyboard.press("j")
                     expect(subject).to_have_text("Fixture message 3")
-                    until(lambda: mailbox.record("m2")["folder"] == "archive", "e archives the open message")
+                    until(lambda: mailbox.record("m2")["folder"] == "archive", "d archives the open message")
                     assert mailbox.record("m3")["folder"] == "inbox", (
                         "the queued e moved to the message opened after it"
                     )

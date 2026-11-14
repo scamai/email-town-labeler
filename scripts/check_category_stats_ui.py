@@ -87,7 +87,7 @@ def main() -> int:
                 shows("orders", 0)
 
                 open_row("Fixture message 1")
-                more("#previewDoneButton")
+                page.locator('.preview-actions [data-single-action="archive"]').click()
                 expect(page.locator(".message-row")).to_have_count(3)
                 shows("updates", 3, unread=3, automatic=3)
 
