@@ -135,7 +135,8 @@ def main():
         readers.append(reader)
         return reader
 
-    manager = Workbench(out / "workbench", paths, reader_factory=factory)
+    # A short, non-zero undo window: sends and Trash are really held, and the run stays quick.
+    manager = Workbench(out / "workbench", paths, reader_factory=factory, undo_seconds=1.5)
     manager.demo = True
     manager.accounts.add(
         "Fixture", "imap", {"host": "fixture", "username": "fixture@example.test", "port": 993}
@@ -216,9 +217,27 @@ def main():
                 expect(page.locator(".draft-item")).to_have_count(prior_drafts + 1)
                 page.locator(".draft-item .text-button").first.click()
                 expect(page.locator("#composeTo")).to_have_value("recipient@example.test")
-                page.locator("#sendButton").click()
-                expect(page.locator("#composeDialog")).to_be_hidden(timeout=8000)
                 reader = readers[-1]
+                sent_before = len(reader.sent)
+                # Send, then Undo inside the window: nothing reaches the provider, the editor comes back.
+                page.locator("#sendButton").click()
+                expect(page.locator("#composeDialog")).to_be_hidden()
+                expect(page.locator("#toast")).to_contain_text("Sending")
+                page.locator("#toast button").click()
+                expect(page.locator("#toast")).to_contain_text("Not sent")
+                expect(page.locator("#composeDialog")).to_be_visible()
+                expect(page.locator("#composeTo")).to_have_value("recipient@example.test")
+                expect(page.locator("#attachmentSummary")).to_contain_text("fixture.txt")
+                page.wait_for_timeout(2500)  # past the window: an undone send must still be unsent
+                assert len(reader.sent) == sent_before, "an undone send reached the provider"
+                # Send for real: the editor closes at once, the provider gets it when the window ends.
+                page.locator("#sendButton").click()
+                expect(page.locator("#composeDialog")).to_be_hidden()
+                deadline = time.monotonic() + 8
+                while len(reader.sent) == sent_before and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                assert len(reader.sent) == sent_before + 1, "the held send never reached the provider"
+                expect(page.locator("#toast")).to_contain_text("Fixture", timeout=8000)
                 assert reader.sent[-1]["to"] == "recipient@example.test"
                 assert reader.sent[-1]["cc"] == ""
                 assert reader.sent[-1]["bcc"] == ""
@@ -246,9 +265,11 @@ def main():
                 page.locator("#composeSubject").fill("Unknown")
                 reader.unknown_next = True
                 page.locator("#sendButton").click()
-                expect(page.locator("#sendButton")).to_be_disabled(timeout=8000)
+                # An unconfirmed send reopens its draft with the reason and blocks a second send.
                 expect(page.locator("#composeError")).to_contain_text("Fixture lost response", timeout=8000)
-                assert page.locator("#composeDialog").is_visible()
+                expect(page.locator("#composeDialog")).to_be_visible()
+                expect(page.locator("#composeSubject")).to_have_value("Unknown")
+                expect(page.locator("#sendButton")).to_be_disabled()
                 page.locator("#composeBody").fill("New unsent edits after the old request")
                 pending = json.loads(page.evaluate("sessionStorage.getItem('email-town-pending-send')"))
                 manager.mail_store.finish(
@@ -261,7 +282,7 @@ def main():
                     },
                 )
                 page.get_by_role("button", name="Check send result", exact=True).click()
-                expect(page.locator("#composeError")).to_contain_text("current edits are preserved")
+                expect(page.locator("#toast")).to_contain_text("Fixture accepted later")
                 expect(page.locator("#composeBody")).to_have_value("New unsent edits after the old request")
                 expect(page.locator("#composeDialog")).to_be_visible()
                 page.locator("#composeDialog [data-compose-close]").first.click()

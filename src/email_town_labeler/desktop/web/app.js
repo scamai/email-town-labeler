@@ -1399,6 +1399,10 @@
       outbox: Array.isArray(data.outbox) ? data.outbox : [],
       demo: Boolean(data.demo),
       limit: Number(data.limit) || 100,
+      // How long Archive, Trash and Send wait before reaching the mailbox: the Undo toast's lifetime.
+      undoSeconds: Number.isFinite(Number(data.undo_seconds))
+        ? Number(data.undo_seconds)
+        : 5,
       modelError: data.model_error || "",
       modelStatus: data.model_status || null,
     };

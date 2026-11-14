@@ -178,7 +178,8 @@ Send/reply/reply-all/forward support To/Cc/Bcc, plaintext bodies and explicit at
 and attachments are stored privately under `workbench/mail`; failed, unknown or partial sends retain the
 draft and are never retried automatically. Gmail/SMTP sends are limited to 20 MiB total and Graph to 2 MiB;
 downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding includes body only; attachments
-must be re-added explicitly.
+must be re-added explicitly. Send closes the editor and waits 5 seconds before the message leaves: **Undo**
+in the toast keeps it unsent and reopens it in the editor; quitting inside the window sends it at once.
 
 Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
 Local overrides take precedence. They currently neither write back to the

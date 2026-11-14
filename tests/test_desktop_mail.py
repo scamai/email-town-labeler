@@ -738,5 +738,64 @@ def test_read_and_star_are_not_held_back(tmp_path):
     job = flag_request(w, ids[0], "read")
     assert finished(w, job)["status"] == "complete"
     with pytest.raises(ValueError, match="Too late to undo"):
-        w.mail_undo(job)  # only Archive and Trash have an undo window
+        w.mail_undo(job)  # only Archive, Trash and Send have an undo window
+    w.close()
+
+
+# ─── Undo Send: a send waits out the same window before it reaches the provider ───
+
+
+def held_send(tmp_path, seconds):
+    w, readers, first, _second = setup_mail(tmp_path)
+    w.undo_seconds = seconds
+    data = composition(account_id=first)
+    draft = w.mail_store.save_draft(data)
+    key = w.send_mail({**data, "draft_id": draft["id"], "request_id": uuid.uuid4().hex})["job_id"]
+    return w, readers[first], draft["id"], key
+
+
+def test_send_waits_out_the_undo_window_then_reaches_the_provider(tmp_path):
+    w, reader, draft_id, key = held_send(tmp_path, 0.4)
+    time.sleep(0.15)
+    assert reader.sent == [] and w.mail_store.receipt(key)["status"] == "pending"
+    assert finished(w, key)["status"] == "complete"
+    assert len(reader.sent) == 1
+    with pytest.raises(ValueError):
+        w.mail_store.draft(draft_id)  # a delivered send removes its draft
+    w.close()
+
+
+def test_undo_send_inside_the_window_sends_nothing_and_keeps_the_draft(tmp_path):
+    w, reader, draft_id, key = held_send(tmp_path, 5)
+    assert w.mail_undo(key) == {"ok": True}
+    assert w.mail_store.receipt(key)["status"] == "cancelled"
+    assert w.mail_store.draft(draft_id)["subject"] == "Fixture"
+    time.sleep(0.2)
+    w.close()
+    assert reader.sent == []  # neither the woken thread nor quitting sends what was undone
+    assert w.mail_slots.acquire(blocking=False)  # the send slot was given back
+
+
+def test_undo_send_after_it_was_sent_is_refused(tmp_path):
+    w, reader, _draft_id, key = held_send(tmp_path, 0)
+    assert finished(w, key)["status"] == "complete"
+    with pytest.raises(ValueError, match="Too late to undo"):
+        w.mail_undo(key)
+    assert len(reader.sent) == 1
+    w.close()
+
+
+def test_quitting_inside_the_window_still_sends_the_message(tmp_path):
+    w, reader, _draft_id, key = held_send(tmp_path, 60)
+    started = time.monotonic()
+    w.close()
+    assert time.monotonic() - started < 5
+    assert len(reader.sent) == 1
+    assert w.mail_store.receipt(key)["status"] == "complete"
+
+
+def test_snapshot_tells_the_page_how_long_undo_lasts(tmp_path):
+    w, _readers, _first, _second = setup_mail(tmp_path)
+    w.undo_seconds = 2.5
+    assert w.snapshot()["undo_seconds"] == 2.5
     w.close()
