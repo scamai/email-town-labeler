@@ -347,26 +347,19 @@
       message: "Still working. Check the result again before retrying.",
     };
   }
-  async function applySendResult(job) {
+  // The editor closes as soon as a send is accepted; a send that fails or cannot be confirmed reopens
+  // its draft with the reason, so the words are never lost behind a toast.
+  async function applySendResult(job, draftId) {
+    if (job.status === "cancelled") return; // Undo already reopened the draft
     if (job.status === "complete") {
-      const submittedEditor =
-        local.pending?.editor_id === local.editorId &&
-        local.pending?.edit_version === local.editVersion;
       notePending(null);
-      if (submittedEditor) {
-        local.dirty = false;
-        els.compose.close();
-      } else
-        setError(
-          "The previous message was sent. Your current edits are preserved.",
-        );
-      host.showToast(job.message || "Accepted for delivery");
+      host.showToast(job.message || "Sent");
       await host.loadState();
-    } else {
-      setError(
-        `${jobMessage(job)}\nThe local draft is retained. Check Sent before any new send.`,
-      );
+      return;
     }
+    const reason = `${jobMessage(job)}\nThe local draft is retained. Check Sent before any new send.`;
+    if (await reopenDraft(draftId)) setError(reason);
+    else host.showToast(`${jobMessage(job)} The message is saved in Drafts.`);
   }
   async function send(event) {
     event.preventDefault();
@@ -375,19 +368,13 @@
     const data = payload();
     if (!data.to && !data.cc && !data.bcc)
       return setError("Add at least one recipient.");
-    const account = accountFor(data.account_id);
-    if (
-      !confirm(
-        `Send from ${ownAddress(account) || account.name}?\nTo: ${data.to || "—"}\nCc: ${data.cc || "—"}\nBcc: ${data.bcc || "—"}\nAttachments: ${local.attachments.length}`,
-      )
-    )
-      return;
     local.busy = true;
     updateControls();
     setError("");
     let saved = false;
+    let draftId = null;
     try {
-      await persistDraft();
+      draftId = await persistDraft();
       saved = true;
       const requestId = crypto.randomUUID();
       // Persist only IDs. Attachment content stays in the private on-device draft, not browser storage.
@@ -405,13 +392,34 @@
           draft_id: local.draftId,
         }),
       });
-      await applySendResult(await pollJob(result.job_id));
+      local.dirty = false;
+      els.compose.close();
+      const seconds = host.state.undoSeconds ?? 5;
+      if (seconds > 0)
+        host.showActionToast(
+          "Sending…",
+          async () => {
+            host.uiLog?.("send-undo", {});
+            await host.api("/api/mail-undo", {
+              method: "POST",
+              body: JSON.stringify({ job_id: result.job_id }),
+            });
+            notePending(null);
+            if (!(await reopenDraft(draftId)))
+              return "Not sent. It is saved in Drafts.";
+            return "Not sent. Your message is back in the editor.";
+          },
+          seconds * 1000,
+        );
+      local.busy = false;
+      updateControls();
+      await applySendResult(await pollJob(result.job_id), draftId);
     } catch (error) {
-      setError(
-        saved
-          ? `${error.message}\nDraft saved. Check the send result and Sent before retrying.`
-          : `${error.message}\nNothing was submitted for sending; keep this window open to preserve your edits.`,
-      );
+      const message = saved
+        ? `${error.message}\nDraft saved. Check the send result and Sent before retrying.`
+        : `${error.message}\nNothing was submitted for sending; keep this window open to preserve your edits.`;
+      if (els.compose.open || (await reopenDraft(draftId))) setError(message);
+      else host.showToast(message);
     } finally {
       local.busy = false;
       updateControls();
@@ -422,7 +430,10 @@
     local.busy = true;
     updateControls();
     try {
-      await applySendResult(await pollJob(local.pending.request_id));
+      await applySendResult(
+        await pollJob(local.pending.request_id),
+        local.pending.draft_id,
+      );
     } catch (error) {
       setError(
         `${error.message}\nIf no receipt exists, check Sent before starting a new send.`,
@@ -460,6 +471,15 @@
     } catch (error) {
       host.showToast(error.message);
     }
+  }
+  // Bring a held or failed send back into the editor, unless the editor already holds other unsaved
+  // writing (that is never overwritten; the send stays in Drafts).
+  async function reopenDraft(id) {
+    if (!id) return false;
+    if (els.compose.open && local.draftId === id) return true;
+    if (els.compose.open && local.dirty) return false;
+    await loadDraft(id);
+    return els.compose.open;
   }
   async function loadDraftList() {
     els.draftList.replaceChildren();
@@ -620,7 +640,7 @@
         await host.api("/api/mail-undo", { method: "POST", body: JSON.stringify({ job_id: job.job_id }) });
         await host.loadState();
         return "Undone. Nothing was changed in your mailbox.";
-      });
+      }, Math.max(1, host.state.undoSeconds ?? 5) * 1000);
     }
     pollJob(job.job_id).then((result) => {
       if (["complete", "cancelled"].includes(result.status)) return;

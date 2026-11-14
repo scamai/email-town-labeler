@@ -9,6 +9,11 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Undo Send.** Send no longer asks "Send from …?" in a dialog. The editor closes at once and the message waits
+  5 seconds before it leaves; **Undo** in the toast keeps it unsent and puts it back in the editor with its
+  attachments. A send that fails or cannot be confirmed reopens its draft with the reason. Quitting inside the
+  window sends it at once.
+
 - **Undo for Archive and Trash.** For 5 seconds after Archive or Trash, the toast offers **Undo**; the change is held
   back from the mailbox until then, so Undo sends nothing and the messages come straight back. Quitting inside the
   window sends the change at once rather than dropping it.

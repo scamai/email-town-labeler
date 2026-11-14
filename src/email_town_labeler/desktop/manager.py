@@ -81,7 +81,7 @@ PREFETCH_MAX = 8  # bodies one /api/prefetch may ask for (the next few around th
 PREVIEW_WAIT = 20
 LEAVES_FOLDER = ("trash", "archive", "restore")  # mail actions that take a message out of the open folder
 # Archive and Trash wait this long before reaching the mailbox, so Undo can take them back without a provider
-# round trip (Gmail's Undo works the same way). Quitting sends them at once.
+# round trip (Gmail's Undo works the same way). Quitting sends them at once. Send is held the same way.
 UNDOABLE = ("trash", "archive")
 UNDO_SECONDS = 5.0
 # Longest a /api/state long-poll is held before it answers "unchanged".
@@ -135,6 +135,9 @@ class Workbench:
         self.outbox, self.outbox_worker = deque(), None
         self.outbox_wake, self.flushing = threading.Event(), False
         self.outbox_jobs: dict[str, dict] = {}
+        # Sends inside their undo window: request id -> (wake event, thread). Undo removes the entry and
+        # wakes the thread, which then sends nothing; quitting wakes them all and they send at once.
+        self.held_sends: dict[str, tuple[threading.Event, threading.Thread]] = {}
         self.pending_leave: dict[str, str] = {}  # message key -> job id
         self.pending_flags: dict[str, dict[str, tuple[str, bool]]] = {}
         self.limit, self.refreshing, self.last_refresh = 100, False, None
@@ -194,12 +197,16 @@ class Workbench:
                     self.model_lock.release()
 
     def close(self):
-        # Archive/Trash still inside their undo window go to the mailbox now, not never.
+        # Archive/Trash and sends still inside their undo window go to the mailbox now, not never.
         self.flushing = True
         self.outbox_wake.set()
-        worker = self.outbox_worker
-        if worker is not None and worker.is_alive():
-            worker.join(timeout=15)
+        with self.lock:
+            held = list(self.held_sends.values())
+        for wake, _thread in held:
+            wake.set()
+        for thread in [self.outbox_worker, *(t for _wake, t in held)]:
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=15)
         self.stop.set()
         self._touch()
         if self.model_lock.acquire(timeout=1):
@@ -276,6 +283,7 @@ class Workbench:
                 "model_status": self.model_status,
                 "limit": self.limit,
                 "folder": self.folder,
+                "undo_seconds": self.undo_seconds,
             }
             self.seq += 1
             digest = hashlib.sha256(json.dumps(result, sort_keys=True, ensure_ascii=False).encode())
@@ -903,11 +911,21 @@ class Workbench:
             self.refresh()
 
     def mail_undo(self, request_id) -> dict:
-        """Take back an Archive/Trash that has not reached the mailbox yet: nothing is sent, the rows return."""
+        """Take back an Archive/Trash or a send that has not reached the mailbox yet: nothing is sent."""
+        with self.lock:
+            held = self.held_sends.pop(request_id, None)
+        if held is not None:
+            # Finish before waking: the woken thread sees its entry gone and returns without sending.
+            self.mail_store.finish(
+                request_id, {"status": "cancelled", "succeeded": [], "failed": [], "message": "Not sent"}
+            )
+            held[0].set()
+            log.info("send %s undone: nothing sent, draft kept", request_id[:8])
+            return {"ok": True}
         with self.lock:
             entry = next((e for e in self.outbox if e[0] == request_id), None)
             if entry is None or entry[1] not in UNDOABLE:
-                raise ValueError("Too late to undo: the change already reached your mailbox")
+                raise ValueError("Too late to undo: it already reached your mailbox")
             self.outbox.remove(entry)
             keys = [item["id"] for item in entry[2]]
             for key in keys:
@@ -922,7 +940,7 @@ class Workbench:
         log.info("mail action %s undone: %d message(s) %s, nothing sent", entry[1], len(keys), shorts(keys))
         return {"ok": True}
 
-    def _mail_job(self, request_id, payload, work):
+    def _mail_job(self, request_id, payload, work, *, hold=0.0):
         if not self.mail_slots.acquire(blocking=False):
             raise ValueError("Three mail operations are already running. Wait for one to finish")
         try:
@@ -933,8 +951,15 @@ class Workbench:
             self.mail_slots.release()
             raise
 
+        wake = threading.Event()
+
         def run():
             try:
+                if hold:
+                    wake.wait(hold)  # Undo or quitting wakes this early
+                    with self.lock:
+                        if self.held_sends.pop(request_id, None) is None:
+                            return  # Undo took it back and already recorded "Not sent"
                 result = work()
                 self.mail_store.finish(request_id, result)
             except Exception:  # noqa: BLE001 - a network failure may follow remote acceptance
@@ -951,7 +976,11 @@ class Workbench:
                 self.mail_slots.release()
                 self.refresh()
 
-        threading.Thread(target=run, name="workbench-mail-operation", daemon=True).start()
+        thread = threading.Thread(target=run, name="workbench-mail-operation", daemon=True)
+        if hold:
+            with self.lock:
+                self.held_sends[request_id] = (wake, thread)
+        thread.start()
         return {"job_id": request_id}
 
     def _progress(self, request_id, field):
@@ -1094,7 +1123,8 @@ class Workbench:
                 "message": result.get("message", "Accepted for delivery"),
             }
 
-        return self._mail_job(request_id, payload, work)
+        log.info("send %s held %.0f s for Undo", str(request_id)[:8], self.undo_seconds)
+        return self._mail_job(request_id, payload, work, hold=self.undo_seconds)
 
     def action(self, data: dict):
         ids = data.get("ids")
