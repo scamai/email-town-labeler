@@ -8,7 +8,7 @@ Checked where the user sees it, in WebKit (the macOS app's engine) and Chromium:
 - with one account there is no "All accounts" entry and no account chip on rows or the reading pane;
 - rows are two fixed lines (sender and time; subject, category, star) with the sender's name only;
 - a category entry filters, a chip appears in the list header, and the chip or a second click clears it;
-- the Done entry shows completed mail and choosing a folder leaves it.
+- there is no local Done entry or button: archiving is how mail is done with.
 """
 
 from __future__ import annotations
@@ -57,7 +57,9 @@ def main() -> int:
                 server.shutdown()
                 server.server_close()
                 manager.close()
-    print("panes UI passed: resize/persist/keys/reset, single account, chips, Done (WebKit, Chromium)")
+    print(
+        "panes UI passed: resize/persist/keys/reset, single account, chips, no local Done (WebKit, Chromium)"
+    )
     return 0
 
 
@@ -93,15 +95,8 @@ def check(playwright, engine, server, out):
     updates.click()  # the same entry again shows every category
     expect(chip).to_have_count(0)
 
-    # ─── Done entry and back to a folder ───
-    rows.first.locator(".row-check").check()
-    page.locator("#markDoneButton").click()
-    expect(rows).to_have_count(3)
-    page.locator('[data-done-filter="done"]').click()
-    expect(rows).to_have_count(1)
-    expect(page.locator('[data-mail-folder="inbox"]')).to_have_attribute("aria-pressed", "false")
-    page.locator('[data-mail-folder="inbox"]').click()
-    expect(rows).to_have_count(3)
+    # ─── No local Done: the folder pane holds mailbox folders only ───
+    expect(page.locator("[data-done-filter], #markDoneButton")).to_have_count(0)
     expect(page.locator('[data-mail-folder="inbox"]')).to_have_attribute("aria-pressed", "true")
 
     # ─── Pane borders ───

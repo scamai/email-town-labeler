@@ -46,14 +46,11 @@
     selectionToolbar: $("selectionToolbar"),
     selectAll: $("selectAll"),
     selectionCount: $("selectionCount"),
-    markDone: $("markDoneButton"),
-    reopen: $("reopenButton"),
     clearSelection: $("clearSelectionButton"),
     previewPane: $("previewPane"),
     previewEmpty: $("previewEmpty"),
     previewContent: $("previewContent"),
     previewClose: $("previewClose"),
-    previewDone: $("previewDoneButton"),
     previewCategoryButton: $("previewCategoryButton"),
     originalLink: $("originalLink"),
     previewSource: $("previewSource"),
@@ -96,7 +93,6 @@
     demo: false,
     filters: {
       type: "all",
-      done: "pending",
       account: "all",
       category: "all",
       search: "",
@@ -399,10 +395,6 @@
         (state.filters.type === "today"
           ? date >= today && date < tomorrow
           : date < today);
-      const doneOk =
-        omit === "done" ||
-        state.filters.done === "all" ||
-        (state.filters.done === "done" ? message.done : !message.done);
       const accountOk =
         omit === "account" ||
         state.filters.account === "all" ||
@@ -414,24 +406,18 @@
       const queryOk =
         !query ||
         `${message.subject || ""} ${message.sender || ""}`.toLowerCase().includes(query);
-      return typeOk && doneOk && accountOk && categoryOk && queryOk;
+      return typeOk && accountOk && categoryOk && queryOk;
     });
   }
   function scopeStats(messages) {
     return {
       total: messages.length,
       unread: messages.filter((message) => message.unread).length,
-      done: messages.filter((message) => message.done).length,
     };
   }
   function syncFilterButtons() {
     document.querySelectorAll("[data-type-filter]").forEach((button) => {
       const active = button.dataset.typeFilter === state.filters.type;
-      button.classList.toggle("is-active", active);
-      button.setAttribute("aria-pressed", String(active));
-    });
-    document.querySelectorAll("[data-done-filter]").forEach((button) => {
-      const active = button.dataset.doneFilter === state.filters.done;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
     });
@@ -466,11 +452,11 @@
         account.id === "all"
           ? accountScope
           : accountScope.filter((message) => message.account_id === account.id);
-      const { total, unread, done } = scopeStats(messages);
+      const { total, unread } = scopeStats(messages);
       let status = "";
       if (account.id !== "all")
         status = account.enabled === false ? "Paused" : account.status === "error" ? "Error" : "";
-      const summary = `${text(account.name)}: ${unread} unread of ${total} loaded in current scope, ${done} completed${status ? `, ${status}` : ""}`;
+      const summary = `${text(account.name)}: ${unread} unread of ${total} loaded in current scope${status ? `, ${status}` : ""}`;
       const active = several && state.filters.account === account.id;
       const button = sidebarEntry(`account-filter${active ? " is-active" : ""}`, account.name, unread, summary);
       if (several) {
@@ -507,12 +493,11 @@
       const entry = stats.get(category.id) || {};
       const total = entry.total || 0;
       const unread = entry.unread || 0;
-      const done = entry.done || 0;
       const automatic = entry.automatic || 0;
       const corrected = (entry.corrected || 0) + (entry.correctedAway || 0);
       const awaiting = entry.awaiting || 0;
       const active = state.filters.category === category.id;
-      const summary = `${text(category.name)}: ${unread} unread of ${total} loaded in current scope, ${done} completed; ${automatic} sorted automatically, ${corrected} corrected by you${awaiting ? `, ${awaiting} awaiting classification` : ""}`;
+      const summary = `${text(category.name)}: ${unread} unread of ${total} loaded in current scope; ${automatic} sorted automatically, ${corrected} corrected by you${awaiting ? `, ${awaiting} awaiting classification` : ""}`;
       const button = sidebarEntry(`category-filter${active ? " is-active" : ""}${total ? "" : " is-empty"}`, category.name, unread, summary);
       // Choosing the selected category again shows every category.
       button.dataset.categoryFilter = active ? "all" : category.id;
@@ -530,7 +515,6 @@
       const entry = stats.get(id) || {
         total: 0,
         unread: 0,
-        done: 0,
         automatic: 0,
         corrected: 0,
         correctedAway: 0,
@@ -544,7 +528,6 @@
       for (const id of [current, "all"]) {
         bump(id, "total");
         if (message.unread) bump(id, "unread");
-        if (message.done) bump(id, "done");
         if (["model", "mailbox"].includes(message.source)) bump(id, "automatic");
         if (message.source === "pending") bump(id, "awaiting");
       }
@@ -569,8 +552,8 @@
       backlog: { label: "Earlier", test: (message) => Number(message.date) < today },
     };
     for (const [type, view] of Object.entries(views)) {
-      const { total, unread, done } = scopeStats(scoped.filter(view.test));
-      const summary = `${view.label}: ${unread} unread of ${total} loaded in current scope, ${done} completed`;
+      const { total, unread } = scopeStats(scoped.filter(view.test));
+      const summary = `${view.label}: ${unread} unread of ${total} loaded in current scope`;
       const button = document.querySelector(`[data-type-filter="${type}"]`);
       button.setAttribute("aria-label", summary);
       button.title = summary;
@@ -700,7 +683,6 @@
     checkbox.checked = state.selected.has(message.id);
     checkbox.setAttribute("aria-label", `Select ${subjectText}`);
     const subject = row.querySelector(".row-open");
-    subject.classList.toggle("row-status", Boolean(message.done));
     setText(subject, subjectText);
     subject.title = subjectText;
     const who = senderParts(message.sender);
@@ -765,10 +747,7 @@
       { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
         state.folder
       ] || "Inbox";
-    const completionName = { all: "All completion states", done: "Completed", pending: "Pending" }[
-      state.filters.done
-    ];
-    els.listTitle.textContent = state.filters.done === "done" ? "Completed" : folderName;
+    els.listTitle.textContent = folderName;
     const categoryName =
       state.filters.category === "all"
         ? ""
@@ -780,7 +759,6 @@
         ? "All accounts"
         : accountById(state.filters.account)?.name,
       folderName,
-      completionName,
       dateName,
       categoryName,
       query ? `Search: “${query}”` : "",
@@ -811,7 +789,6 @@
     els.selectAll.indeterminate =
       messages.some((m) => state.selected.has(m.id)) &&
       !messages.every((m) => state.selected.has(m.id));
-    els.markDone.disabled = els.reopen.disabled = state.selected.size === 0;
     els.selectAll.checked =
       messages.length > 0 && messages.every((m) => state.selected.has(m.id));
     if (hasLoading) {
@@ -841,7 +818,6 @@
       empty.className = "empty-state";
       const h = document.createElement("h3");
       const p = document.createElement("p");
-      const hasCompleted = filteredMessages("done").some((message) => message.done);
       const scopedAccounts = state.accounts.filter(
         (account) => state.filters.account === "all" || account.id === state.filters.account,
       );
@@ -862,26 +838,11 @@
       } else if (!state.messages.length) {
         h.textContent = `No mail in ${folderName}`;
         p.textContent = "This folder is empty for the connected accounts.";
-      } else if (state.filters.done === "pending" && hasCompleted) {
-        h.textContent = "No pending mail";
-        p.textContent = "Everything in this scope is completed.";
       } else {
         h.textContent = "No messages match these filters";
         p.textContent = "Try clearing a filter or search term.";
       }
       empty.append(h, p);
-      if (state.filters.done === "pending" && hasCompleted) {
-        const completed = document.createElement("button");
-        completed.type = "button";
-        completed.className = "button button-secondary button-small";
-        completed.textContent = "View completed";
-        completed.addEventListener("click", () => {
-          state.filters.done = "done";
-          renderScope();
-          els.messageList.focus({ preventScroll: true });
-        });
-        empty.append(completed);
-      }
       els.messageList.replaceChildren(empty);
       restoreFocus(focus);
       return;
@@ -1076,7 +1037,6 @@
         els.previewBody.textContent = "Reading message…";
     }, 300);
     updatePreviewPosition();
-    els.previewDone.textContent = message.done ? "Reopen" : "Mark done";
     const setOriginalLink = (value) => {
       const knownUrl = safeOriginalUrl(value);
       els.originalLink.hidden = !knownUrl;
@@ -1168,8 +1128,6 @@
       ids.forEach((id) => {
         const message = state.messages.find((item) => item.id === id);
         if (message) {
-          if (action === "done") message.done = true;
-          if (action === "reopen") message.done = false;
           if (action === "category") {
             if (["model", "mailbox"].includes(message.source))
               message.auto_category = message.category;
@@ -1186,7 +1144,6 @@
           (message) => message.id === state.activeId,
         );
         if (current) {
-          els.previewDone.textContent = current.done ? "Reopen" : "Mark done";
           els.previewCategory.textContent = text(
             categoryById(current.category)?.name ||
               current.category ||
@@ -1197,13 +1154,7 @@
       }
       if (result.undo) showUndoToast(result.undo);
       else
-        showToast(
-          action === "done"
-            ? "Marked done locally"
-            : action === "reopen"
-              ? "Reopened"
-              : "Category updated locally",
-        );
+        showToast("Category updated locally");
     } catch (error) {
       showToast(error.message);
     }
@@ -1431,7 +1382,6 @@
     if (state.activeId) {
       const active = state.messages.find((m) => m.id === state.activeId);
       els.previewUnread.hidden = !active.unread;
-      els.previewDone.textContent = active.done ? "Reopen" : "Mark done";
       els.previewCategory.textContent =
         categoryById(active.category)?.name ||
         active.category ||
@@ -1646,16 +1596,12 @@
     if (close) close.closest("dialog")?.close();
     const type = event.target.closest("[data-type-filter]");
     if (type) state.filters.type = type.dataset.typeFilter;
-    const done = event.target.closest("[data-done-filter]");
-    if (done) state.filters.done = done.dataset.doneFilter;
-    // A folder shows its pending mail: choosing one leaves the Done view (mail.js loads the folder).
     const folder = event.target.closest("[data-mail-folder]");
-    if (folder && state.filters.done === "done") state.filters.done = "pending";
     const account = event.target.closest("[data-account-filter]");
     if (account) state.filters.account = account.dataset.accountFilter;
     const category = event.target.closest("[data-category-filter]");
     if (category) state.filters.category = category.dataset.categoryFilter;
-    if (type || done || account || category || folder) {
+    if (type || account || category || folder) {
       renderScope();
       if (window.innerWidth < 1200) els.previewPane.classList.remove("is-open");
       if (window.innerWidth < 768) closeSidebar();
@@ -1883,7 +1829,6 @@
   els.clearFilters.addEventListener("click", () => {
     state.filters = {
       type: "all",
-      done: "pending",
       account: "all",
       category: "all",
       search: "",
@@ -1909,17 +1854,6 @@
   els.clearSelection.addEventListener("click", () => {
     state.selected.clear();
     renderList();
-  });
-  els.markDone.addEventListener("click", () =>
-    performAction([...state.selected], "done"),
-  );
-  els.reopen.addEventListener("click", () =>
-    performAction([...state.selected], "reopen"),
-  );
-  els.previewDone.addEventListener("click", () => {
-    const message = state.messages.find((item) => item.id === state.activeId);
-    if (message)
-      performAction([message.id], message.done ? "reopen" : "done", undefined, "preview");
   });
   els.previewCategoryButton.addEventListener("click", () => {
     if (state.activeId) showCategoryDialog([state.activeId]);

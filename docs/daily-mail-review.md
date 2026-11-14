@@ -9,7 +9,7 @@ mail as fixtures or transmit real mail to coding agents.
 
 | Priority | Finding | Reproduction / consequence | Acceptance |
 | --- | --- | --- | --- |
-| P1 | Done has no useful default destination | Inbox defaults to completion=all; Done leaves the row with a strike-through | Pending Inbox removes it; Completed finds it; Reopen restores it; category survives |
+| P1 | Done has no useful default destination | Inbox defaults to completion=all; Done leaves the row with a strike-through | Pending Inbox removes it; Completed finds it; Reopen restores it; category survives. Superseded in 0.1.7: Done is Archive (`e`/`d`), so the mailbox agrees |
 | P1 | Routine navigation recreates every list row | In a 40-message fixture, 20 Down presses remove 800 row nodes | Unchanged rows retain identity, focus, geometry and scroll; changed rows update without whole-list teardown |
 | P1 | Queued flags overwrite each other | On an unread message, queue read then star while provider writes are blocked: snapshot becomes unread=true/starred=true | Independent fields retain their queued state; older requests cannot remove newer overlays |
 | P1 | Automatic read overtakes later explicit unread | Separate queues can write unread then stale read, leaving provider and UI read | PR #55 shares one ordered outbox; final intent and immediate failure rollback verified |
@@ -25,7 +25,7 @@ installation, distribution contents and a non-root Docker smoke run.
 The stable-list fix landed in [PR #53](https://github.com/scamai/email-town-labeler/pull/53).
 The original 40-message/20-Down reproduction now removes zero row nodes, versus 800 before.
 WebKit and Chromium verify row/control identity, selection, current-state row actions, reordered-row
-focus and visibility, background refresh, held responses, Done/undo, and narrow Back/Escape.
+focus and visibility, background refresh, held responses, archive, and narrow Back/Escape.
 The lead found and fixed an additional key-only focus-restoration edge during independent review.
 Old assets fail the identity regression, and the pre-guard version fails the Escape regression.
 Hover/focus geometry passed at 1280, 1000 and 390 px in both engines; 787 unit tests passed with
@@ -137,8 +137,8 @@ requires owner enrollment through the app, then:
 4. Check IMAP special-use folder discovery, UID MOVE support, SMTP settings and OS vault access
    on the actual chosen server and desktop OS.
 
-Done is local completion, not provider Archive or Trash. Classification tags and completion
-are independent. Local overrides are keyed by account and provider message identity; do not
+Since 0.1.7 being done with a message is provider Archive; the old local completion flag is no longer
+shown or set. Local overrides are keyed by account and provider message identity; do not
 infer that they survive an IMAP server changing UID/UIDVALIDITY or moving between folders.
 
 ## Classification limitations

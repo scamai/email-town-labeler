@@ -975,9 +975,7 @@
         host.state.folder
       ] || "Mail";
     document.querySelectorAll("[data-mail-folder]").forEach((button) => {
-      // In the Done view the Done entry is the selected one, not the folder underneath it.
-      const active =
-        button.dataset.mailFolder === host.state.folder && host.state.filters.done !== "done";
+      const active = button.dataset.mailFolder === host.state.folder;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
       if (active)
@@ -996,8 +994,7 @@
         badge.title = active && unread ? `${unread} unread loaded in current filters` : "";
       }
     });
-    const view = host.state.filters.done === "done" ? "Completed" : folder;
-    document.title = unread ? `${view} (${unread}) · Email Town` : `${view} · Email Town`;
+    document.title = unread ? `${folder} (${unread}) · Email Town` : `${folder} · Email Town`;
   }
   host.render = render;
   // A send, or a bulk action still being handed to the outbox (a few ms): the next key action waits.

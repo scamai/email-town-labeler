@@ -196,18 +196,22 @@ def main():
             expect(page.locator(".message-row")).to_have_count(6)
             page.locator("[data-account-filter]").nth(1).click()
             expect(page.locator(".message-row")).to_have_count(3)
-            page.locator("#selectAll").check()
-            page.locator("#markDoneButton").click()
+            expect(page.locator("#markDoneButton, #reopenButton, #previewDoneButton")).to_have_count(0)
+            page.locator(".row-open").first.click()
+
+            def recategorize(category):
+                page.locator("#previewMore summary").click()
+                page.locator("#previewCategoryButton").click()
+                page.locator("#categorySelect").select_option(category)
+                page.locator("#categoryForm button[type=submit]").click()
+
+            recategorize("travel")
             expect(page.locator("#toast button")).to_have_text("Undo")
-            assert sum(m["done"] for m in manager.snapshot()["messages"]) == 3
+            assert sum(m["category"] == "travel" for m in manager.snapshot()["messages"]) == 1
             page.locator("#toast button").click()
             expect(page.locator("#toast")).to_have_text("Change undone")
-            assert not any(m["done"] for m in manager.snapshot()["messages"])
-            page.locator(".row-open").first.click()
-            page.locator("#previewMore summary").click()
-            page.locator("#previewCategoryButton").click()
-            page.locator("#categorySelect").select_option("travel")
-            page.locator("#categoryForm button[type=submit]").click()
+            assert not any(m["category"] == "travel" for m in manager.snapshot()["messages"])
+            recategorize("travel")
             expect(page.locator("#previewCategory")).to_have_text("Travel")
             expect(page.locator("#previewCategory")).to_have_attribute("data-category", "travel")
             page.reload()

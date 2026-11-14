@@ -7,8 +7,8 @@ English · [简体中文](desktop-workbench.md)
 [Download the app](#download-the-app) · [Open from source](#open-from-source) · [Connect accounts](#connect-accounts) · [Process mail](#process-mail) · [Keyboard shortcuts](#keyboard-shortcuts) · [Appearance](#appearance) · [Privacy](#privacy) · [Recovery and verification](#recovery-and-verification)
 
 The workbench combines explicitly authorized mailboxes into one local list, with Inbox, Sent, Archive and
-Trash views, common categories, search and completion state. It supports explicit send/reply/forward,
-read/unread, starred, archive, trash/restore and attachment actions. Manual categories and completion remain local.
+Trash views, common categories and search. It supports explicit send/reply/forward,
+read/unread, starred, archive, trash/restore and attachment actions. Manual categories remain local.
 It runs as the Email Town desktop app (macOS: signed and notarized; Windows/Linux: unsigned; not in an app store) or from source in your browser.
 
 ## Download the app
@@ -153,10 +153,11 @@ Three panes, as in Outlook: folders and filters, the message list, the reading p
 border (or focus it and press ←/→) to resize; double-click restores the default. Widths are kept per
 device.
 
-The folder pane lists Inbox, Drafts, Sent, Archive, Trash and **Done**. A folder shows its pending mail;
-marking a message done moves it to **Done**, with its category tags intact, and **Reopen** returns it.
-Completion is local: it does not archive, delete, move, or mark the provider message read. An all-done
-folder offers **View completed**.
+The folder pane lists Inbox, Drafts, Sent, Archive and Trash. Being done with a message is **Archive**
+(<kbd>e</kbd> or <kbd>d</kbd>), as in Gmail: it leaves the Inbox here and in the mailbox itself, so every
+mail app agrees. It is in **Archive**, category intact, and **Restore** puts it back in the Inbox. (Before
+0.1.7 a separate local **Done** only hid mail on this device; mail marked that way shows in the Inbox again
+until it is archived.)
 
 Below the folders, categories and accounts each show one number: their unread mail in the current scope.
 Choose a category to filter by it and again (or its chip in the list header) to clear it. With one
@@ -164,12 +165,12 @@ account, there is no "All accounts" entry and rows carry no account name. The li
 range (All / Today / Earlier), a chip per active filter, and the message count; search sits in the top
 bar. Filters compose; **Clear search and filters** returns to the default view. Each row is two fixed
 lines: the sender's name and the time; the subject, its category and the star. Unread rows are bold with
-a blue bar at the left edge. Totals, completion and classification sources (sorted automatically,
+a blue bar at the left edge. Totals and classification sources (sorted automatically,
 corrected by you, awaiting classification) are in each entry's tooltip and accessible name. Only the
 active folder has a loaded unread count; other folders are not reported as zero.
 They do not measure accuracy or establish that unreviewed classifications are correct. Failed or paused
 accounts are distinguished from genuinely empty folders.
-Completion survives restart; undo tokens live only in the current process. Selection is limited to loaded,
+Manual categories survive restart; undo tokens live only in the current process. Selection is limited to loaded,
 currently filtered results and 500 messages per action across accounts. The initial window is 100 inbox
 messages per account; Load more adds 100 up to 1,000 per account.
 
@@ -180,7 +181,7 @@ downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding i
 must be re-added explicitly.
 
 Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
-Local overrides take precedence and are independent of completion. They currently neither write back to the
+Local overrides take precedence. They currently neither write back to the
 provider nor train the existing CLI feedback model.
 
 A message with an HTML version opens formatted, as Gmail shows it: the sender's layout, colours, buttons and
@@ -207,16 +208,16 @@ only; read-only accounts show neither.
 Inbox, Sent, Archive and Trash are separate views. Counts cover loaded messages only; truncation is
 explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox while preserving local
 workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox.
-These changes synchronize to other clients using the same mailbox. Local category/completion changes
+These changes synchronize to other clients using the same mailbox. Local category changes
 stay on this device. Selecting all results selects only loaded, filtered messages, not the whole mailbox.
 Synchronization runs every 60 seconds. The UI holds one request open (up to 10 seconds) and updates as soon as
 local state changes. A cold Gmail list shows rows in batches of 25 while the rest load; returning to a folder shows
 its last list at once and then revalidates it. The newest 10 bodies per Microsoft/IMAP account are read ahead so they open instantly. Failure in one account retains its last
-list with an error and leaves others usable. Completion survives restart; undo tokens live only in the current process.
+list with an error and leaves others usable. Manual categories survive restart; undo tokens live only in the current process.
 
 The top bar holds **Compose** and **Drafts**. The list shows sender/time, subject, then category/account.
-Select messages to reveal batch actions. **More** groups read/star controls and local completion/category
-actions separately. The preview keeps archive/trash at the top and reply/forward below the sender details.
+Select messages to reveal batch actions. **More** groups read/star controls and the local category action
+separately. The preview keeps archive/trash at the top and reply/forward below the sender details.
 Below 1,200 CSS pixels, opening a message replaces the list; **Back** returns to the same message.
 Below 768 pixels, the menu button opens filters/accounts. Compose keeps **Send** and **Save draft** visible
 while its fields scroll. See the [layout decisions](design-spec.md#desktop-layout-and-alignment).
@@ -236,9 +237,9 @@ Apple Mail (Ctrl on Windows and Linux).
 | <kbd>Shift</kbd>-click · <kbd>⌘</kbd>-click | Select a range (rows or checkboxes) · add or remove one message without opening it |
 | <kbd>Shift j</kbd> / <kbd>Shift k</kbd> | Extend the selection down / up |
 | <kbd>*</kbd> then <kbd>a</kbd> / <kbd>n</kbd> / <kbd>r</kbd> / <kbd>u</kbd> | Select all, none, read, unread (also in the ▾ menu beside "Select all loaded", with Starred and Unstarred) |
-| <kbd>e</kbd> | Archive (the selection if there is one, else the open message) |
+| <kbd>e</kbd> or <kbd>d</kbd> | Archive: done with it (the selection if there is one, else the open message) |
 | <kbd>#</kbd> or <kbd>Delete</kbd> | Move to Trash (asks first, as the button does) |
-| <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> · <kbd>d</kbd> | Star or unstar · mark unread · mark read · done or reopen |
+| <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> | Star or unstar · mark unread · mark read |
 | <kbd>c</kbd> or <kbd>⌘N</kbd> | New message |
 | <kbd>r</kbd> / <kbd>a</kbd> / <kbd>f</kbd> or <kbd>⌘R</kbd> / <kbd>⌘⇧R</kbd> / <kbd>⌘⇧F</kbd> | Reply / reply all / forward |
 | <kbd>⌘Enter</kbd> | Send the message you are writing |
@@ -302,7 +303,7 @@ sending persist locally, including attachment bytes, without additional applicat
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, completion and revisions, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 
@@ -328,7 +329,6 @@ uv run --extra dev --with playwright python scripts/check_mail_ui.py
 uv run --extra dev --with playwright python scripts/check_layout_ui.py
 uv run --extra dev --with playwright python scripts/check_recovery_ui.py
 uv run --extra dev --with playwright python scripts/check_outbox_layout_ui.py
-uv run --extra dev --with playwright python scripts/check_completion_ui.py
 uv run --extra dev --with playwright python scripts/check_list_reconciliation_ui.py
 # Also run WebKit; this does not replace native macOS acceptance:
 EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/check_desktop_ui.py
@@ -336,6 +336,6 @@ EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/
 ```
 
 Browser tests use clearly labeled synthetic mail from two accounts and exercise actual loopback HTTP actions,
-filters, plaintext preview, completion/undo, category persistence, keyboard use, and four viewport widths in
+filters, plaintext preview, category undo and persistence, keyboard use, and four viewport widths in
 light/dark themes. They do not establish live OAuth/provider behavior for unauthorized accounts. Real cross-provider
 acceptance still needs separately authorized accounts, new-mail/expiry/reconnection checks and client feedback tests.

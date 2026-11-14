@@ -34,11 +34,10 @@
         ["Shift-click", "Select a range (rows or checkboxes)"],
         [`${MOD}-click`, "Add or remove one message"],
         ["Esc", "Clear the selection"],
-        ["e", "Archive"],
+        ["e or d", "Archive (done with it)"],
         ["# or Delete", "Move to Trash"],
         ["s", "Star or unstar"],
         ["Shift U / Shift I", "Mark unread / read"],
-        ["d", "Mark done or reopen"],
       ],
     ],
     [
@@ -267,14 +266,12 @@
       pendingGo = Date.now();
       handled = true;
     } else if (lower === "x") handled = toggleOpenSelected();
-    else if (lower === "e") handled = act("archive");
+    else if (lower === "e" || (lower === "d" && !event.shiftKey)) handled = act("archive");
     else if (key === "#" || key === "Delete" || key === "Backspace")
       handled = act("trash");
     else if (lower === "s" && !event.shiftKey) handled = act("toggle-star");
     else if (key === "U") handled = act("unread");
     else if (key === "I") handled = act("read");
-    else if (lower === "d" && !event.shiftKey)
-      handled = !selection() && press("#previewDoneButton");
     else if (lower === "c" && !event.shiftKey) handled = compose();
     else if (lower === "r" && !event.shiftKey) handled = compose("reply");
     else if (lower === "a" && !event.shiftKey) handled = compose("reply-all");

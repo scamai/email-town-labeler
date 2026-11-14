@@ -265,19 +265,19 @@ def main() -> int:
                 assert page.evaluate("window.EmailTownMailHost.state.seq") >= newer
                 assert page.evaluate(identical), f"{engine}: out-of-order response replaced rows"
 
-                # Done removes a focused pending row; focus advances. Undo restores the active row.
-                assert page.evaluate("window.EmailTownMailHost.state.filters.done") == "pending"
+                # d (archive) removes a focused row at once; focus stays on the row now in its place.
                 rows.nth(11).locator(".row-open").click()
                 rows.nth(11).locator(".row-open").focus()
-                completed_id = rows.nth(11).get_attribute("data-message-id")
+                archived_id = rows.nth(11).get_attribute("data-message-id")
                 page.keyboard.press("d")
-                expect(page.locator(f'.message-row[data-message-id="{completed_id}"]')).to_have_count(0)
+                expect(page.locator(f'.message-row[data-message-id="{archived_id}"]')).to_have_count(0)
                 expect(rows.nth(11).locator(".row-open")).to_be_focused()
-                page.locator("#toast button").click()
-                restored = page.locator(f'.message-row[data-message-id="{completed_id}"]')
-                expect(restored).to_have_count(1)
-                expect(restored.locator(".row-open")).to_be_focused()
-                page.screenshot(path=str(out / f"{engine}-after-undo.png"))
+                page.screenshot(path=str(out / f"{engine}-after-archive.png"))
+                # The archived row is gone for good: the rows left are the identity baseline from here on.
+                page.evaluate(
+                    "window.__rows = window.__rows.filter(([id]) => id !== " + repr(archived_id) + ")"
+                )
+                assert page.evaluate(identical), f"{engine}: archiving one row replaced the others"
 
                 # Bulk read updates preserve selection and every unaffected row/control.
                 for index in range(3):
@@ -329,7 +329,7 @@ def main() -> int:
                 }""")
                 assert geometry["before"] == geometry["after"], (engine, "unread badge moved list", geometry)
                 assert not errors, errors
-                print(f"{engine}: identity, focus, scroll, Done/undo, bulk and held responses pass")
+                print(f"{engine}: identity, focus, scroll, archive, bulk and held responses pass")
             finally:
                 browser.close()
                 server.shutdown()
