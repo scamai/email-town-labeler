@@ -338,6 +338,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.change_folder(data.get("folder"))
             elif path == "/api/mail-action":
                 result = manager.mail_action(data)
+            elif path == "/api/mail-undo":
+                result = manager.mail_undo(data.get("job_id"))
             elif path == "/api/send":
                 result = manager.send_mail(data)
             elif path == "/api/draft":

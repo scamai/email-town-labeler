@@ -7,7 +7,8 @@ Run: uv run --no-project --with-editable '.[dev]' --with playwright python scrip
 - the search ✕ appears only when there is a search or filter to clear;
 - Add account opens on the route that works in this copy: with no Google sign-in client, the email-address
   form (app passwords cover Gmail too), with the address field focused and server settings folded until an
-  unknown domain needs them; no "Account settings" eyebrow.
+  unknown domain needs them; no "Account settings" eyebrow;
+- Archive offers Undo, which brings the row back and sends nothing to the mailbox.
 WebKit (the macOS app's engine) and Chromium; synthetic data only.
 """
 
@@ -92,6 +93,20 @@ def main() -> int:
                     expect(page.locator(control)).to_be_visible()
                 expect(page.locator("#emptyAddAccount")).to_have_count(0)
                 expect(page.locator("#previewEmptyTitle")).to_have_text("Select a message")
+
+                # ─── Archive can be undone: nothing reaches the mailbox ───
+                rows = page.locator(".message-row")
+                count = rows.count()
+                mailbox = next(iter(manager.readers.values()))
+                rows.first.locator(".row-open").click()
+                page.keyboard.press("e")
+                expect(rows).to_have_count(count - 1)
+                expect(page.locator("#toast")).to_contain_text("Archived 1 message")
+                page.locator("#toast button").click()
+                expect(page.locator("#toast")).to_contain_text("Undone")
+                expect(rows).to_have_count(count)
+                page.wait_for_timeout(manager.undo_seconds * 1000 + 500)
+                assert all(r["folder"] == "inbox" for r in mailbox.records), "Undo must send nothing"
                 assert not errors, errors
                 page.screenshot(path=str(out / f"{engine}-with-account.png"))
             finally:

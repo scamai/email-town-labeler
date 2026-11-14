@@ -272,6 +272,34 @@
       els.toast.hidden = true;
     }, 4200);
   }
+  // A short-lived toast with an Undo button. `undo` resolves to the text shown afterwards.
+  function showActionToast(message, undo, ms = 5000) {
+    els.toast.replaceChildren();
+    const label = document.createElement("span");
+    label.textContent = `${message} · `;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-button";
+    button.textContent = "Undo";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        els.toast.textContent = await undo();
+      } catch (error) {
+        els.toast.textContent = error.message;
+      }
+      clearTimeout(state.toastTimer);
+      state.toastTimer = setTimeout(() => {
+        els.toast.hidden = true;
+      }, 3000);
+    });
+    els.toast.append(label, button);
+    els.toast.hidden = false;
+    clearTimeout(state.toastTimer);
+    state.toastTimer = setTimeout(() => {
+      els.toast.hidden = true;
+    }, ms);
+  }
   function showUndoToast(token) {
     els.toast.replaceChildren();
     const label = document.createElement("span");
@@ -1925,6 +1953,7 @@
     state,
     loadState,
     showToast,
+    showActionToast,
     openMessage,
     accountById,
     renderList,
