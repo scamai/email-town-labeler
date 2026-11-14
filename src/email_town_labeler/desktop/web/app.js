@@ -766,6 +766,21 @@
       .filter(Boolean)
       .join(" / ");
     $("listContext").textContent = context;
+    // Nothing to clear, no ✕; no mailbox yet, nothing to sync or write from.
+    const filtered =
+      Boolean(query) ||
+      state.filters.type !== "all" ||
+      state.filters.account !== "all" ||
+      state.filters.category !== "all";
+    els.clearFilters.hidden = !filtered;
+    const hasAccounts = state.accounts.length > 0;
+    els.syncIndicator.hidden = !hasAccounts;
+    $("refreshButton").hidden = !hasAccounts;
+    $("composeButton").hidden = !hasAccounts;
+    $("previewEmptyTitle").textContent = hasAccounts ? "Select a message" : "Your mail will show here";
+    $("previewEmptyText").textContent = hasAccounts
+      ? "Pick a message from the list to read it here."
+      : "Add an email account to start. Your mail stays on this computer.";
     $("listContext").title = context;
     $("listContext").setAttribute("aria-label", context);
     els.messageList.setAttribute("aria-label", `${els.listTitle.textContent}: ${context}`);
@@ -825,8 +840,16 @@
         (message) => state.filters.account === "all" || message.account_id === state.filters.account,
       );
       if (!state.accounts.length) {
-        h.textContent = "No accounts connected";
-        p.textContent = "Add an account to load mail into this workbench.";
+        h.textContent = "Welcome to Email Town";
+        p.textContent =
+          "Connect Gmail, Outlook, iCloud, QQ or any IMAP mailbox. Email Town reads it directly from your provider and sorts it on this computer.";
+        const add = document.createElement("button");
+        add.type = "button";
+        add.className = "button button-primary";
+        add.id = "emptyAddAccount";
+        add.textContent = "Add an email account";
+        add.addEventListener("click", () => openAccountForm());
+        empty.append(h, p, add);
       } else if (!hasAccountMail && scopedAccounts.some(
         (account) => account.enabled !== false && account.status === "error",
       )) {
@@ -842,7 +865,7 @@
         h.textContent = "No messages match these filters";
         p.textContent = "Try clearing a filter or search term.";
       }
-      empty.append(h, p);
+      if (!empty.childElementCount) empty.append(h, p);
       els.messageList.replaceChildren(empty);
       restoreFocus(focus);
       return;
@@ -1753,7 +1776,8 @@
     delete els.imapUsername.dataset.auto;
     els.imapPresetHelp.hidden = true;
     els.useMicrosoft.hidden = true;
-    els.imapServerDetails.open = true;
+    // Known providers fill these in; they open for an unknown domain (applyPreset) or a reconnect.
+    els.imapServerDetails.open = Boolean(account);
     els.accountError.hidden = true;
     els.accountForm.dataset.reconnectId = account?.id || "";
     els.provider.disabled = Boolean(account);
@@ -1776,8 +1800,13 @@
         if (connection[key] !== undefined) $(field).value = connection[key];
       }
     }
+    // A new account starts on the route that works in this copy: Google sign-in when it ships with one,
+    // otherwise the email-address form (app password), which also covers Gmail.
+    if (!account) els.provider.value = state.setup?.google_signin ? "gmail" : "imap";
     setProviderFields();
     els.accountDialog.showModal();
+    if (!account && els.provider.value === "imap") els.imapEmail.focus();
+    else els.provider.focus();
   }
   function showAccountManagement(id) {
     const account = accountById(id);

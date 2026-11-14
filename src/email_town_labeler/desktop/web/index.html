@@ -308,8 +308,8 @@
         >
           <div class="preview-empty" id="previewEmpty">
             <span class="empty-icon" aria-hidden="true">✉</span>
-            <h2>Select a message</h2>
-            <p>Select a message from the list to preview it on this device.</p>
+            <h2 id="previewEmptyTitle">Select a message</h2>
+            <p id="previewEmptyText">Pick a message from the list to read it here.</p>
           </div>
           <article class="preview-content" id="previewContent" hidden>
             <div class="preview-header">
@@ -434,7 +434,6 @@
       <form method="dialog" id="accountForm" class="dialog-card">
         <div class="dialog-heading">
           <div>
-            <p class="eyebrow">Account settings</p>
             <h2 id="accountDialogTitle">Add account</h2>
           </div>
           <button
@@ -447,15 +446,15 @@
           </button>
         </div>
         <p class="dialog-intro">
-          Connect your inbox. Classification and organization run on this
-          device.
+          Email Town talks to your mail provider directly. Your mail and its
+          sorting stay on this computer.
         </p>
-        <label class="field-label" for="providerSelect">Email provider</label
+        <label class="field-label" for="providerSelect">Account type</label
         ><select class="text-input" id="providerSelect" name="provider">
           <option value="gmail">Google / Gmail</option>
           <option value="microsoft">Microsoft / Outlook</option>
           <option value="imap">Other email (iCloud, Yahoo, QQ…)</option>
-          <option value="gmail-existing">Existing Email Town folder</option>
+          <option value="gmail-existing">Advanced: existing Email Town folder</option>
         </select>
         <div id="gmailFields" hidden>
           <p class="field-help" id="googleStatus"></p>

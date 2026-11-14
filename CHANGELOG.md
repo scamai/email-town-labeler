@@ -21,6 +21,12 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- **First run explains itself.** With no mailbox connected, the list welcomes you and offers one button, **Add an
+  email account**; sync status, refresh and Compose stay hidden until there is a mailbox. **Add account** opens on the
+  route that works in this copy (the email-address form with app passwords when no Google sign-in client ships), with
+  the address focused and server settings folded until an unknown domain needs them. The search ✕ shows only when
+  there is a search or filter to clear.
+
 - **Done is Archive.** The local Done folder, **Mark done** and **Reopen** are gone: being done with a message is
   **Archive** (`e`, and now `d`), which leaves the Inbox in the mailbox too, as Gmail's Done does, so Email Town and
   the mailbox never disagree. Mail marked done before shows in the Inbox again until it is archived.
