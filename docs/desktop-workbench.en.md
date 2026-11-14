@@ -104,7 +104,7 @@ To get the native window from source instead of a browser, install the `app` ext
 
 ## Connect accounts
 
-An existing default Gmail authorization is enrolled automatically and listed by its mailbox address. Use **Accounts → + Add** in the sidebar for other
+On first run, with no mailbox yet, **Add an email account** in the middle of the list is the way in. An existing default Gmail authorization is enrolled automatically and listed by its mailbox address. Use **Accounts → + Add** in the sidebar for other
 mailboxes. The display name is optional: left empty, the account is listed by its address. The app does not extract Outlook or Apple Mail credentials.
 
 | Provider | Connection | What you need |

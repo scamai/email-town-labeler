@@ -6,7 +6,8 @@ Run: uv run --no-project --with-editable '.[dev]' --with playwright python scrip
 - nothing that needs a mailbox shows: sync status, refresh, Compose;
 - the search ✕ appears only when there is a search or filter to clear;
 - Add account opens on the route that works in this copy: with no Google sign-in client, the email-address
-  form (app passwords cover Gmail too), with the address field focused; no "Account settings" eyebrow.
+  form (app passwords cover Gmail too), with the address field focused and server settings folded until an
+  unknown domain needs them; no "Account settings" eyebrow.
 WebKit (the macOS app's engine) and Chromium; synthetic data only.
 """
 
@@ -71,6 +72,12 @@ def main() -> int:
                 expect(dialog.locator(".eyebrow")).to_have_count(0)
                 expect(page.locator("#providerSelect")).to_have_value("imap")
                 expect(page.locator("#imapEmail")).to_be_focused()
+                details = page.locator("#imapServerDetails")
+                expect(details).not_to_have_attribute("open", "")  # known providers need no server names
+                page.locator("#imapEmail").fill("someone@unknown-provider.example")
+                page.locator("#imapEmail").blur()
+                expect(details).to_have_attribute("open", "")  # an unknown domain needs them
+                page.locator("#imapEmail").fill("")
                 page.screenshot(path=str(out / f"{engine}-add-account.png"))
                 page.keyboard.press("Escape")
 

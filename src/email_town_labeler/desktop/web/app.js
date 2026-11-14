@@ -1776,7 +1776,8 @@
     delete els.imapUsername.dataset.auto;
     els.imapPresetHelp.hidden = true;
     els.useMicrosoft.hidden = true;
-    els.imapServerDetails.open = true;
+    // Known providers fill these in; they open for an unknown domain (applyPreset) or a reconnect.
+    els.imapServerDetails.open = Boolean(account);
     els.accountError.hidden = true;
     els.accountForm.dataset.reconnectId = account?.id || "";
     els.provider.disabled = Boolean(account);
