@@ -529,6 +529,8 @@
     });
   }
   const LEAVES_FOLDER = ["archive", "trash", "restore"];
+  // Held back for a few seconds by the server, so Undo sends nothing (manager.UNDO_SECONDS).
+  const UNDOABLE = { archive: "Archived", trash: "Moved to Trash" };
   function nextAfter(id, leaving) {
     const ids = (host.filteredMessages?.() || host.state.messages).map((m) => m.id);
     const at = ids.indexOf(id);
@@ -611,8 +613,17 @@
     }
     local.detailId = null;
     await host.loadState();
+    if (UNDOABLE[action]) {
+      const n = chosen.length;
+      host.showActionToast(`${UNDOABLE[action]} ${n === 1 ? "1 message" : `${n} messages`}`, async () => {
+        host.uiLog?.("mail-undo", { action, ids: chosen.slice(0, 20).map(host.k8), count: n });
+        await host.api("/api/mail-undo", { method: "POST", body: JSON.stringify({ job_id: job.job_id }) });
+        await host.loadState();
+        return "Undone. Nothing was changed in your mailbox.";
+      });
+    }
     pollJob(job.job_id).then((result) => {
-      if (result.status === "complete") return;
+      if (["complete", "cancelled"].includes(result.status)) return;
       host.showToast(jobMessage(result));
       if (result.status !== "pending") alert(jobMessage(result));
     });

@@ -675,3 +675,68 @@ def test_a_message_waiting_in_the_outbox_cannot_be_acted_on_again(tmp_path):
         w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids[:1], "action": "trash"})
     reader.gate.set()
     w.close()
+
+
+# ─── Undo window for Archive and Trash ───
+
+
+def test_archive_waits_out_the_undo_window_then_reaches_the_mailbox(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.undo_seconds = 0.4
+    reader.gate.set()
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})["job_id"]
+    time.sleep(0.15)
+    assert reader.writes == [] and w.snapshot()["messages"] == []  # hidden at once, not yet sent
+    assert finished(w, job)["status"] == "complete"
+    assert [a for _m, a in reader.writes] == ["archive", "archive"]
+    w.close()
+
+
+def test_undo_inside_the_window_sends_nothing_and_brings_the_rows_back(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.undo_seconds = 5
+    reader.gate.set()
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "trash"})["job_id"]
+    assert w.snapshot()["messages"] == []
+    assert w.mail_undo(job) == {"ok": True}
+    assert sorted(m["id"] for m in w.snapshot()["messages"]) == sorted(ids)
+    assert w.mail_store.receipt(job)["status"] == "cancelled"
+    assert w.snapshot()["outbox"] == []
+    time.sleep(0.2)
+    assert reader.writes == []
+    w.close()
+    assert reader.writes == []  # quitting does not send what was undone
+
+
+def test_undo_after_the_change_reached_the_mailbox_is_refused(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.undo_seconds = 0
+    reader.gate.set()
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})["job_id"]
+    assert finished(w, job)["status"] == "complete"
+    with pytest.raises(ValueError, match="Too late to undo"):
+        w.mail_undo(job)
+    w.close()
+
+
+def test_quitting_inside_the_window_still_sends_the_change(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.undo_seconds = 60
+    reader.gate.set()
+    job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "archive"})["job_id"]
+    started = time.monotonic()
+    w.close()
+    assert time.monotonic() - started < 5
+    assert [a for _m, a in reader.writes] == ["archive", "archive"]
+    assert w.mail_store.receipt(job)["status"] == "complete"
+
+
+def test_read_and_star_are_not_held_back(tmp_path):
+    w, reader, ids = setup_outbox(tmp_path)
+    w.undo_seconds = 60
+    reader.gate.set()
+    job = flag_request(w, ids[0], "read")
+    assert finished(w, job)["status"] == "complete"
+    with pytest.raises(ValueError, match="Too late to undo"):
+        w.mail_undo(job)  # only Archive and Trash have an undo window
+    w.close()

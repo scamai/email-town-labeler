@@ -9,6 +9,10 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Undo for Archive and Trash.** For 5 seconds after Archive or Trash, the toast offers **Undo**; the change is held
+  back from the mailbox until then, so Undo sends nothing and the messages come straight back. Quitting inside the
+  window sends the change at once rather than dropping it.
+
 - Builds can ship Google sign-in: `scripts/build_app.py --google-client <Desktop OAuth client JSON>` puts the
   company project's client into the app (never into the public repository), so connecting a Gmail account
   needs no client file of the user's own. While the project is unverified, only its test users can sign in.

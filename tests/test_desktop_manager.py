@@ -36,7 +36,8 @@ def _workbench(tmp_path: Path):
     def factory(account):
         return readers[account["id"]]
 
-    workbench = Workbench(root, paths, reader_factory=factory, classifier=object())
+    # No undo window: these tests are about what reaches the provider, not when (see test_desktop_mail).
+    workbench = Workbench(root, paths, reader_factory=factory, classifier=object(), undo_seconds=0)
     first = workbench.accounts.add("One", "imap", {"host": "one.example", "username": "u", "port": 993})
     second = workbench.accounts.add("Two", "imap", {"host": "two.example", "username": "u", "port": 993})
     return workbench, readers, first["id"], second["id"]

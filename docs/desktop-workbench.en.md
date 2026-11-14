@@ -207,7 +207,9 @@ only; read-only accounts show neither.
 
 Inbox, Sent, Archive and Trash are separate views. Counts cover loaded messages only; truncation is
 explicit. At most 32 accounts can be connected. Archive moves mail out of Inbox while preserving local
-workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox.
+workflow records. Trash moves selected originals to the provider trash and Restore returns them to Inbox. For 5 seconds after
+Archive or Trash the toast offers **Undo**: the change is held back from the mailbox until then, so Undo sends
+nothing; quitting inside the window sends it at once.
 These changes synchronize to other clients using the same mailbox. Local category changes
 stay on this device. Selecting all results selects only loaded, filtered messages, not the whole mailbox.
 Synchronization runs every 60 seconds. The UI holds one request open (up to 10 seconds) and updates as soon as
