@@ -1772,3 +1772,22 @@ body.is-resizing {
 body.is-resizing iframe {
   pointer-events: none;
 }
+
+/* Category dialog: "Always use this category for mail from …" (a sender rule). */
+.sender-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.sender-rule[hidden] {
+  display: none;
+}
+.sender-rule input {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

@@ -140,6 +140,7 @@
       manual: "Local manual",
       pending: "Awaiting classification",
       none: "Not classified (sent mail)",
+      sender: "Your rule for this sender",
     })[source] || "Local category";
   function usableFocus(el = document.activeElement) {
     return Boolean(
@@ -300,10 +301,10 @@
       els.toast.hidden = true;
     }, ms);
   }
-  function showUndoToast(token) {
+  function showUndoToast(token, message = "Saved") {
     els.toast.replaceChildren();
     const label = document.createElement("span");
-    label.textContent = "Saved · ";
+    label.textContent = `${message} · `;
     const undo = document.createElement("button");
     undo.type = "button";
     undo.className = "text-button";
@@ -1337,11 +1338,12 @@
     renderList();
   }
 
-  async function performAction(ids, action, category, via = "toolbar") {
+  async function performAction(ids, action, category, via = "toolbar", senderRule = undefined) {
     uiLog("workflow-action", {
       action,
       via,
       ...(category ? { category } : {}),
+      ...(senderRule ? { sender_rule: senderRule } : {}),
       ids: ids.slice(0, 20).map(k8),
       count: ids.length,
       active: k8(state.activeId),
@@ -1360,6 +1362,7 @@
           ids,
           action,
           ...(category ? { category } : {}),
+          ...(senderRule ? { sender_rule: senderRule } : {}),
         }),
       });
       ids.forEach((id) => {
@@ -1389,7 +1392,17 @@
           els.previewCategory.dataset.category = current.category || "unknown";
         }
       }
-      if (result.undo) showUndoToast(result.undo);
+      // A sender rule moves other messages too: take the server's view of every row.
+      if (senderRule) await loadState();
+      const name = categoryById(category)?.name || category;
+      const n = result.senders || 0;
+      const saved =
+        senderRule === "set"
+          ? `${name} for every message from ${n === 1 ? "this sender" : `${n} senders`}`
+          : senderRule === "clear"
+            ? `Rule removed for ${n === 1 ? "this sender" : `${n} senders`}`
+            : "Saved";
+      if (result.undo) showUndoToast(result.undo, saved);
       else
         showToast("Category updated locally");
     } catch (error) {
@@ -1409,6 +1422,22 @@
       (message) => message.id === state.activeId,
     );
     if (current?.category) els.categorySelect.value = current.category;
+    // Decide once per sender (HEY's Screener): the same category for their future mail. Checked when
+    // these senders already have a rule, so unchecking it is how a rule is removed.
+    const chosen = ids.map((id) => state.messages.find((m) => m.id === id)).filter(Boolean);
+    const addresses = [
+      ...new Set(chosen.map((m) => senderParts(m.sender).address.toLowerCase()).filter((a) => a.includes("@"))),
+    ];
+    const received = chosen.every((m) => m.source !== "none");
+    $("senderRuleRow").hidden = !addresses.length || !received;
+    const ruled = chosen.length > 0 && chosen.every((m) => m.sender_rule);
+    $("senderRuleCheck").checked = ruled;
+    $("senderRuleCheck").dataset.ruled = String(ruled);
+    const who = chosen.length && addresses.length === 1
+      ? senderParts(chosen[0].sender).name || addresses[0]
+      : `these ${addresses.length} senders`;
+    $("senderRuleText").textContent = `Always use this category for mail from ${who}`;
+    $("senderRuleRow").title = addresses.length === 1 ? addresses[0] : "";
     els.categoryDialog.showModal();
   }
   function renderJobs() {
@@ -2111,7 +2140,15 @@
   els.categoryForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const ids = JSON.parse(els.categoryDialog.dataset.ids || "[]");
-    performAction(ids, "category", els.categorySelect.value, "category-dialog");
+    const check = $("senderRuleCheck");
+    const rule = $("senderRuleRow").hidden
+      ? undefined
+      : check.checked
+        ? "set"
+        : check.dataset.ruled === "true"
+          ? "clear"
+          : undefined;
+    performAction(ids, "category", els.categorySelect.value, "category-dialog", rule);
     els.categoryDialog.close();
   });
   els.loadMore.addEventListener("click", async () => {

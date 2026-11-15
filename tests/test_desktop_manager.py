@@ -453,3 +453,64 @@ def test_bundle_choice_reaches_the_snapshot_and_survives_a_restart(tmp_path):
     restarted = Workbench(tmp_path / "workbench", workbench.paths, classifier=object(), undo_seconds=0)
     assert "newsletters" not in restarted.snapshot()["prefs"]["bundled"]
     restarted.close()
+
+
+def _from(provider_id, sender, *, category="updates"):
+    return {**_record(provider_id, category=category), "headers": {"subject": "Fixture", "from": sender}}
+
+
+def test_a_sender_rule_moves_that_senders_other_mail_and_undo_takes_it_back(tmp_path):
+    workbench, readers, first, _second = _workbench(tmp_path)
+    readers[first] = FakeReader(
+        [
+            _from("n1", "Digest <digest@example.test>"),
+            _from("n2", "Digest <DIGEST@example.test>"),
+            _from("p1", "Person <person@example.test>", category="action_needed"),
+        ]
+    )
+    workbench._refresh()
+    digest = [m for m in workbench.snapshot()["messages"] if "digest@" in m["sender"].lower()]
+    person = next(m for m in workbench.snapshot()["messages"] if "person@" in m["sender"])
+    result = workbench.action(
+        {"ids": [digest[0]["id"]], "action": "category", "category": "newsletters", "sender_rule": "set"}
+    )
+    assert result["senders"] == 1
+    after = {m["id"]: m for m in workbench.snapshot()["messages"]}
+    other = after[digest[1]["id"]]  # never selected, same address in other case
+    assert (other["category"], other["source"], other["auto_category"]) == (
+        "newsletters",
+        "sender",
+        "updates",
+    )
+    assert after[digest[0]["id"]]["source"] == "manual"  # the one chosen is also a per-message choice
+    assert after[digest[0]["id"]]["sender_rule"] == "newsletters"  # still shows the sender has a rule
+    assert "sender_rule" not in after[person["id"]]
+    assert after[person["id"]]["category"] == "action_needed"
+    # A per-message choice beats the sender's rule.
+    workbench.action({"ids": [other["id"]], "action": "category", "category": "orders"})
+    assert {m["id"]: m for m in workbench.snapshot()["messages"]}[other["id"]]["category"] == "orders"
+    # Undo of the rule change restores the rule set (none) and the chosen message.
+    workbench.undo(result["undo"])
+    assert workbench.sender_rules == {}
+    assert {m["id"]: m for m in workbench.snapshot()["messages"]}[digest[0]["id"]]["category"] == "updates"
+    stored = (tmp_path / "workbench" / "workflow.sqlite").read_bytes()
+    assert b"digest@example.test" not in stored.lower() and b"digest" not in stored.lower()
+    workbench.close()
+
+
+def test_clearing_a_sender_rule_and_rules_survive_a_restart(tmp_path):
+    workbench, readers, first, _second = _workbench(tmp_path)
+    readers[first] = FakeReader([_from("n1", "a@example.test"), _from("n2", "a@example.test")])
+    workbench._refresh()
+    ids = [m["id"] for m in workbench.snapshot()["messages"]]
+    workbench.action({"ids": ids[:1], "action": "category", "category": "travel", "sender_rule": "set"})
+    restarted = Workbench(tmp_path / "workbench", workbench.paths, classifier=object(), undo_seconds=0)
+    assert list(restarted.sender_rules.values()) == ["travel"]
+    restarted.close()
+    workbench.action({"ids": ids[1:], "action": "category", "category": "travel", "sender_rule": "clear"})
+    assert workbench.sender_rules == {}
+    with pytest.raises(ValueError, match="Unknown sender rule"):
+        workbench.action(
+            {"ids": ids[:1], "action": "category", "category": "travel", "sender_rule": "always"}
+        )
+    workbench.close()

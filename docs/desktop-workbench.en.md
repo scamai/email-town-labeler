@@ -193,6 +193,13 @@ Existing Gmail project labels supply categories directly. Other unclassified mai
 Local overrides take precedence. They currently neither write back to the
 provider nor train the existing CLI feedback model.
 
+**Decide once per sender.** The category dialog offers **Always use this category for mail from …**. With it,
+that sender's other loaded mail and everything they send later get the category you chose, ahead of the
+provider label and the model (a category you set on one message still wins for that message). This is how
+you screen a new sender: a newsletter that landed in Action needed moves into the Newsletters bundle along
+with its future issues. **Undo** in the toast removes the rule again; reopening the dialog shows the box
+checked, and unchecking it removes the rule. Rules apply to received mail only and stay on this device.
+
 A message with an HTML version opens formatted, as Gmail shows it: the sender's layout, colours, buttons and
 inline images. The HTML is reduced to an allowlist first (no scripts, forms, frames, SVG or event handlers;
 links keep only http, https and mailto) and shown in a sandboxed frame that cannot run code, submit forms
@@ -314,7 +321,7 @@ sending persist locally, including attachment bytes, without additional applicat
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, which categories are bundled, pane widths, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, sender rules (a keyed hash of each address, never the address), legacy completion flags and revisions, which categories are bundled, pane widths, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 

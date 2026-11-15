@@ -116,3 +116,36 @@ def test_a_hand_edited_pane_width_outside_the_limits_is_ignored(tmp_path: Path):
     with state._connect() as db:
         db.execute("""INSERT INTO prefs(key, value) VALUES ('panes', '{"list": 5, "sidebar": 250}')""")
     assert state.prefs()["panes"] == {"sidebar": 250}
+
+
+# ─── Sender rules: decided once per sender, stored without the address ───
+
+
+def test_sender_keys_are_keyed_per_install_and_ignore_case(tmp_path: Path):
+    one = LocalState(tmp_path / "one.sqlite")
+    other = LocalState(tmp_path / "other.sqlite")
+    key = one.sender_key("News@Example.test")
+    assert (
+        key
+        == one.sender_key("news@example.test ")
+        == LocalState(tmp_path / "one.sqlite").sender_key("news@example.test")
+    )
+    assert key != other.sender_key("news@example.test")  # a different install's key: no shared dictionary
+    assert "news@example.test" not in key
+    assert "sender_secret" not in one.prefs()  # the key never goes to the page
+
+
+def test_sender_rules_set_clear_and_restore(tmp_path: Path):
+    state = LocalState(tmp_path / "workflow.sqlite")
+    a, b = state.sender_key("a@example.test"), state.sender_key("b@example.test")
+    assert state.set_sender_rules([a], "newsletters") == [(a, None)]
+    previous = state.set_sender_rules([a, b], "orders")
+    assert previous == [(a, "newsletters"), (b, None)]
+    assert state.sender_rules() == {a: "orders", b: "orders"}
+    state.restore_sender_rules(previous)
+    assert state.sender_rules() == {a: "newsletters"}
+    state.set_sender_rules([a], None)
+    assert state.sender_rules() == {}
+    for not_a_decision in ("new_sender", "unknown", "made_up"):
+        with pytest.raises(ValueError, match="Choose a category"):
+            state.set_sender_rules([a], not_a_decision)

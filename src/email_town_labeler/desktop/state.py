@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
-from ..taxonomy import LABEL_CLASSES
+from ..taxonomy import LABEL_CLASSES, NEW_SENDER, UNKNOWN
 
 # Categories that can collapse into one Inbox row ("bundle"). Mail that may need you (action needed, new
 # senders, unclassified) always stays as its own rows. All five bundle by default, as in Inbox by Gmail.
 BUNDLEABLE = ("newsletters", "promotional", "updates", "orders", "travel")
 # Pane widths in CSS pixels (desktop/web/panes.js enforces the same minimums against the window).
 PANE_LIMITS = {"sidebar": (180, 360), "list": (320, 4000)}
+# What a sender rule can choose: a real category ("new sender" and "unclassified" are not decisions).
+RULE_CATEGORIES = tuple(c for c in LABEL_CLASSES if c not in (NEW_SENDER, UNKNOWN))
 
 
 def message_key(account_id: str, provider_id: str) -> str:
@@ -31,6 +35,10 @@ class LocalState:
                 "CREATE TABLE IF NOT EXISTS workflow (id TEXT PRIMARY KEY, done INTEGER NOT NULL DEFAULT 0, category TEXT, revision INTEGER NOT NULL DEFAULT 0)"
             )
             db.execute("CREATE TABLE IF NOT EXISTS prefs (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            # Sender rules: a keyed hash of the address (never the address) -> the category for its mail.
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS sender_rules (sender TEXT PRIMARY KEY, category TEXT NOT NULL)"
+            )
         path.chmod(0o600)
 
     @contextmanager
@@ -153,3 +161,57 @@ class LocalState:
             ]
             self._save("bundled", chosen)
         return {"bundled": chosen}
+
+    # ─── Sender rules: "every message from this sender goes to <category>", decided once ───
+
+    def sender_key(self, address: str) -> str:
+        """A keyed hash of an address, so the file holds no readable address. The key is random per install
+        (kept in prefs, never sent to the page), so hashes do not match across installs; someone holding the
+        whole file, key included, could still test guessed addresses."""
+        if getattr(self, "_sender_secret", None) is None:
+            with self.lock:
+                saved = self._saved("sender_secret")
+                if not (isinstance(saved, str) and len(saved) == 64):
+                    saved = secrets.token_hex(32)
+                    self._save("sender_secret", saved)
+                self._sender_secret = bytes.fromhex(saved)
+        return hmac.new(self._sender_secret, address.strip().lower().encode(), hashlib.sha256).hexdigest()
+
+    def sender_rules(self) -> dict[str, str]:
+        with self.lock, self._connect() as db:
+            return {
+                row["sender"]: row["category"]
+                for row in db.execute("SELECT sender, category FROM sender_rules")
+                if row["category"] in RULE_CATEGORIES
+            }
+
+    def set_sender_rules(self, keys: list[str], category: str | None) -> list[tuple[str, str | None]]:
+        """Set (or, with None, remove) the rule for each sender key; returns what each had before, for Undo."""
+        if category is not None and category not in RULE_CATEGORIES:
+            raise ValueError("Choose a category for this sender")
+        with self.lock, self._connect() as db:
+            previous = []
+            for key in dict.fromkeys(keys):
+                row = db.execute("SELECT category FROM sender_rules WHERE sender=?", (key,)).fetchone()
+                previous.append((key, row["category"] if row else None))
+                if category is None:
+                    db.execute("DELETE FROM sender_rules WHERE sender=?", (key,))
+                else:
+                    db.execute(
+                        "INSERT INTO sender_rules(sender, category) VALUES (?, ?) "
+                        "ON CONFLICT(sender) DO UPDATE SET category=excluded.category",
+                        (key, category),
+                    )
+            return previous
+
+    def restore_sender_rules(self, previous: list[tuple[str, str | None]]) -> None:
+        with self.lock, self._connect() as db:
+            for key, category in previous:
+                if category is None:
+                    db.execute("DELETE FROM sender_rules WHERE sender=?", (key,))
+                else:
+                    db.execute(
+                        "INSERT INTO sender_rules(sender, category) VALUES (?, ?) "
+                        "ON CONFLICT(sender) DO UPDATE SET category=excluded.category",
+                        (key, category),
+                    )
