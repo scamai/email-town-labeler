@@ -26,6 +26,7 @@ from check_shortcuts_ui import until
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop.manager import Workbench
 from email_town_labeler.desktop.server import LocalServer
+from email_town_labeler.desktop.state import BUNDLEABLE
 
 NOW = int(time.time() * 1000)
 TO = ", ".join(f"Person Number {i} <person{i}@example.test>" for i in range(1, 13))
@@ -76,6 +77,12 @@ MAIL = {  # newest first
 }
 
 
+def flat_inbox(manager):
+    """List every message as its own row, as before Inbox bundles: this check is about the rows themselves."""
+    for category in BUNDLEABLE:
+        manager.set_bundled(category, False)
+
+
 class Reader:
     def __init__(self, account):
         self.address = "me@example.test"
@@ -124,6 +131,7 @@ def main() -> int:
     paths = Paths.default(out / "home").ensure()
     paths.config_file.write_text('[model]\nref = "rules"\n')  # offline: never the 263 MB default model
     manager = Workbench(out / "workbench", paths, reader_factory=Reader)
+    flat_inbox(manager)  # bundles have their own check (check_bundles_ui.py)
     manager.accounts.add("Work", "imap", {"host": "h", "username": "me@example.test", "port": 993})
     manager._refresh()
     server = LocalServer(manager)

@@ -360,6 +360,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.mark_read(data.get("id", ""), data.get("read", True))
             elif path == "/api/action":
                 result = manager.action(data)
+            elif path == "/api/bundle":
+                result = manager.set_bundled(data.get("category"), data.get("bundled"))
             elif path == "/api/undo":
                 result = manager.undo(data.get("token", ""))
             elif path == "/api/account":

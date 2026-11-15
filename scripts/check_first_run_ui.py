@@ -27,6 +27,13 @@ from check_shortcuts_ui import FixtureReader
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop.manager import Workbench
 from email_town_labeler.desktop.server import LocalServer
+from email_town_labeler.desktop.state import BUNDLEABLE
+
+
+def flat_inbox(manager):
+    """List every message as its own row, as before Inbox bundles: this check is about the rows themselves."""
+    for category in BUNDLEABLE:
+        manager.set_bundled(category, False)
 
 
 def main() -> int:
@@ -37,6 +44,7 @@ def main() -> int:
             paths = Paths.default(root / "home").ensure()
             paths.config_file.write_text('[model]\nref = "rules"\n')  # offline
             manager = Workbench(root / "workbench", paths, reader_factory=FixtureReader)
+            flat_inbox(manager)  # bundles have their own check (check_bundles_ui.py)
             server = LocalServer(manager)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             browser = getattr(playwright, engine).launch()

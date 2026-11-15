@@ -1000,7 +1000,8 @@
       clearDetail();
     }
     // Only the active folder has a loaded snapshot; its unread count follows every other active filter.
-    const unread = (host.filteredMessages?.() || host.state.messages).filter((m) => m.unread).length;
+    // Bundled mail counts too: it is in the Inbox, just collapsed into one row per category.
+    const unread = (host.filteredMessages?.("bundle") || host.state.messages).filter((m) => m.unread).length;
     const folder =
       { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
         host.state.folder
@@ -1028,6 +1029,9 @@
     document.title = unread ? `${folder} (${unread}) · Email Town` : `${folder} · Email Town`;
   }
   host.render = render;
+  // For the Inbox bundles' "Archive all" (app.js): the same outbox, Undo toast and checks as the toolbar.
+  host.mailAction = mailAction;
+  host.mailAllowed = allowed;
   // A send, or a bulk action still being handed to the outbox (a few ms): the next key action waits.
   host.mailBusy = () => local.busy || Boolean(local.posting);
   // the buttons' path, permissions and confirm

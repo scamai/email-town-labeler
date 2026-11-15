@@ -411,11 +411,25 @@
     renderPreviewError();
   }
 
+  // Bundles (as in Inbox by Gmail): in the Inbox, with no category chosen and no search, the
+  // categories listed in state.bundled collapse into one row each. Mail that may need you never does.
+  function bundling() {
+    return (
+      state.folder === "inbox" &&
+      state.filters.category === "all" &&
+      !state.filters.search.trim() &&
+      (state.bundled || []).length > 0
+    );
+  }
+  // What the list shows. `omit` names one filter to ignore, for counts; any omit also keeps bundled
+  // mail, since counts are about all of it ("bundle" ignores only the bundling).
   function filteredMessages(omit = "") {
     const query = state.filters.search.trim().toLowerCase();
     const today = localMidnight();
     const tomorrow = localMidnight(1);
+    const hidden = !omit && bundling() ? new Set(state.bundled) : null;
     return state.messages.filter((message) => {
+      if (hidden?.has(message.category)) return false;
       const date = Number(message.date) || 0;
       const typeOk =
         omit === "type" ||
@@ -621,7 +635,44 @@
         state.filters.search = "";
       });
     $("filterChips").replaceChildren(...chips);
+    // Inside a bundleable category in the Inbox: choose whether it shows as one row there.
+    const toggle = $("bundleToggle");
+    const category = state.filters.category;
+    const bar = $("bundleBar");
+    bar.hidden = !(state.folder === "inbox" && (state.bundleable || []).includes(category));
+    if (!bar.hidden) {
+      const bundled = state.bundled.includes(category);
+      const name = categoryById(category)?.name || category;
+      toggle.dataset.category = category;
+      toggle.dataset.bundled = String(bundled);
+      $("bundleBarText").textContent = bundled
+        ? "Shown as one row in your Inbox."
+        : "Shown one by one in your Inbox.";
+      toggle.setAttribute("aria-label", bundled ? `Show ${name} one by one in the Inbox` : `Bundle ${name} in the Inbox`);
+      toggle.textContent = bundled ? "Show one by one" : "Bundle them";
+    }
   }
+  $("bundleToggle").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const category = button.dataset.category;
+    const bundled = button.dataset.bundled !== "true";
+    uiLog("bundle-toggle", { category, bundled });
+    button.disabled = true;
+    try {
+      const result = await api("/api/bundle", {
+        method: "POST",
+        body: JSON.stringify({ category, bundled }),
+      });
+      state.bundled = result.prefs?.bundled || state.bundled;
+      const name = categoryById(category)?.name || category;
+      showToast(bundled ? `${name} will show as one row in the Inbox` : `${name} will show one by one in the Inbox`);
+      renderScope();
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   function renderScope() {
     renderCounts();
     renderChips();
@@ -642,6 +693,7 @@
   }
 
   const rowNodes = new Map();
+  const bundleNodes = new Map(); // category -> its bundle row
   const setText = (node, value) => {
     const next = text(value);
     if (node.textContent !== next) node.textContent = next;
@@ -701,6 +753,116 @@
     body.append(title, meta, snippet);
     row.append(lead, body);
     return row;
+  }
+  // One group per bundled category under the current account and date filters, newest message first.
+  function bundleGroups() {
+    if (!bundling()) return [];
+    const groups = new Map();
+    for (const message of filteredMessages("bundle")) {
+      if (!state.bundled.includes(message.category)) continue;
+      if (!groups.has(message.category)) groups.set(message.category, []);
+      groups.get(message.category).push(message);
+    }
+    return [...groups].map(([category, messages]) => ({
+      category,
+      messages,
+      newest: Math.max(...messages.map((m) => Number(m.date) || 0)),
+      unread: messages.filter((m) => m.unread).length,
+    }));
+  }
+  function openBundle(category) {
+    uiLog("bundle-open", { category });
+    state.filters.category = category;
+    renderScope();
+    ensureListFocus(0);
+  }
+  function createBundleRow(category) {
+    const row = document.createElement("article");
+    row.className = "bundle-row";
+    row.dataset.bundle = category;
+    row.dataset.category = category;
+    const lead = document.createElement("div");
+    lead.className = "row-lead";
+    const icon = document.createElement("span");
+    icon.className = "bundle-icon";
+    icon.setAttribute("aria-hidden", "true");
+    lead.append(icon);
+    const body = document.createElement("div");
+    body.className = "row-content";
+    const title = document.createElement("div");
+    title.className = "row-title";
+    const name = document.createElement("span");
+    name.className = "row-sender bundle-name";
+    const count = document.createElement("span");
+    count.className = "bundle-count";
+    const date = document.createElement("time");
+    title.append(name, count, date);
+    const meta = document.createElement("div");
+    meta.className = "row-meta";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "row-open bundle-senders";
+    open.dataset.focusKey = `bundle-${category}`;
+    open.addEventListener("click", () => openBundle(category));
+    const archive = document.createElement("button");
+    archive.type = "button";
+    archive.className = "text-button bundle-archive";
+    archive.dataset.focusKey = `bundle-archive-${category}`;
+    archive.textContent = "Archive all";
+    archive.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const ids = JSON.parse(row.dataset.ids || "[]");
+      uiLog("bundle-archive", { category, count: ids.length });
+      window.EmailTownMailHost?.mailAction?.("archive", ids, "bundle");
+    });
+    meta.append(open, archive);
+    body.append(title, meta);
+    row.append(lead, body);
+    row.addEventListener("click", (event) => {
+      if (!event.target.closest("button")) openBundle(category);
+    });
+    return row;
+  }
+  function syncBundleRow(row, group) {
+    const name = categoryById(group.category)?.name || group.category;
+    const ids = group.messages.slice(0, 500).map((m) => m.id);
+    row.dataset.ids = JSON.stringify(ids);
+    row.classList.toggle("is-unread", group.unread > 0);
+    setText(row.querySelector(".bundle-name"), name);
+    const n = group.messages.length;
+    setText(
+      row.querySelector(".bundle-count"),
+      `${n} ${n === 1 ? "message" : "messages"}${group.unread ? ` · ${group.unread} unread` : ""}`,
+    );
+    const senders = [];
+    for (const message of group.messages) {
+      const who = senderParts(message.sender);
+      const label = who.name || who.address;
+      if (label && !senders.includes(label)) senders.push(label);
+      if (senders.length === 4) break;
+    }
+    const open = row.querySelector(".bundle-senders");
+    setText(open, senders.join(", ") || name);
+    open.setAttribute(
+      "aria-label",
+      `Open ${name}: ${n} ${n === 1 ? "message" : "messages"}${group.unread ? `, ${group.unread} unread` : ""}`,
+    );
+    const date = row.querySelector("time");
+    const newest = new Date(group.newest);
+    date.dateTime = newest.toISOString();
+    date.title = formatDate(group.newest);
+    setText(
+      date,
+      new Intl.DateTimeFormat(
+        "en-US",
+        group.newest >= localMidnight()
+          ? { hour: "numeric", minute: "2-digit" }
+          : { month: "short", day: "numeric" },
+      ).format(newest),
+    );
+    const archive = row.querySelector(".bundle-archive");
+    archive.setAttribute("aria-label", `Archive all ${n} in ${name}`);
+    archive.disabled = !(window.EmailTownMailHost?.mailAllowed?.("archive", ids) ?? true);
   }
   function syncRow(row, message) {
     row.classList.toggle("is-unread", Boolean(message.unread));
@@ -770,6 +932,7 @@
     if (state.activeId) updatePreviewPosition();
     const focus = saveFocus();
     const messages = filteredMessages();
+    const groups = bundleGroups();
     const hasLoading = state.refreshing && !state.messages.length;
     const folderName =
       { inbox: "Inbox", sent: "Sent", archive: "Archive", trash: "Trash" }[
@@ -824,9 +987,11 @@
         : "";
     renderMailboxNotice();
     els.selectionToolbar.hidden = !state.messages.length;
+    const inBundles = groups.reduce((sum, group) => sum + group.messages.length, 0);
+    const listed = `${messages.length} ${messages.length === 1 ? "message" : "messages"}${inBundles ? ` · ${inBundles} in bundles` : ""}`;
     els.selectionCount.textContent = state.selected.size
       ? `${state.selected.size} selected`
-      : `${messages.length} messages`;
+      : listed;
     $("clearSelectionButton").hidden = !state.selected.size;
     els.messageList.classList.toggle("has-selection", state.selected.size > 0);
     els.selectAll.indeterminate =
@@ -856,7 +1021,7 @@
       restoreFocus(focus);
       return;
     }
-    if (!messages.length) {
+    if (!messages.length && !groups.length) {
       const empty = document.createElement("div");
       empty.className = "empty-state";
       const h = document.createElement("h3");
@@ -906,17 +1071,38 @@
       }
     }
     const visibleIds = new Set(messages.map((message) => message.id));
+    const shownBundles = new Set(groups.map((group) => group.category));
     for (const child of [...els.messageList.children]) {
-      if (!child.classList.contains("message-row") || !visibleIds.has(child.dataset.messageId))
-        child.remove();
+      const keep = child.dataset.bundle
+        ? shownBundles.has(child.dataset.bundle)
+        : child.classList.contains("message-row") && visibleIds.has(child.dataset.messageId);
+      if (!keep) child.remove();
     }
-    messages.forEach((message, index) => {
-      let row = rowNodes.get(message.id);
-      if (!row) {
-        row = createRow(message);
-        rowNodes.set(message.id, row);
+    for (const category of [...bundleNodes.keys()])
+      if (!shownBundles.has(category)) bundleNodes.delete(category);
+    // Messages in date order (newest first), each bundle placed where its newest message would be.
+    const items = messages.map((message) => ({ message, date: Number(message.date) || 0 }));
+    for (const group of [...groups].sort((a, b) => b.newest - a.newest)) {
+      const at = items.findIndex((item) => item.date < group.newest);
+      items.splice(at < 0 ? items.length : at, 0, { group, date: group.newest });
+    }
+    items.forEach((item, index) => {
+      let row;
+      if (item.group) {
+        row = bundleNodes.get(item.group.category);
+        if (!row) {
+          row = createBundleRow(item.group.category);
+          bundleNodes.set(item.group.category, row);
+        }
+        syncBundleRow(row, item.group);
+      } else {
+        row = rowNodes.get(item.message.id);
+        if (!row) {
+          row = createRow(item.message);
+          rowNodes.set(item.message.id, row);
+        }
+        syncRow(row, item.message);
       }
-      syncRow(row, message);
       const current = els.messageList.children[index];
       if (current !== row) els.messageList.insertBefore(row, current || null);
     });
@@ -924,7 +1110,7 @@
       state.selected.size === 0 && !state.messages.length;
     els.selectionCount.textContent = state.selected.size
       ? `${state.selected.size} selected`
-      : `${messages.length} messages`;
+      : listed;
     $("clearSelectionButton").hidden = !state.selected.size;
     els.selectAll.indeterminate =
       messages.some((m) => state.selected.has(m.id)) &&
@@ -1403,6 +1589,8 @@
       undoSeconds: Number.isFinite(Number(data.undo_seconds))
         ? Number(data.undo_seconds)
         : 5,
+      bundleable: Array.isArray(data.bundleable) ? data.bundleable : [],
+      bundled: Array.isArray(data.prefs?.bundled) ? data.prefs.bundled : [],
       modelError: data.model_error || "",
       modelStatus: data.model_status || null,
     };

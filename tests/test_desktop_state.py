@@ -59,3 +59,41 @@ def test_accounts_bind_identity_rejects_duplicate_authorization(tmp_path: Path):
     accounts.bind_identity(first["id"], "same-mailbox")
     with pytest.raises(ValueError, match="another account"):
         accounts.bind_identity(second["id"], "same-mailbox")
+
+
+# ─── Inbox bundles: a per-device preference, not a message field ───
+
+
+def test_bundles_default_to_every_bundleable_category_and_persist(tmp_path: Path):
+    from email_town_labeler.desktop.state import BUNDLEABLE
+
+    state = LocalState(tmp_path / "workflow.sqlite")
+    assert state.prefs() == {"bundled": list(BUNDLEABLE)}
+    assert state.set_bundled("travel", False)["bundled"] == [c for c in BUNDLEABLE if c != "travel"]
+    reopened = LocalState(tmp_path / "workflow.sqlite")
+    assert "travel" not in reopened.prefs()["bundled"]
+    assert reopened.set_bundled("travel", True)["bundled"] == list(BUNDLEABLE)  # back in its usual place
+
+
+def test_mail_that_may_need_you_never_bundles(tmp_path: Path):
+    state = LocalState(tmp_path / "workflow.sqlite")
+    for category in ("action_needed", "new_sender", "unknown", "made_up"):
+        with pytest.raises(ValueError, match="always stays in the Inbox"):
+            state.set_bundled(category, True)
+    assert "action_needed" not in state.prefs()["bundled"]
+
+
+def test_bundle_preference_ignores_unknown_saved_values(tmp_path: Path):
+    state = LocalState(tmp_path / "workflow.sqlite")
+    with state._connect() as db:
+        db.execute("INSERT INTO prefs(key, value) VALUES ('bundled', '[\"action_needed\", \"orders\"]')")
+    assert state.prefs() == {"bundled": ["orders"]}  # a hand-edited or older file cannot bundle Action needed
+
+
+def test_a_damaged_bundle_preference_falls_back_to_the_default(tmp_path: Path):
+    from email_town_labeler.desktop.state import BUNDLEABLE
+
+    state = LocalState(tmp_path / "workflow.sqlite")
+    with state._connect() as db:
+        db.execute("INSERT INTO prefs(key, value) VALUES ('bundled', 'not json')")
+    assert state.prefs() == {"bundled": list(BUNDLEABLE)}

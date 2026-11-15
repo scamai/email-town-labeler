@@ -9,6 +9,12 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Inbox bundles.** In the Inbox, Newsletters, Promotions, Updates, Orders & bills and Travel each collapse
+  into one row (count, unread count, first senders), placed by its newest message, as in Inbox by Gmail.
+  Mail that may need you (Action needed, New sender, Unclassified) stays as its own rows. **Archive all**
+  clears a whole bundle with the 5-second Undo. Inside a bundle, **Show one by one** / **Bundle them** sets
+  how that category shows in the Inbox; the choice is kept on this device in `workflow.sqlite`.
+
 - **Undo Send.** Send no longer asks "Send from …?" in a dialog. The editor closes at once and the message waits
   5 seconds before it leaves; **Undo** in the toast keeps it unsent and puts it back in the editor with its
   attachments. A send that fails or cannot be confirmed reopens its draft with the reason. Quitting inside the

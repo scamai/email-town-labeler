@@ -33,7 +33,7 @@ from .providers import (
     save_microsoft_token,
 )
 from .setup import MICROSOFT_CLIENT_ID, google_client_config
-from .state import LocalState, message_key
+from .state import BUNDLEABLE, LocalState, message_key
 
 log = logging.getLogger("email_town_labeler.desktop")
 
@@ -109,6 +109,7 @@ class Workbench:
         self.undo_seconds = undo_seconds
         self.accounts = Accounts(root, default_paths)
         self.state = LocalState(root / "workflow.sqlite")
+        self.prefs = self.state.prefs()
         self.cache = ListCache(root / "cache.sqlite")
         self.mail_store = MailStore(root / "mail")
         self.mail_slots = threading.BoundedSemaphore(3)  # sends; bulk mail actions queue in the outbox
@@ -284,6 +285,8 @@ class Workbench:
                 "limit": self.limit,
                 "folder": self.folder,
                 "undo_seconds": self.undo_seconds,
+                "bundleable": list(BUNDLEABLE),
+                "prefs": self.prefs,
             }
             self.seq += 1
             digest = hashlib.sha256(json.dumps(result, sort_keys=True, ensure_ascii=False).encode())
@@ -1125,6 +1128,16 @@ class Workbench:
 
         log.info("send %s held %.0f s for Undo", str(request_id)[:8], self.undo_seconds)
         return self._mail_job(request_id, payload, work, hold=self.undo_seconds)
+
+    def set_bundled(self, category, bundled) -> dict:
+        """Collapse a category into one Inbox row, or list its messages one by one again (this device only)."""
+        if not isinstance(bundled, bool):
+            raise ValueError("Choose whether to bundle this category")  # noqa: TRY004 - the page gets it as a 400
+        with self.lock:
+            self.prefs = self.prefs | self.state.set_bundled(category, bundled)
+            log.info("bundle %s: %s (local preference)", category, "on" if bundled else "off")
+            self._touch()
+            return {"ok": True, "prefs": self.prefs}
 
     def action(self, data: dict):
         ids = data.get("ids")
