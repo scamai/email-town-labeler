@@ -159,6 +159,14 @@ mail app agrees. It is in **Archive**, category intact, and **Restore** puts it 
 0.1.7 a separate local **Done** only hid mail on this device; mail marked that way shows in the Inbox again
 until it is archived.)
 
+**Bundles.** In the Inbox, Newsletters, Promotions, Updates, Orders & bills and Travel each collapse into one
+row, placed where its newest message would be, with how many messages and how many unread, and the first
+senders. Action needed, New sender and Unclassified always stay as their own rows. Click a bundle to open its
+messages; **Archive all** archives the whole bundle, with the same 5-second Undo. Inside an opened bundle,
+**Show one by one** lists that category's messages individually in the Inbox again (**Bundle them** undoes
+it); the choice is kept on this device. A search, a chosen category or another folder always lists messages
+one by one. Keyboard navigation (<kbd>j</kbd>/<kbd>k</kbd>) moves between messages and skips bundle rows.
+
 Below the folders, categories and accounts each show one number: their unread mail in the current scope.
 Choose a category to filter by it and again (or its chip in the list header) to clear it. With one
 account, there is no "All accounts" entry and rows carry no account name. The list header holds the date
@@ -306,7 +314,7 @@ sending persist locally, including attachment bytes, without additional applicat
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, which categories are bundled, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 

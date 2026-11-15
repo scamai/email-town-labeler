@@ -20,8 +20,15 @@ from playwright.sync_api import expect, sync_playwright
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop.manager import Workbench
 from email_town_labeler.desktop.server import LocalServer
+from email_town_labeler.desktop.state import BUNDLEABLE
 
 NOW = int(time.time() * 1000)
+
+
+def flat_inbox(manager):
+    """List every message as its own row, as before Inbox bundles: this check is about the rows themselves."""
+    for category in BUNDLEABLE:
+        manager.set_bundled(category, False)
 
 
 class FixtureReader:
@@ -132,6 +139,7 @@ def main() -> int:
         return readers[-1]
 
     manager = Workbench(out / "workbench", paths, reader_factory=factory)
+    flat_inbox(manager)  # bundles have their own check (check_bundles_ui.py)
     manager.accounts.add(
         "Fixture", "imap", {"host": "fixture", "username": "fixture@example.test", "port": 993}
     )

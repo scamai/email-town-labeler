@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 import threading
 from contextlib import contextmanager
 from pathlib import Path
 
 from ..taxonomy import LABEL_CLASSES
+
+# Categories that can collapse into one Inbox row ("bundle"). Mail that may need you (action needed, new
+# senders, unclassified) always stays as its own rows. All five bundle by default, as in Inbox by Gmail.
+BUNDLEABLE = ("newsletters", "promotional", "updates", "orders", "travel")
 
 
 def message_key(account_id: str, provider_id: str) -> str:
@@ -23,6 +28,7 @@ class LocalState:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS workflow (id TEXT PRIMARY KEY, done INTEGER NOT NULL DEFAULT 0, category TEXT, revision INTEGER NOT NULL DEFAULT 0)"
             )
+            db.execute("CREATE TABLE IF NOT EXISTS prefs (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         path.chmod(0o600)
 
     @contextmanager
@@ -85,3 +91,35 @@ class LocalState:
                     "UPDATE workflow SET done=?,category=?,revision=revision+1 WHERE id=?",
                     (old["done"], old["category"], old["id"]),
                 )
+
+    # ─── Preferences: per-device choices that are not about any one message ───
+
+    def prefs(self) -> dict:
+        with self.lock, self._connect() as db:
+            row = db.execute("SELECT value FROM prefs WHERE key='bundled'").fetchone()
+        try:
+            bundled = json.loads(row["value"]) if row else None
+        except ValueError:  # a damaged value falls back to the default, never stops the app
+            bundled = None
+        return {
+            "bundled": [c for c in BUNDLEABLE if c in bundled]
+            if isinstance(bundled, list)
+            else list(BUNDLEABLE)
+        }
+
+    def set_bundled(self, category: str, bundled: bool) -> dict:
+        """Bundle a category in the Inbox or show its messages one by one again."""
+        if category not in BUNDLEABLE:
+            raise ValueError("This category always stays in the Inbox")
+        with self.lock:
+            current = self.prefs()["bundled"]
+            chosen = [
+                c for c in BUNDLEABLE if (c == category and bundled) or (c != category and c in current)
+            ]
+            with self._connect() as db:
+                db.execute(
+                    "INSERT INTO prefs(key, value) VALUES ('bundled', ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (json.dumps(chosen),),
+                )
+        return {"bundled": chosen}

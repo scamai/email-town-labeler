@@ -778,6 +778,26 @@ input[type="checkbox"] {
 .demo-banner {
   background: var(--surface-2);
 }
+/* Inside a bundleable category: whether it shows as one row in the Inbox, and the switch. */
+.bundle-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px var(--pane-gutter);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+}
+.bundle-bar[hidden] {
+  display: none;
+}
+.bundle-bar .text-button {
+  min-height: 28px;
+  padding: 0 4px;
+  font-size: 12px;
+}
 .job-status {
   background: color-mix(in srgb, var(--warning) 10%, var(--surface));
 }
@@ -823,7 +843,62 @@ input[type="checkbox"] {
 .message-row.is-focused {
   --row-bg: var(--accent-soft);
 }
-/* Outlook's unread mark: a bar on the row's left edge, so read and unread text start at the same place. */
+/* A bundle (Inbox by Gmail): one row standing for a whole category. Same height and columns as a message
+   row; its lead is a tinted square in the category's colour instead of an avatar. */
+.bundle-row {
+  --row-bg: var(--surface);
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 60px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--row-bg);
+  cursor: pointer;
+}
+.bundle-row:hover {
+  --row-bg: var(--bg);
+}
+.bundle-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--category-surface, var(--surface-2));
+}
+.bundle-icon::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--category-dot, var(--muted));
+  box-shadow: 4px 4px 0 -1px var(--row-bg), 4px 4px 0 0 var(--category-dot, var(--muted));
+}
+.bundle-name {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.bundle-count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+}
+.bundle-row .bundle-senders {
+  color: var(--muted);
+}
+.bundle-archive {
+  flex-shrink: 0;
+  min-height: 20px;
+  padding: 0;
+  font-size: 12px;
+}
+.bundle-row.is-unread::before,
 .message-row.is-unread::before {
   content: "";
   position: absolute;
@@ -1468,7 +1543,8 @@ dialog::backdrop {
   .toolbar {
     padding: 0 12px;
   }
-  .message-row {
+  .message-row,
+  .bundle-row {
     padding-inline: 12px;
   }
   .topbar-actions {

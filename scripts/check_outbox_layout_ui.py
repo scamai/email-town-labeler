@@ -23,6 +23,7 @@ from check_list_reconciliation_ui import RowsMailbox
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop.manager import Workbench
 from email_town_labeler.desktop.server import LocalServer
+from email_town_labeler.desktop.state import BUNDLEABLE
 
 VIEWPORTS = [(1440, 900), (1000, 900), (390, 900)]
 STATES = (
@@ -73,10 +74,17 @@ METRICS = """() => {
 }"""
 
 
+def flat_inbox(manager):
+    """List every message as its own row, as before Inbox bundles: this check is about the rows themselves."""
+    for category in BUNDLEABLE:
+        manager.set_bundled(category, False)
+
+
 def workbench(root: Path) -> Workbench:
     paths = Paths.default(root / "home").ensure()
     paths.config_file.write_text('[model]\nref = "rules"\n')
     manager = Workbench(root / "workbench", paths, reader_factory=RowsMailbox)
+    flat_inbox(manager)  # bundles have their own check (check_bundles_ui.py)
     manager.accounts.add("Gmail fixture", "gmail", {"config_dir": str(root / "gmail")})
     manager._refresh()
     return manager

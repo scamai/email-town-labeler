@@ -436,3 +436,20 @@ def test_prefetch_reads_neighbours_in_one_batch_and_skips_cached_and_busy(tmp_pa
     with pytest.raises(ValueError):
         workbench.prefetch("not a list")
     workbench.close()
+
+
+def test_bundle_choice_reaches_the_snapshot_and_survives_a_restart(tmp_path):
+    workbench, _readers, _first, _second = _workbench(tmp_path)
+    snapshot = workbench.snapshot()
+    assert "newsletters" in snapshot["prefs"]["bundled"]
+    assert "action_needed" not in snapshot["bundleable"]
+    version = workbench.version
+    assert workbench.set_bundled("newsletters", False)["prefs"]["bundled"].count("newsletters") == 0
+    assert workbench.version > version  # a waiting page hears about it at once
+    assert "newsletters" not in workbench.snapshot()["prefs"]["bundled"]
+    with pytest.raises(ValueError, match="Choose whether"):
+        workbench.set_bundled("orders", "yes")
+    workbench.close()
+    restarted = Workbench(tmp_path / "workbench", workbench.paths, classifier=object(), undo_seconds=0)
+    assert "newsletters" not in restarted.snapshot()["prefs"]["bundled"]
+    restarted.close()
