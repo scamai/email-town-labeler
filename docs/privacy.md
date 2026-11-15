@@ -44,7 +44,7 @@ Deleting the file is safe and only costs one full reload. Explicitly saved draft
 stored under `workbench/mail` as described below.
 Browser extensions, OS swap and screenshots are outside that guarantee.
 `workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
-`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions, which categories are bundled in the Inbox, and pane widths; `cache.sqlite`
+`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions, sender rules, which categories are bundled in the Inbox, and pane widths. A sender rule is stored under an HMAC-SHA256 of the sender's address with a random key made on first use and kept in the same file, so the file holds no address in readable form and its hashes do not match another install's. Anyone who has the whole file (key included) can still test guessed addresses against it; `cache.sqlite`
 holds the list cache above. Private
 drafts, attachments and operation receipts are stored under `workbench/mail`; receipts retain IDs, digests
 and status, not sent bodies; partial SMTP delivery receipts also retain accepted/rejected recipient addresses so recovery can avoid duplicate delivery. Failed, unknown or partial sends retain the draft and are not automatically retried.

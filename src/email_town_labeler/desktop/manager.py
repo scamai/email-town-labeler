@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict, deque
+from email.utils import parseaddr
 from pathlib import Path
 
 from ..config import Paths, load_config
@@ -110,6 +111,8 @@ class Workbench:
         self.accounts = Accounts(root, default_paths)
         self.state = LocalState(root / "workflow.sqlite")
         self.prefs = self.state.prefs()
+        self.sender_rules = self.state.sender_rules()  # sender key -> category
+        self.sender_keys: dict[str, str | None] = {}  # From header -> sender key (None: no address)
         self.cache = ListCache(root / "cache.sqlite")
         self.mail_store = MailStore(root / "mail")
         self.mail_slots = threading.BoundedSemaphore(3)  # sends; bulk mail actions queue in the outbox
@@ -227,11 +230,19 @@ class Workbench:
             for row in rows:
                 saved = states.get(row["id"], {})
                 row["done"] = bool(saved.get("done", False))
-                if saved.get("category"):
+                rule = (
+                    self.sender_rules.get(self._sender_key(row.get("sender", "")))
+                    if self.sender_rules and row.get("source") != "none"  # sent mail is not classified
+                    else None
+                )
+                if rule:
+                    row["sender_rule"] = rule  # the dialog shows the rule even where a message choice wins
+                chosen, source = (saved["category"], "manual") if saved.get("category") else (rule, "sender")
+                if chosen:
                     if row.get("source") in ("model", "mailbox"):
                         # What classification chose before the user's choice: the sidebar's "wrong" count.
                         row["auto_category"] = row["category"]
-                    row["category"], row["source"] = saved["category"], "manual"
+                    row["category"], row["source"] = chosen, source
                 row.pop("provider_id", None)
             accounts = []
             for a in self.accounts.all():
@@ -1129,6 +1140,15 @@ class Workbench:
         log.info("send %s held %.0f s for Undo", str(request_id)[:8], self.undo_seconds)
         return self._mail_job(request_id, payload, work, hold=self.undo_seconds)
 
+    def _sender_key(self, header: str) -> str | None:
+        """The sender key of a From header (caller holds the lock); cached, since snapshots are frequent."""
+        if header not in self.sender_keys:
+            address = parseaddr(header)[1]
+            self.sender_keys[header] = self.state.sender_key(address) if "@" in address else None
+            if len(self.sender_keys) > 20000:
+                self.sender_keys.clear()
+        return self.sender_keys[header]
+
     def set_bundled(self, category, bundled) -> dict:
         """Collapse a category into one Inbox row, or list its messages one by one again (this device only)."""
         if not isinstance(bundled, bool):
@@ -1152,6 +1172,16 @@ class Workbench:
         with self.lock:
             if any(k not in self.messages for k in ids):
                 raise ValueError("The list changed. Select the messages again.")
+            rule = data.get("sender_rule")  # "set": every message from these senders; "clear": stop that
+            if rule not in (None, "set", "clear") or (rule and data.get("action") != "category"):
+                raise ValueError("Unknown sender rule")
+            senders = [
+                key
+                for key in dict.fromkeys(self._sender_key(self.messages[k].get("sender", "")) for k in ids)
+                if key
+            ]
+            if rule and not senders:
+                raise ValueError("These messages have no sender address to remember")
             before = self.state.edit(ids, data.get("action"), data.get("category"))
             # Local only: Done / Reopen / category never touch the mailbox, so this line is their whole record.
             log.info(
@@ -1161,21 +1191,42 @@ class Workbench:
                 len(ids),
                 shorts(ids),
             )
+            previous = []
+            if rule:
+                previous = self.state.set_sender_rules(
+                    senders, data.get("category") if rule == "set" else None
+                )
+                self.sender_rules = self.state.sender_rules()
+                log.info(
+                    "sender rule %s%s: %d sender(s) (local, mailbox unchanged)",
+                    rule,
+                    f" {data.get('category')}" if rule == "set" else "",
+                    len(senders),
+                )
             token = secrets.token_urlsafe(24)
-            self.undos[token] = before
+            self.undos[token] = {"messages": before, "senders": previous}
             while len(self.undos) > 50:
                 self.undos.popitem(last=False)
             self._touch()
-            return {"ok": True, "undo": token}
+            return {"ok": True, "undo": token, "senders": len(senders) if rule else 0}
 
     def undo(self, token: str):
         with self.lock:
-            before = self.undos.get(token)
-            if before is None:
+            entry = self.undos.get(token)
+            if entry is None:
                 raise ValueError("Undo expired. Review the messages again.")
+            before = entry["messages"]
             self.state.undo(before)
+            if entry["senders"]:
+                self.state.restore_sender_rules(entry["senders"])
+                self.sender_rules = self.state.sender_rules()
             self.undos.pop(token)
-            log.info("workflow undo: %d message(s) %s restored", len(before), shorts(r["id"] for r in before))
+            log.info(
+                "workflow undo: %d message(s) %s restored%s",
+                len(before),
+                shorts(r["id"] for r in before),
+                f", {len(entry['senders'])} sender rule(s)" if entry["senders"] else "",
+            )
             self._touch()
         return {"ok": True}
 

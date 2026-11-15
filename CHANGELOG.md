@@ -9,6 +9,12 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Decide once per sender.** The category dialog offers **Always use this category for mail from …**: that
+  sender's other mail and everything they send later get the category, ahead of the provider label and the
+  model (a per-message choice still wins). Combined with bundles, screening a newsletter that landed in Action
+  needed sends it and its future issues into the Newsletters bundle. Undo removes the rule; unchecking the box
+  later does too. Rules are stored as an HMAC of the address with a per-install key, never the address.
+
 - **Inbox bundles.** In the Inbox, Newsletters, Promotions, Updates, Orders & bills and Travel each collapse
   into one row (count, unread count, first senders), placed by its newest message, as in Inbox by Gmail.
   Mail that may need you (Action needed, New sender, Unclassified) stays as its own rows. **Archive all**
