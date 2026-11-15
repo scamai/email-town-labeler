@@ -1139,6 +1139,12 @@ class Workbench:
             self._touch()
             return {"ok": True, "prefs": self.prefs}
 
+    def set_panes(self, widths) -> dict:
+        """Remember pane widths on this device; the page asks for them again after every launch."""
+        with self.lock:
+            self.prefs = self.prefs | self.state.set_panes(widths)
+            return {"ok": True, "panes": self.prefs["panes"]}
+
     def action(self, data: dict):
         ids = data.get("ids")
         if not isinstance(ids, list) or not 1 <= len(ids) <= 500 or any(not isinstance(k, str) for k in ids):

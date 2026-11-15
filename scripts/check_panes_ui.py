@@ -3,7 +3,8 @@
 Run: uv run --no-project --with-editable '.[dev]' --with playwright python scripts/check_panes_ui.py
 
 Checked where the user sees it, in WebKit (the macOS app's engine) and Chromium:
-- the pane borders drag, keep the reading pane at least 360px wide, persist across a reload, take ←/→
+- the pane borders drag, keep the reading pane at least 360px wide, persist across a reload and a relaunch
+  (a new port, so a new origin with empty localStorage), take ←/→
   when focused, and reset on double-click;
 - with one account there is no "All accounts" entry and no account chip on rows or the reading pane;
 - rows are two fixed lines (sender and time; subject, category, star) with the sender's name only;
@@ -16,6 +17,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
@@ -60,7 +62,7 @@ def main() -> int:
         for engine in ("webkit", "chromium"):
             out, manager, server = serve()
             try:
-                check(playwright, engine, server, out)
+                check(playwright, engine, server, out, manager)
             finally:
                 server.shutdown()
                 server.server_close()
@@ -71,7 +73,7 @@ def main() -> int:
     return 0
 
 
-def check(playwright, engine, server, out):
+def check(playwright, engine, server, out, manager):
     browser = getattr(playwright, engine).launch()
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     errors = []
@@ -126,6 +128,29 @@ def check(playwright, engine, server, out):
     page.reload()
     expect(rows.first).to_be_visible()
     assert abs(width(page, ".message-pane") - widest) <= 2, "the width did not persist"
+    # Relaunching serves the page on a new port: a new origin with empty localStorage. The widths come
+    # from the workbench, as in the installed app.
+    deadline = time.monotonic() + 5
+    while not (manager.prefs.get("panes") or {}).get("list") and time.monotonic() < deadline:
+        page.wait_for_timeout(50)
+    relaunch = LocalServer(manager)
+    threading.Thread(target=relaunch.serve_forever, daemon=True).start()
+    try:
+        fresh = browser.new_page(viewport={"width": 1440, "height": 900})
+        fresh.goto(relaunch.launch_url)
+        expect(fresh.locator(".message-row").first).to_be_visible()
+        deadline = time.monotonic() + 5
+        while abs(width(fresh, ".message-pane") - widest) > 2 and time.monotonic() < deadline:
+            fresh.wait_for_timeout(50)
+        assert abs(width(fresh, ".message-pane") - widest) <= 2, (
+            "lost on relaunch",
+            width(fresh, ".message-pane"),
+            widest,
+        )
+        fresh.close()
+    finally:
+        relaunch.shutdown()
+        relaunch.server_close()
     box = page.locator('.splitter[data-split="list"]').bounding_box()  # a 0px border: click its spot
     page.mouse.dblclick(box["x"], box["y"] + 300)
     assert abs(width(page, ".message-pane") - 420) <= 2, width(page, ".message-pane")

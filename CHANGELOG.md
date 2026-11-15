@@ -72,6 +72,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- Pane widths now survive quitting and reopening the app. They were kept in the page's localStorage, but the
+  app serves the page on a new port every launch, so that storage started empty each time. The workbench now
+  keeps them in `workflow.sqlite`; a drag is saved as soon as it ends.
+
 - Passing over messages with j/k no longer reads them: as in Gmail's reading pane, a message is marked read
   after 1.5 s on it. Mark unread on the open message sticks for that open, even inside the delay.
 - A state answer produced just before an open's mark-read could arrive after it and show the open message
