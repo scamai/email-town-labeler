@@ -68,7 +68,7 @@ def test_bundles_default_to_every_bundleable_category_and_persist(tmp_path: Path
     from email_town_labeler.desktop.state import BUNDLEABLE
 
     state = LocalState(tmp_path / "workflow.sqlite")
-    assert state.prefs() == {"bundled": list(BUNDLEABLE)}
+    assert state.prefs()["bundled"] == list(BUNDLEABLE)
     assert state.set_bundled("travel", False)["bundled"] == [c for c in BUNDLEABLE if c != "travel"]
     reopened = LocalState(tmp_path / "workflow.sqlite")
     assert "travel" not in reopened.prefs()["bundled"]
@@ -87,7 +87,7 @@ def test_bundle_preference_ignores_unknown_saved_values(tmp_path: Path):
     state = LocalState(tmp_path / "workflow.sqlite")
     with state._connect() as db:
         db.execute("INSERT INTO prefs(key, value) VALUES ('bundled', '[\"action_needed\", \"orders\"]')")
-    assert state.prefs() == {"bundled": ["orders"]}  # a hand-edited or older file cannot bundle Action needed
+    assert state.prefs()["bundled"] == ["orders"]  # a hand-edited or older file cannot bundle Action needed
 
 
 def test_a_damaged_bundle_preference_falls_back_to_the_default(tmp_path: Path):
@@ -96,4 +96,23 @@ def test_a_damaged_bundle_preference_falls_back_to_the_default(tmp_path: Path):
     state = LocalState(tmp_path / "workflow.sqlite")
     with state._connect() as db:
         db.execute("INSERT INTO prefs(key, value) VALUES ('bundled', 'not json')")
-    assert state.prefs() == {"bundled": list(BUNDLEABLE)}
+    assert state.prefs()["bundled"] == list(BUNDLEABLE)
+
+
+def test_pane_widths_persist_merge_and_reject_out_of_range_values(tmp_path: Path):
+    state = LocalState(tmp_path / "workflow.sqlite")
+    assert state.prefs()["panes"] == {}  # nothing saved: the page uses its defaults
+    assert state.set_panes({"list": 640})["panes"] == {"list": 640}
+    assert state.set_panes({"sidebar": 300})["panes"] == {"list": 640, "sidebar": 300}  # one border at a time
+    assert LocalState(tmp_path / "workflow.sqlite").prefs()["panes"] == {"list": 640, "sidebar": 300}
+    for bad in ({"list": 100}, {"sidebar": 9000}, {"list": "640"}, {"list": 640.5}, {"list": True}, []):
+        with pytest.raises(ValueError):
+            state.set_panes(bad)
+    assert state.prefs()["panes"] == {"list": 640, "sidebar": 300}
+
+
+def test_a_hand_edited_pane_width_outside_the_limits_is_ignored(tmp_path: Path):
+    state = LocalState(tmp_path / "workflow.sqlite")
+    with state._connect() as db:
+        db.execute("""INSERT INTO prefs(key, value) VALUES ('panes', '{"list": 5, "sidebar": 250}')""")
+    assert state.prefs()["panes"] == {"sidebar": 250}

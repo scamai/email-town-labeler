@@ -14,6 +14,8 @@ from ..taxonomy import LABEL_CLASSES
 # Categories that can collapse into one Inbox row ("bundle"). Mail that may need you (action needed, new
 # senders, unclassified) always stays as its own rows. All five bundle by default, as in Inbox by Gmail.
 BUNDLEABLE = ("newsletters", "promotional", "updates", "orders", "travel")
+# Pane widths in CSS pixels (desktop/web/panes.js enforces the same minimums against the window).
+PANE_LIMITS = {"sidebar": (180, 360), "list": (320, 4000)}
 
 
 def message_key(account_id: str, provider_id: str) -> str:
@@ -94,18 +96,51 @@ class LocalState:
 
     # ─── Preferences: per-device choices that are not about any one message ───
 
-    def prefs(self) -> dict:
+    def _saved(self, key: str):
         with self.lock, self._connect() as db:
-            row = db.execute("SELECT value FROM prefs WHERE key='bundled'").fetchone()
+            row = db.execute("SELECT value FROM prefs WHERE key=?", (key,)).fetchone()
         try:
-            bundled = json.loads(row["value"]) if row else None
+            return json.loads(row["value"]) if row else None
         except ValueError:  # a damaged value falls back to the default, never stops the app
-            bundled = None
+            return None
+
+    def _save(self, key: str, value) -> None:
+        with self.lock, self._connect() as db:
+            db.execute(
+                "INSERT INTO prefs(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, json.dumps(value)),
+            )
+
+    def prefs(self) -> dict:
+        bundled, panes = self._saved("bundled"), self._saved("panes")
         return {
             "bundled": [c for c in BUNDLEABLE if c in bundled]
             if isinstance(bundled, list)
-            else list(BUNDLEABLE)
+            else list(BUNDLEABLE),
+            # Only widths inside the limits; anything else means "the default" to the page.
+            "panes": {
+                name: panes[name]
+                for name, (low, high) in PANE_LIMITS.items()
+                if isinstance(panes, dict) and type(panes.get(name)) is int and low <= panes[name] <= high
+            },
         }
+
+    def set_panes(self, widths) -> dict:
+        """Remember the folder pane and message list widths (the page's origin changes every launch)."""
+        if not isinstance(widths, dict):
+            raise ValueError("Pane widths must be an object")  # noqa: TRY004 - the page gets it as a 400
+        clean = {}
+        for name, (low, high) in PANE_LIMITS.items():
+            value = widths.get(name)
+            if value is None:
+                continue
+            if type(value) is not int or not low <= value <= high:
+                raise ValueError(f"The {name} width must be {low}–{high} pixels")
+            clean[name] = value
+        with self.lock:
+            merged = self.prefs()["panes"] | clean
+            self._save("panes", merged)
+        return {"panes": merged}
 
     def set_bundled(self, category: str, bundled: bool) -> dict:
         """Bundle a category in the Inbox or show its messages one by one again."""
@@ -116,10 +151,5 @@ class LocalState:
             chosen = [
                 c for c in BUNDLEABLE if (c == category and bundled) or (c != category and c in current)
             ]
-            with self._connect() as db:
-                db.execute(
-                    "INSERT INTO prefs(key, value) VALUES ('bundled', ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (json.dumps(chosen),),
-                )
+            self._save("bundled", chosen)
         return {"bundled": chosen}

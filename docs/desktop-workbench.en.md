@@ -150,8 +150,8 @@ a different mailbox. Each additional mailbox needs its own user authorization.
 ## Process mail
 
 Three panes, as in Outlook: folders and filters, the message list, the reading pane. Drag either pane
-border (or focus it and press ←/→) to resize; double-click restores the default. Widths are kept per
-device.
+border (or focus it and press ←/→) to resize; double-click restores the default. Widths are kept on this device
+and come back after you quit and reopen the app.
 
 The folder pane lists Inbox, Drafts, Sent, Archive and Trash. Being done with a message is **Archive**
 (<kbd>e</kbd> or <kbd>d</kbd>), as in Gmail: it leaves the Inbox here and in the mailbox itself, so every
@@ -314,7 +314,7 @@ sending persist locally, including attachment bytes, without additional applicat
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, which categories are bundled, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, legacy completion flags and revisions, which categories are bundled, pane widths, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 

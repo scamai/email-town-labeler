@@ -1,6 +1,7 @@
 // Draggable pane borders, as in Outlook: the folder pane and the message list can each be widened or
 // narrowed by dragging the border on their right (or focusing it and pressing ←/→); double-click restores
-// the default. Widths are a per-viewer convenience kept in localStorage; without it the defaults apply.
+// the default. The workbench keeps the widths (prefs in workflow.sqlite): the app serves the page on a new
+// port every launch, so the page's localStorage starts empty each time and only caches them for a reload.
 (() => {
   "use strict";
   const shell = document.getElementById("appShell");
@@ -12,6 +13,9 @@
   const READING_MIN = 360; // the reading pane keeps at least this much
   const STEP = 16;
   let widths = { ...DEFAULTS };
+  let adopted = false; // the workbench's widths are taken once per page, unless a border was moved first
+  let touched = false;
+  let saveTimer = null;
 
   function load() {
     try {
@@ -23,11 +27,35 @@
     }
   }
   function save() {
+    touched = true;
     try {
       localStorage.setItem(KEY, JSON.stringify(widths));
     } catch (_) {
-      // private window or blocked storage: the widths last for this session only
+      // private window or blocked storage: the workbench copy below still keeps them
     }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(send, 300); // arrow keys repeat: one save once they stop
+  }
+  // keepalive: a save started as the window closes (or right after a drag) still reaches the workbench.
+  function send() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    window.EmailTownMailHost?.api("/api/panes", {
+      method: "POST",
+      keepalive: true,
+      body: JSON.stringify({ widths }),
+    }).catch(() => {}); // a lost save only means the default width after the next launch
+  }
+  function adopt(saved) {
+    if (adopted || touched || !saved) return;
+    adopted = true;
+    let changed = false;
+    for (const name of Object.keys(DEFAULTS))
+      if (Number.isFinite(saved[name]) && saved[name] !== widths[name]) {
+        widths[name] = saved[name];
+        changed = true;
+      }
+    if (changed) apply();
   }
   function max(name) {
     const total = workspace.clientWidth;
@@ -72,6 +100,7 @@
         document.body.classList.remove("is-resizing");
         handle.removeEventListener("pointermove", move);
         save();
+        send(); // a drag ends once: save now, not after the debounce
       };
       handle.addEventListener("pointermove", move);
       handle.addEventListener("pointerup", end, { once: true });
@@ -87,6 +116,10 @@
     });
   });
   window.addEventListener("resize", apply);
+  window.addEventListener("pagehide", () => {
+    if (saveTimer) send();
+  });
+  window.EmailTownPanes = { adopt };
   load();
   apply();
 })();

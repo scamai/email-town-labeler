@@ -1620,6 +1620,7 @@
     const changed = snapshot !== state.snapshot;
     const recovering = state.stale || Boolean(state.listError);
     Object.assign(state, next, { initialized: true, stale: false, snapshot });
+    window.EmailTownPanes?.adopt(data.prefs?.panes); // widths kept by the workbench (new origin each launch)
     reconcileMessageState();
     renderOutbox();
     if (state.activeId) {
