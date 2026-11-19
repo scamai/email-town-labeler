@@ -9,6 +9,12 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **Unread filter.** An **Unread** toggle beside the date range lists only unread mail in whatever view is open,
+  so a category such as Updates can be worked through unread-first. A message read in that view stays listed
+  until the view changes, as in Gmail and Outlook; with nothing unread left, the list says so. Inside a bundled
+  Inbox, each bundle counts and holds only its unread mail. When the list pane is narrow, the header's chips and
+  count move to a second line instead of being cut off.
+
 - **Decide once per sender.** The category dialog offers **Always use this category for mail from …**: that
   sender's other mail and everything they send later get the category, ahead of the provider label and the
   model (a per-message choice still wins). Combined with bundles, screening a newsletter that landed in Action

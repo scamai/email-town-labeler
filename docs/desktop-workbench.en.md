@@ -170,8 +170,11 @@ one by one. Keyboard navigation (<kbd>j</kbd>/<kbd>k</kbd>) moves between messag
 Below the folders, categories and accounts each show one number: their unread mail in the current scope.
 Choose a category to filter by it and again (or its chip in the list header) to clear it. With one
 account, there is no "All accounts" entry and rows carry no account name. The list header holds the date
-range (All / Today / Earlier), a chip per active filter, and the message count; search sits in the top
-bar. Filters compose; **Clear search and filters** returns to the default view. Each row is two fixed
+range (All / Today / Earlier), an **Unread** toggle, a chip per active filter, and the message count; search sits in the top
+bar. Filters compose; **Clear search and filters** returns to the default view. **Unread** lists only the
+unread mail in the current scope (choose Updates, then Unread); a message read in that view stays listed,
+no longer bold, until the folder, category, account, date range or search changes, as in Gmail and
+Outlook, so it does not vanish while you read it. Each row is two fixed
 lines: the sender's name and the time; the subject, its category and the star. Unread rows are bold with
 a blue bar at the left edge. Totals and classification sources (sorted automatically,
 corrected by you, awaiting classification) are in each entry's tooltip and accessible name. Only the
