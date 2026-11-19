@@ -637,14 +637,16 @@ kbd {
   flex-direction: column;
   background: var(--surface);
 }
-/* One slim header: select, date range, active filters, count. Its checkbox sits on the rows' avatar column. */
+/* One slim header: select, date range, Unread, active filters, count. Its checkbox sits on the rows'
+   avatar column. When the list pane is too narrow for all of it, the chips and count take a second line
+   rather than being cut off. */
 .toolbar {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   min-height: 44px;
-  padding: 0 16px;
+  padding: 6px 16px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
@@ -686,6 +688,26 @@ kbd {
 }
 .segment:hover {
   color: var(--text);
+}
+/* Unread only: a toggle beside the date range; on, it reads as a narrowing filter, like the chips. */
+.toggle-filter {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.toggle-filter:hover {
+  color: var(--text);
+}
+.toggle-filter.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .filter-chips {
   display: flex;
@@ -1541,7 +1563,7 @@ dialog::backdrop {
     display: none;
   }
   .toolbar {
-    padding: 0 12px;
+    padding: 6px 12px;
   }
   .message-row,
   .bundle-row {
@@ -1737,7 +1759,8 @@ dialog::backdrop {
   .category-badge {
     border: 1px solid CanvasText;
   }
-  .category-filter.is-active {
+  .category-filter.is-active,
+  .toggle-filter.is-active {
     outline: 2px solid Highlight;
   }
 }

@@ -32,6 +32,7 @@
     categoryFilters: $("categoryFilters"),
     search: $("searchInput"),
     clearFilters: $("clearFiltersButton"),
+    unreadFilter: $("unreadFilterButton"),
     listTitle: $("listTitle"),
     listStatus: $("listStatus"),
     listError: $("listError"),
@@ -96,6 +97,7 @@
       account: "all",
       category: "all",
       search: "",
+      unread: false,
     },
     selected: new Set(),
     activeId: null,
@@ -422,6 +424,19 @@
       (state.bundled || []).length > 0
     );
   }
+  // Unread only: a message read in this view (opened, marked read) stays listed until the view changes,
+  // as in Gmail and Outlook, so the row does not vanish from under the pointer or the open reading pane.
+  // The view is the folder and every other filter; turning Unread on starts a fresh one.
+  const unreadView = { key: "", shown: new Set() };
+  function unreadShown() {
+    const f = state.filters;
+    const key = [state.folder, f.type, f.account, f.category, f.search.trim()].join("|");
+    if (unreadView.key !== key) {
+      unreadView.key = key;
+      unreadView.shown.clear();
+    }
+    return unreadView.shown;
+  }
   // What the list shows. `omit` names one filter to ignore, for counts; any omit also keeps bundled
   // mail, since counts are about all of it ("bundle" ignores only the bundling).
   function filteredMessages(omit = "") {
@@ -429,8 +444,11 @@
     const today = localMidnight();
     const tomorrow = localMidnight(1);
     const hidden = !omit && bundling() ? new Set(state.bundled) : null;
+    const unreadOnly = omit !== "unread" && state.filters.unread;
+    const kept = unreadOnly && (!omit || omit === "bundle") ? unreadShown() : null;
     return state.messages.filter((message) => {
       if (hidden?.has(message.category)) return false;
+      if (unreadOnly && !message.unread && !kept?.has(message.id)) return false;
       const date = Number(message.date) || 0;
       const typeOk =
         omit === "type" ||
@@ -464,6 +482,8 @@
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", String(active));
     });
+    els.unreadFilter.classList.toggle("is-active", state.filters.unread);
+    els.unreadFilter.setAttribute("aria-pressed", String(state.filters.unread));
   }
 
   // The sidebar shows one number per entry: its unread mail in the current scope, as in Gmail and Outlook.
@@ -601,6 +621,12 @@
       button.setAttribute("aria-label", summary);
       button.title = summary;
     }
+    const { unread } = scopeStats(filteredMessages("unread"));
+    const summary = state.filters.unread
+      ? `Showing unread only (${unread} in current scope). Press to show read mail too`
+      : `Show unread only (${unread} in current scope)`;
+    els.unreadFilter.setAttribute("aria-label", summary);
+    els.unreadFilter.title = summary;
   }
   // One removable chip per narrowing filter, so the way back is always next to the list.
   function renderChips() {
@@ -933,6 +959,10 @@
     if (state.activeId) updatePreviewPosition();
     const focus = saveFocus();
     const messages = filteredMessages();
+    if (state.filters.unread) {
+      const shown = unreadShown();
+      messages.forEach((message) => shown.add(message.id));
+    }
     const groups = bundleGroups();
     const hasLoading = state.refreshing && !state.messages.length;
     const folderName =
@@ -953,6 +983,7 @@
       folderName,
       dateName,
       categoryName,
+      state.filters.unread ? "Unread" : "",
       query ? `Search: “${query}”` : "",
     ]
       .filter(Boolean)
@@ -961,6 +992,7 @@
     // Nothing to clear, no ✕; no mailbox yet, nothing to sync or write from.
     const filtered =
       Boolean(query) ||
+      state.filters.unread ||
       state.filters.type !== "all" ||
       state.filters.account !== "all" ||
       state.filters.category !== "all";
@@ -1055,6 +1087,9 @@
       } else if (!state.messages.length) {
         h.textContent = `No mail in ${folderName}`;
         p.textContent = "This folder is empty for the connected accounts.";
+      } else if (state.filters.unread && filteredMessages("unread").length) {
+        h.textContent = "No unread mail here";
+        p.textContent = "Everything in this view is read. Turn off Unread to see it.";
       } else {
         h.textContent = "No messages match these filters";
         p.textContent = "Try clearing a filter or search term.";
@@ -2101,6 +2136,13 @@
     setProviderFields();
   });
   els.accountForm.addEventListener("submit", submitAccount);
+  els.unreadFilter.addEventListener("click", () => {
+    state.filters.unread = !state.filters.unread;
+    unreadView.key = ""; // a fresh view: mail read before it is not kept
+    uiLog("unread-filter", { on: state.filters.unread });
+    renderScope();
+    if (window.innerWidth < 1200) els.previewPane.classList.remove("is-open");
+  });
   els.search.addEventListener("input", () => {
     state.filters.search = els.search.value;
     renderScope();
@@ -2111,6 +2153,7 @@
       account: "all",
       category: "all",
       search: "",
+      unread: false,
     };
     els.search.value = "";
     renderScope();
