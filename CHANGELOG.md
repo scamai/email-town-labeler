@@ -15,6 +15,8 @@ contain breaking changes; they are called out.
   unchanged model on held-out messages, and the action and promotional thresholds are re-tuned. Listed mail is
   re-decided from stored scores at once, without running the model again. Stored: scores and yes/no facts per
   decision in `learning.sqlite`, the head in `personal.json`, no mail content. `[learn] auto = false` turns it off.
+  Mail already listed before this version is classified once more after the update (in the background, its
+  category staying on screen), so correcting it teaches the model too.
 
 - **Unread filter.** An **Unread** toggle beside the date range lists only unread mail in whatever view is open,
   so a category such as Updates can be worked through unread-first. A message read in that view stays listed

@@ -177,6 +177,19 @@ class Workbench:
             log.warning("list cache not read (%s)", type(e).__name__)
             return
         stale = 0
+        # Model categories with no learning record (decided before learning.sqlite existed, or the file was
+        # deleted) are classified once more, so a category you choose for them can teach the model too.
+        current = [
+            row["id"]
+            for _saved, rows in cached.values()
+            for row in rows
+            if row.get("source") == "model" and row.get("classified_by") == self.classifier_stamp
+        ]
+        try:
+            recorded = self.learner.store.decided(current)
+        except Exception as e:  # noqa: BLE001 - without the record, classify again rather than not start
+            log.warning("learning records not read (%s)", type(e).__name__)
+            recorded = set()
         with self.lock:
             for (aid, folder), (saved_at, rows) in cached.items():
                 target = self.messages if folder == self.folder else self.folder_rows.setdefault(folder, {})
@@ -184,7 +197,7 @@ class Workbench:
                     target[row["id"]] = {**row, "done": False}
                     if row.get("source") == "model":
                         # Made by another model or policy: shown until the refresh below classifies it again.
-                        if row.get("classified_by") == self.classifier_stamp:
+                        if row.get("classified_by") == self.classifier_stamp and row["id"] in recorded:
                             self.predictions[row["id"]] = (row["category"], row.get("confidence"))
                         else:
                             stale += 1
@@ -198,7 +211,10 @@ class Workbench:
                     }
             self._touch()
         if stale:
-            log.info("classifier changed: %d cached categories will be classified again", stale)
+            log.info(
+                "classifier changed or no learning record: %d cached categories will be classified again",
+                stale,
+            )
 
     def _save_cache(self, aid, folder, reader):
         try:

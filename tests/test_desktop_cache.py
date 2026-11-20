@@ -187,3 +187,11 @@ def test_categories_cached_before_classifier_stamps_are_classified_again(tmp_pat
     assert any(r.get("classified_by") for r in rows)
     cache.save_rows(aid, "inbox", [{k: v for k, v in r.items() if k != "classified_by"} for r in rows])
     assert _restart(root, paths).calls == 1  # a decision from an earlier version is not carried forward
+
+
+def test_cached_categories_without_a_learning_record_are_classified_once_more(tmp_path):
+    # Mail listed before learning.sqlite existed would otherwise never be recorded, so correcting it taught nothing.
+    paths, root, _aid = _first_run(tmp_path)
+    (root / "learning.sqlite").unlink()
+    assert _restart(root, paths).calls == 1
+    assert _restart(root, paths).calls == 0  # recorded now: the cached category stands again
