@@ -161,7 +161,7 @@ until it is archived.)
 
 **Bundles.** In the Inbox, Newsletters, Promotions, Updates, Orders & bills and Travel each collapse into one
 row, placed where its newest message would be, with how many messages and how many unread, and the first
-senders. Action needed, New sender and Unclassified always stay as their own rows. Click a bundle to open its
+senders. Action needed, New sender and People always stay as their own rows. Click a bundle to open its
 messages; **Archive all** archives the whole bundle, with the same 5-second Undo. Inside an opened bundle,
 **Show one by one** lists that category's messages individually in the Inbox again (**Bundle them** undoes
 it); the choice is kept on this device. A search, a chosen category or another folder always lists messages
@@ -192,7 +192,10 @@ downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding i
 must be re-added explicitly. Send closes the editor and waits 5 seconds before the message leaves: **Undo**
 in the toast keeps it unsent and reopens it in the editor; quitting inside the window sends it at once.
 
-Existing Gmail project labels supply categories directly. Other unclassified mail uses one shared local model; your own Sent mail is not classified.
+Existing Gmail project labels supply categories directly. Other mail without one uses one shared local model; your own Sent mail is not classified.
+**People** is the model's "none of these": mail written to you by a person (a colleague's reply, a forwarded thread)
+rather than sent by a service, so it needs no category. Mail still waiting for the model is listed there too until
+it is classified; the category's tooltip counts it as awaiting classification.
 Local overrides take precedence. They currently neither write back to the
 provider nor train the existing CLI feedback model.
 
@@ -290,7 +293,7 @@ adapt to light/dark mode for readable text. This does not repaint provider label
 | Promotions | Rose |
 | Travel | Teal-blue |
 | Updates | Gold |
-| Unclassified | Slate |
+| People | Slate |
 
 Labels remain visible, and selected categories have a checkmark plus an inset edge. This follows
 [W3C's guidance to supplement color with text or shape](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html).

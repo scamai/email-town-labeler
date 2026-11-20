@@ -929,7 +929,7 @@
     const category = row.querySelector(".category-badge");
     const categoryId = message.category || "unknown";
     category.dataset.category = categoryId;
-    setText(category, categoryById(message.category)?.name || message.category || "Unclassified");
+    setText(category, categoryById(message.category)?.name || message.category || "People");
     category.title = `Classification: ${sourceName(message.source)}`;
     category.hidden = categoryId === "unknown"; // no category is not worth a chip on every row
     const account = row.querySelector(".row-account");
@@ -1274,7 +1274,7 @@
     els.previewCategory.textContent = text(
       categoryById(message.category)?.name ||
         message.category ||
-        "Unclassified",
+        "People",
     );
     els.previewCategory.dataset.category = message.category || "unknown";
     els.previewUnread.hidden = !message.unread;
@@ -1422,7 +1422,7 @@
           els.previewCategory.textContent = text(
             categoryById(current.category)?.name ||
               current.category ||
-              "Unclassified",
+              "People",
           );
           els.previewCategory.dataset.category = current.category || "unknown";
         }
@@ -1693,7 +1693,7 @@
       els.previewCategory.textContent =
         categoryById(active.category)?.name ||
         active.category ||
-        "Unclassified";
+        "People";
       els.previewCategory.dataset.category = active.category || "unknown";
     }
     renderSyncStatus();

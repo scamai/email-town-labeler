@@ -14,11 +14,11 @@ from pathlib import Path
 from ..taxonomy import LABEL_CLASSES, NEW_SENDER, UNKNOWN
 
 # Categories that can collapse into one Inbox row ("bundle"). Mail that may need you (action needed, new
-# senders, unclassified) always stays as its own rows. All five bundle by default, as in Inbox by Gmail.
+# senders, people) always stays as its own rows. All five bundle by default, as in Inbox by Gmail.
 BUNDLEABLE = ("newsletters", "promotional", "updates", "orders", "travel")
 # Pane widths in CSS pixels (desktop/web/panes.js enforces the same minimums against the window).
 PANE_LIMITS = {"sidebar": (180, 360), "list": (320, 4000)}
-# What a sender rule can choose: a real category ("new sender" and "unclassified" are not decisions).
+# What a sender rule can choose: a real category ("new sender" and "people" are not decisions).
 RULE_CATEGORIES = tuple(c for c in LABEL_CLASSES if c not in (NEW_SENDER, UNKNOWN))
 
 

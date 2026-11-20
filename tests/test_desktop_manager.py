@@ -561,3 +561,11 @@ def test_desktop_classifies_bulk_mail_by_its_own_headers(tmp_path):
         "direct-split": "unknown",
     }
     workbench.close()
+
+
+def test_the_none_of_these_class_is_shown_as_people(tmp_path):
+    # "Unclassified" read as a failure; what the model puts there is mail written by people.
+    workbench, _readers, _first, _ = _workbench(tmp_path)
+    names = {c["id"]: c["name"] for c in workbench.snapshot()["categories"]}
+    assert names["unknown"] == "People" and "Unclassified" not in names.values()
+    workbench.close()
