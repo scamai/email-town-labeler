@@ -15,6 +15,11 @@ def test_fresh_install_uses_the_published_model_and_a_config_file_wins(tmp_path)
     again = m.Workbench(tmp_path / "workbench", workbench.paths, reader_factory=lambda a: None)
     assert again.model_ref == "rules"
     again.close()
+    # A config.toml that names no model (e.g. only `[learn] auto = false`) keeps the published model.
+    workbench.paths.config_file.write_text("[learn]\nauto = false\n")
+    third = m.Workbench(tmp_path / "workbench", workbench.paths, reader_factory=lambda a: None)
+    assert third.model_ref == m.DESKTOP_MODEL and third.cfg.learn_auto is False
+    third.close()
 
 
 def test_first_model_download_is_shown_while_it_runs_and_cleared_after(tmp_path, monkeypatch):

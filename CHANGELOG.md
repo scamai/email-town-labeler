@@ -9,6 +9,13 @@ contain breaking changes; they are called out.
 
 ### Added
 
+- **The desktop app learns from the categories you choose.** A category you set on a message is now a
+  correction the model learns from, on this device: once there are 30, at most once a day, a small personal head
+  is fitted on top of the model (the same `learn` code as the CLI service) and kept only if it beats the
+  unchanged model on held-out messages, and the action and promotional thresholds are re-tuned. Listed mail is
+  re-decided from stored scores at once, without running the model again. Stored: scores and yes/no facts per
+  decision in `learning.sqlite`, the head in `personal.json`, no mail content. `[learn] auto = false` turns it off.
+
 - **Unread filter.** An **Unread** toggle beside the date range lists only unread mail in whatever view is open,
   so a category such as Updates can be worked through unread-first. A message read in that view stays listed
   until the view changes, as in Gmail and Outlook; with nothing unread left, the list says so. Inside a bundled

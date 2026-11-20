@@ -81,7 +81,7 @@ email-town-labeler desktop --background
 
 For a fresh install use `uv tool install 'email-town-labeler[onnx,desktop]'`; to use this source checkout,
 use `uv tool install --editable '.[onnx,desktop]'`. The desktop extra provides OS credential-vault support
-for IMAP. Classification uses the model in `config.toml`, or `town-modernbert-int8` when there is none (downloaded
+for IMAP. Classification uses the model in `config.toml`, or `town-modernbert-int8` when it names none (downloaded
 once, 263 MB); mail content is not sent to a remote classifier. The desktop workbench is separate from
 the label-only CLI service.
 
@@ -196,8 +196,19 @@ Existing Gmail project labels supply categories directly. Other mail without one
 **People** is the model's "none of these": mail written to you by a person (a colleague's reply, a forwarded thread)
 rather than sent by a service, so it needs no category. Mail still waiting for the model is listed there too until
 it is classified; the category's tooltip counts it as awaiting classification.
-Local overrides take precedence. They currently neither write back to the
-provider nor train the existing CLI feedback model.
+Local overrides take precedence and are not written back to the provider.
+
+**The model learns from the categories you choose.** Each model decision keeps the model's scores over the
+seven classes and eight yes/no facts (mailing-list headers, Gmail tab, calendar invite) in `learning.sqlite`:
+numbers under the message's opaque key, no mail content. A category you set on a message is a correction of
+that decision (Undo takes it back); a model category left alone for 7 days counts as a weak confirmation.
+Sender rules are not used, so one rule does not turn a single sender into dozens of examples. Once there are
+30 corrections, at most once a day, the workbench fits a small personal head on top of the model with the same
+code as [`learn`](models.md#improving-from-use-learn) and keeps it only if it beats the unchanged model on
+held-out messages; it also re-tunes the action and promotional thresholds. The listed model categories are
+re-decided from the stored scores at once (the model does not run again), and new mail uses the head as it
+arrives. `[learn] auto = false` in `config.toml` turns it off; deleting `personal.json` in the workbench folder
+goes back to the model as shipped.
 
 **Decide once per sender.** The category dialog offers **Always use this category for mail from …**. With it,
 that sender's other loaded mail and everything they send later get the category you chose, ahead of the
@@ -328,7 +339,7 @@ sending persist locally, including attachment bytes, without additional applicat
 and screenshots are part of the local machine's privacy boundary.
 
 The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, sender rules (a keyed hash of each address, never the address), legacy completion flags and revisions, which categories are bundled, pane widths, and the list cache. Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+identities, account-scoped hashed message IDs, manual categories, sender rules (a keyed hash of each address, never the address), legacy completion flags and revisions, which categories are bundled, pane widths, the list cache, and for learning (`learning.sqlite`, `personal.json`) each model decision's scores and yes/no facts plus the personal head learned from your categories (numbers only, derived from your mail: keep them private). Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
 and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 
