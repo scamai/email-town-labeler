@@ -193,6 +193,7 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 |---|---|
 | <kbd>j</kbd> / <kbd>k</kbd>（或 <kbd>↓</kbd> / <kbd>↑</kbd>） | 下一封（更早）/ 上一封（更新） |
 | <kbd>/</kbd> 或 <kbd>⌘F</kbd> | 搜索 |
+| <kbd>⌘A</kbd> | 只选中打开的那封邮件的文字，不选文件夹、列表和收纳行（在输入框里则选中输入框内容） |
 | <kbd>g</kbd> 再按 <kbd>i</kbd> / <kbd>s</kbd> / <kbd>a</kbd> / <kbd>t</kbd> | 收件箱、已发送、归档、废纸篓 |
 | <kbd>x</kbd> | 选中或取消选中打开的邮件 |
 | <kbd>Shift</kbd> 点击 · <kbd>⌘</kbd> 点击 | 选中一个范围（行或复选框）· 单独加选或取消一封且不打开它 |
@@ -206,7 +207,7 @@ IMAP 发信需要额外填写 SMTP 服务器，并使用 TLS；不支持安全�
 | <kbd>⌘Enter</kbd> | 发送正在写的邮件 |
 | <kbd>Esc</kbd> | 返回列表；关闭菜单或对话框 |
 
-macOS 应用的菜单另外提供 <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd>（撤销、重做）、<kbd>⌘X</kbd> <kbd>⌘C</kbd> <kbd>⌘V</kbd> <kbd>⌘A</kbd>、
+macOS 应用的菜单另外提供 <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd>（撤销、重做）、<kbd>⌘X</kbd> <kbd>⌘C</kbd> <kbd>⌘V</kbd>、
 <kbd>⌘M</kbd>（最小化）、<kbd>⌘H</kbd>（隐藏）和 <kbd>⌘Q</kbd>（退出）。窗口没有右键菜单，请用键盘复制粘贴。
 
 ## 语言与颜色

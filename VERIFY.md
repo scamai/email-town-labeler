@@ -8,7 +8,7 @@ Statuses: ✅ exercised; ❌ reproduced defect; ⬜ pending review; 🟡 partial
 
 | ID | Checkpoint | Status | Evidence / remaining work |
 | --- | --- | --- | --- |
-| MAIL01 | Opening, keyboard navigation, selection, read/star state | ✅ | `check_shortcuts_ui.py`, `check_list_navigation_ui.py` in Chromium and WebKit |
+| MAIL01 | Opening, keyboard navigation, selection, read/star state | ✅ | `check_shortcuts_ui.py`, `check_list_navigation_ui.py` in Chromium and WebKit; ⌘A selects only the open message (plain and formatted, nothing with none open, the field's own in search): `check_select_all_ui.py` (WebKit + Chromium; fails with the handler removed) |
 | MAIL02 | Done leaves pending work; Completed can reopen; tags persist | ✅ | PR #54: two-Gmail fixture verifies Pending/Completed/Reopen, all-done recovery, unchanged provider folder/labels and retained category tags |
 | MAIL03 | Account/category/date/completion/search filters compose and explain scope | ✅ | `check_completion_ui.py`: combined scopes, readable/accessible context and reset to Pending in both engines. Unread only inside a category and over bundles, read rows kept until the view changes, empty state, reset by Clear: `check_unread_filter_ui.py` (WebKit + Chromium; the keep-read guard mutation-checked) |
 | MAIL04 | Section/account/category unread counts are explicit and scoped | ✅ | PR #54: explicit unread counters follow other filters; only loaded active-folder count shown; last unread badge no longer moves narrow list |

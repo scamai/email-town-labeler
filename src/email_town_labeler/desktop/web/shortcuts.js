@@ -22,6 +22,7 @@
         ["k / ↑", "Previous (newer) message"],
         ["Esc", "Back to the list, close a menu or dialog"],
         [`/ or ${MOD} F`, "Search"],
+        [`${MOD} A`, "Select the open message's text"],
         ["g then i / s / a / t", "Inbox, Sent, Archive, Trash"],
       ],
     ],
@@ -169,6 +170,33 @@
     search?.select();
     return true;
   }
+  // ⌘A outside a text field selects the open message, as Apple Mail's reader does: only its text,
+  // never the folders, the list or the bundles. With no message open there is nothing to select.
+  function selectMessage() {
+    const body = $("previewBody");
+    if (!body || $("previewContent")?.hidden || !visible(body)) return true;
+    const frame = body.querySelector("iframe.email-frame");
+    let doc = null;
+    try {
+      doc = frame?.contentDocument; // same origin: the server serves the sanitized message
+    } catch {
+      doc = null;
+    }
+    const selection = getSelection();
+    selection.removeAllRanges();
+    if (frame && doc?.body) {
+      // Focus stays with the app (htmlview.js): the shortcuts keep working and ⌘C copies this selection.
+      doc.getSelection().selectAllChildren(doc.body);
+      return true;
+    }
+    if (frame) return true; // still loading: select nothing rather than the window
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    const bar = body.querySelector(":scope > .format-bar"); // "Show formatted" is not the message
+    if (bar) range.setStartAfter(bar);
+    selection.addRange(range);
+    return true;
+  }
   function goFolder(key) {
     const folder = { i: "inbox", s: "sent", a: "archive", t: "trash" }[key];
     return folder ? press(`[data-mail-folder="${folder}"]`) : false;
@@ -230,8 +258,10 @@
         handled = compose(event.shiftKey ? "reply-all" : "reply");
       else if (lower === "f" && event.shiftKey) handled = compose("forward");
       else if (lower === "f" && !event.shiftKey) handled = focusSearch();
+      else if (lower === "a" && !event.shiftKey && !typing(event.target))
+        handled = selectMessage();
       if (handled) event.preventDefault();
-      return; // ⌘C, ⌘V, ⌘A, ⌘Z… stay with the system
+      return; // ⌘C, ⌘V, ⌘Z and ⌘A in a field stay with the system
     }
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (dialog || typing(event.target)) return;

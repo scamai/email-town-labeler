@@ -84,6 +84,9 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **⌘A selects the open message, not the window.** Outside a text field, ⌘A selected every folder, row and bundle
+  on screen; it now selects only the open message's text (inside the formatted view as well), and nothing when no
+  message is open. In the search box or a message you are writing it still selects that field.
 - Pane widths now survive quitting and reopening the app. They were kept in the page's localStorage, but the
   app serves the page on a new port every launch, so that storage started empty each time. The workbench now
   keeps them in `workflow.sqlite`; a drag is saved as soon as it ends.
