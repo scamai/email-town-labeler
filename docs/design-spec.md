@@ -142,15 +142,18 @@ def prefix_renames(labels, old, new, names) -> list[tuple[str, str]]
 
 ### policy.py
 ```python
-def apply_policy(pred: Prediction, *, known_contact: bool, cfg) -> Prediction
+def apply_policy(pred: Prediction, *, known_contact: bool, cfg, bulk=False) -> Prediction
     # action_needed iff p[action_needed] >= action_threshold; else top non-action class, promotional
-    # only if p >= promotional_threshold (else next best); known contact -> never promotional (best
+    # only if p >= promotional_threshold (bulk mail: the lower of it and bulk_promotional_threshold;
+    # else next best); known contact -> never promotional (best
     # non-promotional, non-action class). Missing/NaN/negative probs = 0; a 0-prob result -> unknown.
     # Ties: the model's own cls, then CLASSES order. Returned prob = probs[cls]; probs = the model's.
-def confident_class(pred, cfg) -> str      # unknown below the bar: action_threshold for action_needed,
-                                           # min_confidence otherwise
+def confident_class(pred, cfg, *, bulk=False) -> str  # unknown below the bar: action_threshold for
+    # action_needed, min_confidence otherwise; on bulk mail promotional/newsletters/updates may reach
+    # min_confidence with the three classes' combined probability
 def new_sender_class(cls, *, primary: bool, new_address: bool, cfg) -> str
-def decide(pred, *, known_contact, new_address, primary, cfg) -> Decision(pred, cls)
+def decide(pred, *, known_contact, new_address, primary, cfg, bulk=False) -> Decision(pred, cls)
+    # bulk = features.bulk_mail(rec): List-Unsubscribe/List-Id headers or Gmail's Promotions tab
 ```
 Order: policy → min_confidence → new sender → unknown_action. `new_sender` is never a model class.
 
@@ -291,6 +294,7 @@ recovery_max_days = 30
 [policy]
 action_threshold = 0.2       # 0 < x <= 1
 promotional_threshold = 0.6  # 0 .. 1
+bulk_promotional_threshold = 0.5  # 0 .. 1; bulk mail
 protect_known_contacts = true
 new_sender = true
 contacts_scan_days = 730     # 1 .. 3650

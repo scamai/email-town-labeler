@@ -84,6 +84,13 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Far less marketing left Unclassified.** `town-modernbert` gives consumer marketing (store, loyalty, social
+  digests) a promotional probability of 0.5–0.8, under its recommended 0.8 bar, so that mail fell through to
+  `unknown`. Bulk mail (mailing-list headers or Gmail's Promotions tab) now has its own bar,
+  `[policy] bulk_promotional_threshold` (0.5), and its bulk classes may pool their probability for
+  `min_confidence`. On 800 messages of a personal Gmail account Unclassified went from 98 to 3, on 274 of a
+  work account from 58 to 54; none of them a thread you replied to or a sender you have written to became
+  promotional. Applies in the desktop app and the Gmail labeler.
 - **⌘A selects the open message, not the window.** Outside a text field, ⌘A selected every folder, row and bundle
   on screen; it now selects only the open message's text (inside the formatted view as well), and nothing when no
   message is open. In the search box or a message you are writing it still selects that field.

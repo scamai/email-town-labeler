@@ -119,6 +119,7 @@ _LAYOUT: list[tuple[str, str, str]] = [
     ("engine", "recovery_max_days", "recovery_max_days"),
     ("policy", "action_threshold", "action_threshold"),
     ("policy", "promotional_threshold", "promotional_threshold"),
+    ("policy", "bulk_promotional_threshold", "bulk_promotional_threshold"),
     ("policy", "protect_known_contacts", "protect_known_contacts"),
     ("policy", "new_sender", "new_sender"),
     ("policy", "contacts_scan_days", "contacts_scan_days"),
@@ -161,6 +162,9 @@ class Config:
     # [policy]: how model probabilities become a class (policy.py), then the new-sender rule (engine.py)
     action_threshold: float = 0.2  # p[action_needed] >= this -> action_needed (its confidence bar too)
     promotional_threshold: float = 0.6  # promotional only when p[promotional] >= this
+    # ...for bulk mail (mailing-list headers or Gmail's Promotions tab) this lower bar instead, and a bulk
+    # class (promotional/newsletters/updates) on bulk mail may count the three classes' combined probability
+    bulk_promotional_threshold: float = 0.5
     protect_known_contacts: bool = True  # never promotional for an address you have written to
     new_sender: bool = True  # label unknown Primary mail from never-written-to addresses "new sender"
     contacts_scan_days: int = 730  # setup scans sent mail this far back for contacts...
@@ -286,6 +290,11 @@ class Config:
             errs.append(
                 f"policy.promotional_threshold must be between 0 and 1 (got {self.promotional_threshold})"
             )
+        if not 0.0 <= self.bulk_promotional_threshold <= 1.0:
+            errs.append(
+                "policy.bulk_promotional_threshold must be between 0 and 1"
+                f" (got {self.bulk_promotional_threshold})"
+            )
         if not 1 <= self.contacts_scan_days <= 3650:
             errs.append(
                 f"policy.contacts_scan_days must be between 1 and 3650 (got {self.contacts_scan_days})"
@@ -397,6 +406,7 @@ _EXPECT = {
     "recovery_max_days": int,
     "action_threshold": float,
     "promotional_threshold": float,
+    "bulk_promotional_threshold": float,
     "protect_known_contacts": bool,
     "new_sender": bool,
     "contacts_scan_days": int,

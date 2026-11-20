@@ -25,6 +25,7 @@ from typing import Any
 from . import learn
 from .config import Config
 from .contacts import recipient_addresses, sender_address
+from .features import bulk_mail
 from .policy import Decision, decide
 from .state import Store
 from .taxonomy import UNKNOWN
@@ -268,6 +269,7 @@ class Engine:
                 new_address=new,
                 primary=PRIMARY in (rec.get("label_ids") or []),
                 cfg=self.cfg,
+                bulk=bulk_mail(rec),
             )
             for rec, pred, (known, new) in zip(recs, preds, flags)
         ]

@@ -64,6 +64,7 @@ recovery_max_days = 30         # history expired: rescan at most this many days 
 action_threshold = 0.2         # p(action needed) at or above this: label "action needed" (0 < x <= 1)
 promotional_threshold = 0.6    # "promotional" only at or above this; else the next best class (0 .. 1)
                                # (leave these two unset to use the model's recommended values)
+bulk_promotional_threshold = 0.5  # the "promotional" bar for bulk mail (list headers or Gmail's Promotions tab)
 protect_known_contacts = true  # never "promotional" for someone you have sent mail to
 new_sender = true              # label Primary mail with no other label from a stranger "new sender"
 contacts_scan_days = 730       # setup reads sent mail this far back to learn your contacts (1 .. 3650)
@@ -190,6 +191,17 @@ action-needed recall first and keeping important mail out of `promotional`; see
   it at least this probability; otherwise the message gets the next best class (often
   `updates`). **Raise it to keep uncertain mail out of `promotional`**, which is worth doing if
   you treat that label as "never read". `0` turns this rule off.
+- **`bulk_promotional_threshold`** (default `0.5`): the `promotional` bar for **bulk mail**, meaning
+  mail with mailing-list headers (`List-Unsubscribe`, `List-Id`) or that Gmail filed under
+  Promotions. The lower of this and `promotional_threshold` applies to it. Bulk mail also counts as
+  sure enough for `min_confidence` when its class is `promotional`, `newsletters` or `updates` and
+  those three together reach the bar ("newsletters 0.46, promotional 0.45" is surely bulk, only
+  unsure which kind). Mail written to you, with neither sign, keeps `promotional_threshold` and the
+  plain `min_confidence` bar. Why: `town-modernbert` was trained on one work inbox and gives
+  consumer marketing 0.5–0.8, so with its recommended 0.8 bar that mail fell through to `unknown`.
+  On 800 messages from a personal Gmail account (90 days), `unknown` went from 98 to 3; on 274
+  from a work account, from 58 to 54. In both, no message in a thread you replied to, or from
+  someone you have written to, became `promotional`. `1` turns the lower bar off.
 - **`protect_known_contacts`** (default `true`): mail from an address you have sent mail to is
   never labeled `promotional`; it gets the best class that is neither `promotional` nor
   `action needed` instead (or nothing, if the model saw nothing else in it).
@@ -210,10 +222,12 @@ action-needed recall first and keeping important mail out of `promotional`; see
 For each new message, in this order:
 
 1. **Policy.** `action needed` if its probability reaches `action_threshold`. Otherwise the
-   highest-scoring other class, except that `promotional` needs `promotional_threshold` (else
-   the next best), and is never used for a known contact (`protect_known_contacts`).
+   highest-scoring other class, except that `promotional` needs `promotional_threshold` (bulk mail:
+   the lower of that and `bulk_promotional_threshold`; else the next best), and is never used for a
+   known contact (`protect_known_contacts`).
 2. **`min_confidence`.** If the chosen class's own probability is below `min_confidence`, the
-   result is `unknown`. (`action needed` already passed its own bar in step 1.)
+   result is `unknown`. (`action needed` already passed its own bar in step 1.) On bulk mail,
+   `promotional`, `newsletters` and `updates` may reach it with their combined probability.
 3. **New sender.** An `unknown` result for Primary mail from an address you have never written
    to becomes `new sender` (if `new_sender` is on).
 4. **`unknown_action`.** An `unknown` result is labeled `<prefix>/unknown` (`"label"`) or only

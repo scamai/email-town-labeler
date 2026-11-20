@@ -38,7 +38,7 @@ def test_spec_example_parses(tmp_path):
         "[engine]\ndry_run = false\n"
     )
     assert load_config(p) == Config()
-    assert dump_config(Config()).count("=") == 19
+    assert dump_config(Config()).count("=") == 20
 
 
 @pytest.mark.parametrize(
