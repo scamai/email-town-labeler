@@ -18,7 +18,7 @@ from ..features import bulk_mail
 from ..gmail.auth import save_credentials
 from ..models import catalog
 from ..models.worker import load_service_model
-from ..policy import decide
+from ..policy import POLICY_VERSION, decide
 from ..taxonomy import LABEL_CLASSES
 from .accounts import Accounts, display_name, imap_settings, password_store
 from .cache import ListCache
@@ -124,6 +124,13 @@ class Workbench:
         self.reader_factory, self.model = reader_factory, classifier
         self.cfg = load_config(default_paths.config_file)
         self.model_ref = self.cfg.model_ref if default_paths.config_file.is_file() else DESKTOP_MODEL
+        # What made a "model" category. Cached categories made by anything else (another model, an older
+        # policy, other thresholds) are classified again instead of being carried forward forever.
+        c = self.cfg
+        self.classifier_stamp = (
+            f"{self.model_ref}|policy {POLICY_VERSION}|{c.min_confidence}|{c.action_threshold}"
+            f"|{c.promotional_threshold}|{c.bulk_promotional_threshold}"
+        )
         self.model_status = None  # {"state": "downloading", "size": ...} while the model is fetched
         self.lock, self.model_lock = threading.RLock(), threading.RLock()
         # Woken on every visible change so a waiting /api/state answers at once.
@@ -163,13 +170,18 @@ class Workbench:
         except Exception as e:  # noqa: BLE001 - a damaged cache only costs a cold load
             log.warning("list cache not read (%s)", type(e).__name__)
             return
+        stale = 0
         with self.lock:
             for (aid, folder), (saved_at, rows) in cached.items():
                 target = self.messages if folder == self.folder else self.folder_rows.setdefault(folder, {})
                 for row in rows:
                     target[row["id"]] = {**row, "done": False}
                     if row.get("source") == "model":
-                        self.predictions[row["id"]] = (row["category"], row.get("confidence"))
+                        # Made by another model or policy: shown until the refresh below classifies it again.
+                        if row.get("classified_by") == self.classifier_stamp:
+                            self.predictions[row["id"]] = (row["category"], row.get("confidence"))
+                        else:
+                            stale += 1
                 if folder == self.folder:
                     self.account_status[aid] = {
                         "status": "waiting",
@@ -179,6 +191,8 @@ class Workbench:
                         "last_sync": saved_at,
                     }
             self._touch()
+        if stale:
+            log.info("classifier changed: %d cached categories will be classified again", stale)
 
     def _save_cache(self, aid, folder, reader):
         try:
@@ -482,6 +496,7 @@ class Workbench:
                 "starred": "STARRED" in rec.get("label_ids", []),
                 "source": source,
                 "confidence": prediction[1] if prediction else None,
+                "classified_by": self.classifier_stamp if source == "model" else None,
             }
         return incoming
 
@@ -601,7 +616,10 @@ class Workbench:
                 self.predictions[key] = (result.cls, result.pred.prob)
                 if key in self.messages:
                     self.messages[key].update(
-                        category=result.cls, confidence=result.pred.prob, source="model"
+                        category=result.cls,
+                        confidence=result.pred.prob,
+                        source="model",
+                        classified_by=self.classifier_stamp,
                     )
             self._touch()
 

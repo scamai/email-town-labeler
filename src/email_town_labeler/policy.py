@@ -32,6 +32,9 @@ from .taxonomy import CLASSES, NEW_SENDER, UNKNOWN
 from .types import Prediction
 
 ACTION, PROMO = "action_needed", "promotional"
+# Bump when `decide` changes what it returns for the same probabilities: the desktop keeps model
+# decisions in its list cache and redoes those made by an older policy (desktop/manager.py).
+POLICY_VERSION = 2  # 2: bulk mail's own promotional bar and pooled bulk classes
 BULK_CLASSES = (PROMO, "newsletters", "updates")
 
 

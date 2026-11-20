@@ -88,6 +88,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **A new model or policy now reaches mail already in the list.** The desktop kept each model category in its
+  list cache and restored it on restart as final, so a better model, policy or threshold never reclassified
+  mail it had already seen. Each cached category now records the model, policy version and thresholds that
+  chose it; a category from anything else is classified again (once) after a restart.
 - **Far less marketing left Unclassified.** `town-modernbert` gives consumer marketing (store, loyalty, social
   digests) a promotional probability of 0.5–0.8, under its recommended 0.8 bar, so that mail fell through to
   `unknown`. Bulk mail (mailing-list headers or Gmail's Promotions tab) now has its own bar,

@@ -321,8 +321,8 @@ message details. Each server preview has at most 262,144 body-text characters
 plus up to 50 image references. Image blobs are released when switching messages or losing the session.
 External images load directly in the browser without a referrer or the workbench bearer token; the remote
 host sees the browser's IP and image URL, and its own cookie/cache policies apply. Bodies are never
-written to disk. The list is: `cache.sqlite` keeps subject, sender, date, read/star state, category and IDs of
-each folder's loaded window (plus Gmail header metadata and history cursor) so a restart shows mail at once and
+written to disk. The list is: `cache.sqlite` keeps subject, sender, date, read/star state, category (with the model and policy version that
+chose it, so a new version classifies that mail again) and IDs of each folder's loaded window (plus Gmail header metadata and history cursor) so a restart shows mail at once and
 Gmail re-reads only what changed. Delete it to clear it. There is no telemetry or remote classification. Drafts saved explicitly or before
 sending persist locally, including attachment bytes, without additional application-level encryption. OS swap, browser extensions
 and screenshots are part of the local machine's privacy boundary.
