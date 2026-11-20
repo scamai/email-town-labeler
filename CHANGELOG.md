@@ -97,6 +97,18 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Mail waiting for the model, and your own Sent mail, no longer read as People.** The reader says
+  **Sorting…** for the first and **Not classified** for the second, and Sent mail is not counted or listed
+  under People.
+- **A category being redone after a model or policy change stays on screen** until the model has classified the
+  message again; the whole Inbox briefly turned into People and lost its bundles.
+- **Choosing People or New sender with "Always use this category…" ticked** saved the category and then failed
+  with no Undo. The box is now offered only for categories a rule can choose, and the server checks the rule
+  before saving anything.
+- **Selecting messages inside a category and going back to the bundled Inbox deselects them**, so Archive or
+  Trash cannot act on mail hidden in a bundle. Choosing a category in the sidebar from the keyboard keeps focus
+  on it. **Archive all** on a bundle of more than 500 says it archives the newest 500.
+
 - **A new model or policy now reaches mail already in the list.** The desktop kept each model category in its
   list cache and restored it on restart as final, so a better model, policy or threshold never reclassified
   mail it had already seen. Each cached category now records the model, policy version and thresholds that
