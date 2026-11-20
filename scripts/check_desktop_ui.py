@@ -87,7 +87,7 @@ def check_palette(page, categories):
         assert ratio >= 4.5, (category, ratio)
         # The dot has its own clear hue (not the dark text ink), readable as a mark on the sidebar.
         assert colors["token"], (category, "no --category-dot token")
-        if category == "unknown":  # "Unclassified" is a ring: a transparent fill and a coloured inset
+        if category == "unknown":  # "People" (unknown) is a ring: a transparent fill and a coloured inset
             assert colors["ring"] != "none" and colors["dot"] == "rgba(0, 0, 0, 0)", (category, colors)
             dot = colors["ring"]
         else:

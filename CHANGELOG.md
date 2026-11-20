@@ -48,6 +48,10 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- **Unclassified is now People.** The desktop's name for the model's "none of these" class. With bulk mail
+  classified (see Fixed), what stays there is mail written by people: on 274 messages of a work account, 51 of
+  the 54 left were conversations the model was sure of (0.55 or more), 37 of them threads you replied to or
+  mail from people you have written to. "Unclassified" read as a failure to classify them.
 - **First run explains itself.** With no mailbox connected, the list welcomes you and offers one button, **Add an
   email account**; sync status, refresh and Compose stay hidden until there is a mailbox. **Add account** opens on the
   route that works in this copy (the email-address form with app passwords when no Google sign-in client ships), with

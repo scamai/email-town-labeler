@@ -1736,7 +1736,7 @@ dialog::backdrop {
   border-radius: 50%;
   background: var(--category-dot, var(--category-ink));
 }
-/* "Unclassified" is the absence of a category: a ring, not another colour to tell apart. */
+/* "People" (unknown) is the absence of a category: a ring, not another colour to tell apart. */
 .category-filter[data-category="unknown"]::before {
   background: transparent;
   box-shadow: inset 0 0 0 2px var(--category-dot);

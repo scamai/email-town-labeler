@@ -65,7 +65,8 @@ CATEGORY_NAMES = {
     "promotional": "Promotions",
     "travel": "Travel",
     "updates": "Updates",
-    "unknown": "Unclassified",
+    # The model's "none of these": mail written by people (colleagues, replies), not a failure to classify.
+    "unknown": "People",
 }
 
 
