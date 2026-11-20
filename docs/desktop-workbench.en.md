@@ -253,6 +253,7 @@ Apple Mail (Ctrl on Windows and Linux).
 |---|---|
 | <kbd>j</kbd> / <kbd>k</kbd> (or <kbd>↓</kbd> / <kbd>↑</kbd>) | Next (older) / previous (newer) message |
 | <kbd>/</kbd> or <kbd>⌘F</kbd> | Search |
+| <kbd>⌘A</kbd> | Select the open message's text, not the folders, list or bundles (in a field it selects the field) |
 | <kbd>g</kbd> then <kbd>i</kbd> / <kbd>s</kbd> / <kbd>a</kbd> / <kbd>t</kbd> | Inbox, Sent, Archive, Trash |
 | <kbd>x</kbd> | Select or deselect the open message |
 | <kbd>Shift</kbd>-click · <kbd>⌘</kbd>-click | Select a range (rows or checkboxes) · add or remove one message without opening it |
@@ -267,7 +268,7 @@ Apple Mail (Ctrl on Windows and Linux).
 | <kbd>Esc</kbd> | Back to the list; close a menu or dialog |
 
 In the macOS app the menus also give <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> (undo, redo), <kbd>⌘X</kbd> <kbd>⌘C</kbd>
-<kbd>⌘V</kbd> <kbd>⌘A</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘H</kbd> (hide) and <kbd>⌘Q</kbd> (quit). The window has
+<kbd>⌘V</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘H</kbd> (hide) and <kbd>⌘Q</kbd> (quit). The window has
 no right-click menu; use the keyboard to copy and paste.
 
 ## Appearance
