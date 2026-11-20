@@ -5,6 +5,9 @@ connect accounts → find pending/unread mail → read/reply → finish → reco
 This review uses synthetic messages and authenticated local servers. It does not use real
 mail as fixtures or transmit real mail to coding agents.
 
+> Since 0.1.7, "finish" is Archive (`e`/`d`) in the mailbox itself and recovery is Undo or Restore. The
+> local Pending/Completed/Reopen workflow described below as delivered by PR #54 was removed in PR #67.
+
 ## Confirmed defects and repair status
 
 | Priority | Finding | Reproduction / consequence | Acceptance |
@@ -145,8 +148,9 @@ infer that they survive an IMAP server changing UID/UIDVALIDITY or moving betwee
 
 Provider categories take precedence where available. Otherwise the desktop runs a local
 classifier and applies the policy thresholds. Sender familiarity is intentionally not shared
-between accounts. Manual corrections persist as local overrides with undo; they do **not**
-currently feed the CLI learning pipeline or write back to provider labels.
+between accounts. Manual corrections persist as local overrides with undo. Since PR #79 they feed the
+workbench's own on-device learning (a personal head in the workbench folder's `personal.json`); they do
+**not** feed the Gmail labeler's learning or write back to provider labels.
 
 There is no representative, consented, multi-account labeled evaluation set in this review.
 Accuracy, missed action-needed messages and confidence calibration therefore remain unmeasured.
@@ -157,7 +161,8 @@ set before claiming the model can reliably prioritize the owner's daily mail.
 ## Product direction
 
 Borrow the separation of active work and Completed from
-[Apple Reminders](https://support.apple.com/guide/reminders/view-reminder-lists-remnd854fc47/mac),
+[Apple Reminders](https://support.apple.com/guide/reminders/view-reminder-lists-remnd854fc47/mac)
+(since 0.1.7 that separation is Inbox versus Archive in the mailbox, not a local Completed view),
 while keeping mailbox folders, account identity and category tags visible. Filters should
 compose and report their scope. High-frequency operations should update state without
 animation or list teardown; all essential controls must work with keyboard and narrow layouts.

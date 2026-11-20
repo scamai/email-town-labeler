@@ -225,9 +225,10 @@ have logged in.
 | ✅ | Bring your own model: ONNX, Hugging Face, or a local LLM via Ollama | [Models ↓](#under-the-hood) |
 | 🟡 | Personal Gmail in Google's "Testing" mode needs a re-login every 7 days | [why](docs/google-cloud-setup.md#4-audience-testing-vs-production-external-only) |
 | 🟡 | Install from PyPI | not yet: install from GitHub |
-| 🔴 | Outlook, IMAP, Fastmail | not planned yet |
+| 🔴 | Automatic labels on Outlook, IMAP or Fastmail mail | not planned: the labeler is Gmail-only |
 | 🔴 | Instant push instead of 60-second polling | not built |
 | 🟡 | Desktop workbench: explicit mail actions, drafts, folders and attachments | [workbench guide](docs/desktop-workbench.en.md) |
+| 🟡 | Desktop workbench reads and manages Outlook / Microsoft 365 (Graph) and IMAP mailboxes (iCloud, Yahoo, Fastmail…) next to Gmail | [connect accounts](docs/desktop-workbench.en.md#connect-accounts) |
 | 🟡 | Email Town desktop app (no Python needed); macOS signed and notarized, Windows/Linux unsigned for now | [download](docs/desktop-workbench.en.md#download-the-app) |
 
 ---
@@ -241,6 +242,7 @@ Everything below is the technical detail, folded so the page stays short. Open w
 
 | Command | What it does |
 |---|---|
+| `email-town-labeler desktop [--background] [--stop] [--no-browser]` | Open the local multi-account mail workbench in your browser ([guide](docs/desktop-workbench.en.md)) |
 | `email-town-labeler setup` | Guided first-time setup: client secret, login, model, dry run, optional service install |
 | `email-town-labeler login [--headless]` | (Re)authorize Gmail access. `--headless` for machines without a browser |
 | `email-town-labeler run` | Run the labeler in the foreground, polling every `poll_seconds` |
@@ -249,6 +251,8 @@ Everything below is the technical detail, folded so the page stays short. Open w
 | `email-town-labeler status [--json] [--redact]` | Account, model, last poll, counts per class, service state. Exits 1 when unhealthy. `--redact` masks your address and home paths |
 | `email-town-labeler undo [--dry-run]` | Remove every `e/...` label from every message. Touches nothing else |
 | `email-town-labeler labels rename-prefix NEW [--dry-run]` | Rename every label under `label_prefix` (default `e`) to `NEW/...` in place: messages keep their labels. Stop the service first |
+| `email-town-labeler labels check [--json] \| show [--dry-run] [--json]` | Report whether the class labels are visible in Gmail / create missing ones and show them (explicit repair) |
+| `email-town-labeler triage [--plan] [--view ...] [--date YYYY-MM-DD]` | Daily Gmail inbox searches and bounded counts, without reading mail |
 | `email-town-labeler model list` | Published models (installed or not, with sizes), installed packages, and the active one |
 | `email-town-labeler model pull <name\|ref> [--use]` | Download and verify a model package (`town-modernbert`, `hf:...`, a URL); `--use` makes it active |
 | `email-town-labeler model info [ref]` | Manifest, license and metrics of a model (default: the active one) |
@@ -284,7 +288,9 @@ At most one email-town-labeler label per message. Which one is decided by a poli
 `[policy]` (see [configuration.md](docs/configuration.md#policy)): `action needed` as soon as
 the model gives it 20 %, `promotional` only above 60 % and never for people you have written
 to (built-in defaults; a model can recommend its own, and `town-modernbert` uses 7 % and
-80 %). Rename them under `[labels]` in the config, recolor them under `[label_colors]` (by
+80 %). Bulk mail (mailing-list headers or Gmail's Promotions tab) needs only
+`bulk_promotional_threshold` (50 %) for `promotional` when that bar is lower. Rename them under `[labels]` in the
+config, recolor them under `[label_colors]` (by
 default they get Town's colors), or change the `e` prefix: `email-town-labeler labels rename-prefix
 NEW` renames the existing labels in place (messages keep them) and updates `label_prefix`.
 
@@ -455,7 +461,8 @@ data directories (see [docs/configuration.md](docs/configuration.md#files-and-di
 <details>
 <summary><b>Limitations</b></summary>
 
-- Gmail and Google Workspace only.
+- The labeler is Gmail and Google Workspace only. The desktop workbench also reads Outlook and IMAP mailboxes,
+  but keeps their categories on your device.
 - Polling, not push: labels appear within about `poll_seconds` of arrival. Push via Pub/Sub
   would need a Google Cloud Pub/Sub topic and is not implemented.
 - One label per message from a fixed set of seven classes (plus the rule-based `new sender`).
@@ -544,7 +551,11 @@ Yes: one instance per account, each with its own `EMAIL_TOWN_LABELER_HOME` (or i
 <details>
 <summary><b>Does it work with Outlook, IMAP or Fastmail?</b></summary>
 
-No. Gmail and Google Workspace only, through the Gmail API.
+The automatic labeler does not: it is Gmail and Google Workspace only, through the Gmail API. The
+[desktop workbench](docs/desktop-workbench.en.md) does: it reads and manages Outlook / Microsoft 365 mailboxes
+(Microsoft Graph) and IMAP mailboxes such as iCloud, Yahoo and Fastmail, classifies them with the same on-device
+model and keeps its categories on your device; it does not write labels to those mailboxes
+([what a downloaded copy can connect today](docs/desktop-workbench.en.md#what-a-downloaded-copy-can-connect-today)).
 
 </details>
 
@@ -573,6 +584,7 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 | change labels, colors, thresholds | [Configuration](docs/configuration.md) |
 | use or build a different model | [Models](docs/models.md) · [model card](docs/model-cards/town-modernbert.md) |
 | fix something that isn't working | [Troubleshooting](docs/troubleshooting.md) |
+| use the desktop mail workbench | [Workbench guide](docs/desktop-workbench.en.md) · [本机工作台](docs/desktop-workbench.md) |
 | understand or contribute to the code | [Architecture](docs/architecture.md) · [Design spec](docs/design-spec.md) |
 
 ## Contributing

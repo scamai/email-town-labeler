@@ -1,7 +1,7 @@
 # Unified on-device mail workbench queue
 
 Product objective: explicitly authorized inboxes from many providers appear in one local place,
-with shared categories and fast daily handling. Completion and classification remain independent.
+with shared categories and fast daily handling. Finishing a message is provider Archive, independent of its category.
 The user requested implementation through a usable local app, not a sequence of proposal phases.
 
 ## Implemented and exercised locally
@@ -10,8 +10,9 @@ The user requested implementation through a usable local app, not a sequence of 
 - [x] Independent named per-account labeling services; default service preserved.
 - [x] Authenticated loopback workbench, multi-account registry, Gmail/Graph/TLS IMAP readers.
 - [x] One local classifier shared across workbench accounts; no cross-account contact inference.
-- [x] Unified inbox, account/category/date/completion filters, subject/sender search, plaintext preview, folders and explicit mail actions.
-- [x] Account-scoped local completion and manual categories, batch actions, atomic stale-safe undo.
+- [x] Unified inbox, account/category/date/Unread filters, subject/sender search over loaded mail, sanitized HTML
+  and plain-text preview, folders and explicit mail actions; finishing is Archive (`e`/`d`) with a 5-second Undo.
+- [x] Account-scoped manual categories, per-sender category rules, Inbox bundles, batch actions, atomic stale-safe undo.
 - [x] Explicit enrollment, per-account health, pause/resume and identity-checked reauthorization.
 - [x] System-vault IMAP passwords, private OAuth files; explicitly saved drafts in a private local store.
 - [x] Start/reopen/stop background process and a reproducible macOS double-click launcher.
@@ -33,7 +34,9 @@ The user requested implementation through a usable local app, not a sequence of 
 
 ## Remaining product work
 
-- [ ] Unified local corrections → optional provider write-back and consented learning; separate from completion.
+- [x] Desktop category corrections feed on-device learning (personal head in the workbench's `personal.json`, #79).
+- [ ] Optional write-back of desktop corrections to provider labels/categories; desktop corrections do not yet
+  reach the Gmail labeler's own learning.
 - [ ] Incremental Graph/IMAP sync, custom-folder scope, and broader history beyond the bounded per-folder window.
 - [ ] Account disconnect/revocation/removal policy, without erasing other accounts or silently discarding workflow state.
 - [ ] Multi-account resource measurements and consented Chinese-language quality evaluation; historical one-mailbox

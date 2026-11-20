@@ -14,8 +14,10 @@ stored on disk. If the code ever disagrees with this page, that is a bug: please
 ## Local desktop workbench
 
 `desktop` is an explicit display surface for private mail, unlike CLI status/log output. It reads
-Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders, plaintext bodies and referenced images through
-an authenticated loopback HTTP server in the user's browser. Manual categories and completion are local.
+Gmail, Microsoft Graph or TLS IMAP and displays subjects, senders, bodies (HTML sanitized to an allowlist and shown
+in a sandboxed frame, or plain text) and referenced images through an authenticated loopback HTTP server in the
+user's browser. Manual categories and sender rules are local. Completion flags from before 0.1.7 remain in
+`workflow.sqlite`, but the interface no longer sets or shows them: being done with a message is Archive.
 The desktop workbench can explicitly send/reply/forward, change read/unread and starred state, archive,
 trash and restore messages, and upload/download attachments; these operations require the relevant account
 grant and are separate from the label-only CLI service.
@@ -44,7 +46,7 @@ Deleting the file is safe and only costs one full reload. Explicitly saved draft
 stored under `workbench/mail` as described below.
 Browser extensions, OS swap and screenshots are outside that guarantee.
 `workbench/accounts.json` holds names, connection settings (including IMAP usernames), and identity hashes.
-`workflow.sqlite` holds account-scoped message hashes, local categories, completion and revisions, sender rules, which categories are bundled in the Inbox, and pane widths. A sender rule is stored under an HMAC-SHA256 of the sender's address with a random key made on first use and kept in the same file, so the file holds no address in readable form and its hashes do not match another install's. Anyone who has the whole file (key included) can still test guessed addresses against it; `cache.sqlite`
+`workflow.sqlite` holds account-scoped message hashes, local categories, legacy completion flags (no longer set) and revisions, sender rules, which categories are bundled in the Inbox, and pane widths. A sender rule is stored under an HMAC-SHA256 of the sender's address with a random key made on first use and kept in the same file, so the file holds no address in readable form and its hashes do not match another install's. Anyone who has the whole file (key included) can still test guessed addresses against it; `cache.sqlite`
 holds the list cache above. `learning.sqlite` (mode 0600) holds, per model decision, the message hash, the model's
 scores over the seven classes, eight yes/no facts (mailing-list headers, Gmail tab, calendar invite), the final class
 and when the message arrived; `personal.json` holds the personal head and thresholds learned from the categories you
