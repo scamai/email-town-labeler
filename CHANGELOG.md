@@ -32,7 +32,7 @@ contain breaking changes; they are called out.
 
 - **Inbox bundles.** In the Inbox, Newsletters, Promotions, Updates, Orders & bills and Travel each collapse
   into one row (count, unread count, first senders), placed by its newest message, as in Inbox by Gmail.
-  Mail that may need you (Action needed, New sender, Unclassified) stays as its own rows. **Archive all**
+  Mail that may need you (Action needed, New sender, People) stays as its own rows. **Archive all**
   clears a whole bundle with the 5-second Undo. Inside a bundle, **Show one by one** / **Bundle them** sets
   how that category shows in the Inbox; the choice is kept on this device in `workflow.sqlite`.
 
@@ -52,37 +52,8 @@ contain breaking changes; they are called out.
 - The workbench guide says which mailboxes a downloaded copy can connect today (app passwords: Gmail, iCloud,
   Yahoo, QQ and others) and which wait for a shipped sign-in client (Google browser sign-in, Microsoft).
 
-- desktop.log records Done, Reopen, category corrections and their undo: which control (`via=preview`,
-  `toolbar`, `category-dialog`), which messages by key prefix, and that the mailbox was not changed.
-
-### Changed
-
-- **Unclassified is now People.** The desktop's name for the model's "none of these" class. With bulk mail
-  classified (see Fixed), what stays there is mail written by people: on 274 messages of a work account, 51 of
-  the 54 left were conversations the model was sure of (0.55 or more), 37 of them threads you replied to or
-  mail from people you have written to. "Unclassified" read as a failure to classify them.
-- **First run explains itself.** With no mailbox connected, the list welcomes you and offers one button, **Add an
-  email account**; sync status, refresh and Compose stay hidden until there is a mailbox. **Add account** opens on the
-  route that works in this copy (the email-address form with app passwords when no Google sign-in client ships), with
-  the address focused and server settings folded until an unknown domain needs them. The search ✕ shows only when
-  there is a search or filter to clear.
-
-- **Done is Archive.** The local Done folder, **Mark done** and **Reopen** are gone: being done with a message is
-  **Archive** (`e`, and now `d`), which leaves the Inbox in the mailbox too, as Gmail's Done does, so Email Town and
-  the mailbox never disagree. Mail marked done before shows in the Inbox again until it is archived.
-
-- The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the
-  synthetic fixture at 1440 px), so about twice as many messages fit. Folders, including Drafts and a **Done**
-  folder that replaces the Pending / Completed / All switch, move from tabs to the folder pane. Search
-  moves to the top bar. The list header becomes one row: date range, filter chips, count. Rows are two
-  fixed lines with an avatar that turns into the checkbox, the sender's name without the address, and the
-  category on the subject line; unread rows are bold with a blue edge bar. Each folder, category and
-  account shows one number, its unread mail; the "automatic", "awaiting classification" and per-entry
-  "N unread" texts, the duplicate "All accounts" entry and the per-row account name with one account, the
-  "Unclassified" chip and the scope breadcrumb are gone.
-- Both pane borders can be dragged (or moved with ←/→) to resize; widths are kept per device.
-
-### Added
+- desktop.log records category corrections, sender rules and their undo: which control
+  (`via=category-dialog`), which messages by key prefix, and that the mailbox was not changed.
 
 - Messages with an HTML version open formatted, as in Gmail: the sender's layout, buttons and inline
   images instead of a text version full of "Image" placeholders. The HTML is sanitized to an allowlist and
@@ -94,6 +65,66 @@ contain breaking changes; they are called out.
   (click, keys, Shift+J, auto-advance), selection, shortcut keys, mailbox actions with per-message results,
   each open-to-read decision, and read/star changes reported by the mailbox on sync. Page events are
   filtered to short tokens, so no subject, address or text can reach the log.
+
+- `desktop.log` now says where the time goes. Every API action is logged with its path, status and duration
+  (never message IDs, query strings or bodies); each bulk mail action logs its message count, results, total
+  time, time spent waiting for the account and in provider calls; each list load logs its folder, provider,
+  message count and duration, and when a load was discarded and restarted.
+
+### Changed
+
+- **Unclassified is now People.** The desktop's name for the model's "none of these" class. With bulk mail
+  classified (see Fixed), what stays there is mail written by people: on 274 messages of a work account, 51 of
+  the 54 left were conversations the model was sure of (0.55 or more), 37 of them threads you replied to or
+  mail from people you have written to. "Unclassified" read as a failure to classify them.
+
+- **First run explains itself.** With no mailbox connected, the list welcomes you and offers one button, **Add an
+  email account**; sync status, refresh and Compose stay hidden until there is a mailbox. **Add account** opens on the
+  route that works in this copy (the email-address form with app passwords when no Google sign-in client ships), with
+  the address focused and server settings folded until an unknown domain needs them. The search ✕ shows only when
+  there is a search or filter to clear.
+
+- **Done is Archive.** The local Done folder, **Mark done** and **Reopen** are gone: being done with a message is
+  **Archive** (`e`, and now `d`), which leaves the Inbox in the mailbox too, as Gmail's Done does, so Email Town and
+  the mailbox never disagree. Mail marked done before shows in the Inbox again until it is archived.
+
+- The workbench is laid out like Outlook: a list row is 60 px instead of about 112 px (measured on the
+  synthetic fixture at 1440 px), so about twice as many messages fit. Folders, including Drafts, move from tabs to
+  the folder pane. Search moves to the top bar. The list header becomes one row: date range, filter chips, count. Rows are two
+  fixed lines with an avatar that turns into the checkbox, the sender's name without the address, and the
+  category on the subject line; unread rows are bold with a blue edge bar. Each folder, category and
+  account shows one number, its unread mail; the "automatic", "awaiting classification" and per-entry
+  "N unread" texts, the duplicate "All accounts" entry and the per-row account name with one account, the
+  chip on mail without a category and the scope breadcrumb are gone.
+
+- Both pane borders can be dragged (or moved with ←/→) to resize; widths are kept per device.
+
+- Date, account, category and search filters compose. Loaded unread counts follow that scope for accounts,
+  categories and the active folder. Category statistics distinguish automatic classifications, user
+  corrections and awaiting classification (in tooltips and accessible names) instead of presenting "0 wrong"
+  as evidence of accuracy. Configured empty folders no longer suggest adding an account, and failed or paused
+  accounts are distinguished from empty folders while other accounts keep their loaded mail.
+
+- Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
+  Gmail bodies after a list loads, and, whenever you open a message, the three below it and the one above in
+  one batched request. Opened and prefetched bodies are kept (300 on the server, 150 in the page), the
+  reading pane and the reply/attachment code share one request per message, and the "Reading message…"
+  note appears only when a body really takes longer than 0.3 s. A cold Gmail start still fits the
+  per-minute quota budget with room for about 16 opens.
+
+- Bulk actions no longer make you wait. Archive, Trash, Restore, read/unread and star now take effect in the
+  list at once and the mailbox writes run in a background queue, one action after another; the footer says
+  what is still going ("Archiving 12 of 40"). A message that fails comes back to the list, with the error.
+  You can keep working and switch folders meanwhile, and a fourth action queues instead of being refused.
+
+- The message list gets the height back. Its header (folder tabs, a large "Inbox" title, search, select-all
+  bar and the "Load more" bar) took about 40% of the list pane; it is now two slim rows, search above and
+  select-all · title · count below, and "Load more mail" sits under the list. The first message starts
+  about 150 px from the top of the pane instead of about 480 px.
+
+- Category dots in the sidebar now use one clear hue each (the Gmail label hues), instead of the dark text
+  colours, where brown, maroon, purple, teal and green looked alike at 8 px. Each dot keeps at least 3:1
+  contrast in light and dark mode, and People is a grey ring rather than one more colour.
 
 ### Fixed
 
@@ -113,27 +144,33 @@ contain breaking changes; they are called out.
   list cache and restored it on restart as final, so a better model, policy or threshold never reclassified
   mail it had already seen. Each cached category now records the model, policy version and thresholds that
   chose it; a category from anything else is classified again (once) after a restart.
-- **Far less marketing left Unclassified.** `town-modernbert` gives consumer marketing (store, loyalty, social
+
+- **Far less marketing left unclassified (now People).** `town-modernbert` gives consumer marketing (store, loyalty, social
   digests) a promotional probability of 0.5–0.8, under its recommended 0.8 bar, so that mail fell through to
   `unknown`. Bulk mail (mailing-list headers or Gmail's Promotions tab) now has its own bar,
   `[policy] bulk_promotional_threshold` (0.5), and its bulk classes may pool their probability for
-  `min_confidence`. On 800 messages of a personal Gmail account Unclassified went from 98 to 3, on 274 of a
+  `min_confidence`. On 800 messages of a personal Gmail account the unclassified count went from 98 to 3, on 274 of a
   work account from 58 to 54; none of them a thread you replied to or a sender you have written to became
   promotional. Applies in the desktop app and the Gmail labeler.
+
 - **⌘A selects the open message, not the window.** Outside a text field, ⌘A selected every folder, row and bundle
   on screen; it now selects only the open message's text (inside the formatted view as well), and nothing when no
   message is open. In the search box or a message you are writing it still selects that field.
+
 - Pane widths now survive quitting and reopening the app. They were kept in the page's localStorage, but the
   app serves the page on a new port every launch, so that storage started empty each time. The workbench now
   keeps them in `workflow.sqlite`; a drag is saved as soon as it ends.
 
 - Passing over messages with j/k no longer reads them: as in Gmail's reading pane, a message is marked read
   after 1.5 s on it. Mark unread on the open message sticks for that open, even inside the delay.
+
 - A state answer produced just before an open's mark-read could arrive after it and show the open message
   unread again for a moment (seen in a real session's log); the page now holds its read flag until a newer
   answer arrives.
+
 - The formatted view has no frame line, its text lines up with the sender, and hidden external images leave
   a blank space instead of a broken-image box.
+
 - Opening a message no longer fails when its automatic mark-read lands while the body is being read:
   the preview uses the body it just loaded instead of looking the cache up a second time.
 
@@ -157,42 +194,6 @@ contain breaking changes; they are called out.
   on every open, read, selection, or background update. Unchanged rows and their controls retain DOM identity,
   scroll position and geometry; repeated keys keep focus, removed rows advance it, and undo restores the
   reopened row. Row actions resolve current state when clicked rather than retaining stale handlers.
-
-### Changed
-
-- Inbox now opens on Pending mail. Done removes a message from that view and places it in the clearly named
-  Completed view; Reopen restores it without archiving, deleting, or removing category tags. Date, account,
-  category, completion, and search filters compose, while titles state the resulting scope. Loaded unread
-  counts now follow that scope for date sections, accounts, categories, and the active folder. Category
-  statistics distinguish automatic classifications, user corrections, and awaiting classification instead
-  of presenting "0 wrong" as evidence of accuracy. An all-done Pending view offers a View completed action,
-  and configured empty folders no longer suggest adding an account. Failed or paused accounts are
-  distinguished from empty folders, while other accounts keep their loaded mail. Folder tabs keep their
-  height when the last unread badge disappears, preventing a roughly 10 px list jump on narrow windows.
-- Messages open without "Reading message…". Like a desktop client, Email Town now reads ahead: the newest 30
-  Gmail bodies after a list loads, and, whenever you open a message, the three below it and the one above in
-  one batched request. Opened and prefetched bodies are kept (300 on the server, 150 in the page), the
-  reading pane and the reply/attachment code share one request per message, and the "Reading message…"
-  note appears only when a body really takes longer than 0.3 s. A cold Gmail start still fits the
-  per-minute quota budget with room for about 16 opens.
-- Bulk actions no longer make you wait. Archive, Trash, Restore, read/unread and star now take effect in the
-  list at once and the mailbox writes run in a background queue, one action after another; the footer says
-  what is still going ("Archiving 12 of 40"). A message that fails comes back to the list, with the error.
-  You can keep working and switch folders meanwhile, and a fourth action queues instead of being refused.
-- The message list gets the height back. Its header (folder tabs, a large "Inbox" title, search, select-all
-  bar and the "Load more" bar) took about 40% of the list pane; it is now two slim rows, search above and
-  select-all · title · count below, and "Load more mail" sits under the list. The first message starts
-  about 150 px from the top of the pane instead of about 480 px.
-- Category dots in the sidebar now use one clear hue each (the Gmail label hues), instead of the dark text
-  colours, where brown, maroon, purple, teal and green looked alike at 8 px. Each dot keeps at least 3:1
-  contrast in light and dark mode, and "Unclassified" is a grey ring rather than one more colour.
-
-### Added
-
-- `desktop.log` now says where the time goes. Every API action is logged with its path, status and duration
-  (never message IDs, query strings or bodies); each bulk mail action logs its message count, results, total
-  time, time spent waiting for the account and in provider calls; each list load logs its folder, provider,
-  message count and duration, and when a load was discarded and restarted.
 
 ## [0.1.6] - 2026-11-09
 

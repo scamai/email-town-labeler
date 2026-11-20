@@ -171,7 +171,7 @@ Below the folders, categories and accounts each show one number: their unread ma
 Choose a category to filter by it and again (or its chip in the list header) to clear it. With one
 account, there is no "All accounts" entry and rows carry no account name. The list header holds the date
 range (All / Today / Earlier), an **Unread** toggle, a chip per active filter, and the message count; search sits in the top
-bar. Filters compose; **Clear search and filters** returns to the default view. **Unread** lists only the
+bar and matches only the subjects and senders of loaded mail. Filters compose; **Clear search and filters** returns to the default view. **Unread** lists only the
 unread mail in the current scope (choose Updates, then Unread); a message read in that view stays listed,
 no longer bold, until the folder, category, account, date range or search changes, as in Gmail and
 Outlook, so it does not vanish while you read it. Each row is two fixed
@@ -191,11 +191,16 @@ draft and are never retried automatically. Gmail/SMTP sends are limited to 20 Mi
 downloads are limited to 20 MiB for Gmail/IMAP and 8 MiB for Graph. Forwarding includes body only; attachments
 must be re-added explicitly. Send closes the editor and waits 5 seconds before the message leaves: **Undo**
 in the toast keeps it unsent and reopens it in the editor; quitting inside the window sends it at once.
+An IMAP account sends through the SMTP server you enter, over TLS (STARTTLS or implicit TLS) only. On an IMAP
+server without UID MOVE, Archive, Trash and Restore are refused and nothing is deleted.
 
 Existing Gmail project labels supply categories directly. Other mail without one uses one shared local model; your own Sent mail is not classified.
 **People** is the model's "none of these": mail written to you by a person (a colleague's reply, a forwarded thread)
-rather than sent by a service, so it needs no category. Mail still waiting for the model is listed there too until
-it is classified; the category's tooltip counts it as awaiting classification.
+rather than sent by a service, so it needs no category. It also holds mail the model was not sure enough about: a
+class below its confidence bar (`[model] min_confidence`, 0.55 by default; `[policy] action_threshold` for Action
+needed) counts as none of these. Mail still waiting for the model is listed there too until
+it is classified (the reader says **Sorting…**); the category's tooltip counts it as awaiting classification.
+Your own Sent mail reads **Not classified** and is not counted under People.
 Local overrides take precedence and are not written back to the provider.
 
 **The model learns from the categories you choose.** Each model decision keeps the model's scores over the
@@ -273,14 +278,14 @@ Apple Mail (Ctrl on Windows and Linux).
 | <kbd>x</kbd> | Select or deselect the open message |
 | <kbd>Shift</kbd>-click · <kbd>⌘</kbd>-click | Select a range (rows or checkboxes) · add or remove one message without opening it |
 | <kbd>Shift j</kbd> / <kbd>Shift k</kbd> | Extend the selection down / up |
-| <kbd>*</kbd> then <kbd>a</kbd> / <kbd>n</kbd> / <kbd>r</kbd> / <kbd>u</kbd> | Select all, none, read, unread (also in the ▾ menu beside "Select all loaded", with Starred and Unstarred) |
+| <kbd>*</kbd> then <kbd>a</kbd> / <kbd>n</kbd> / <kbd>r</kbd> / <kbd>u</kbd> / <kbd>s</kbd> / <kbd>t</kbd> | Select all, none, read, unread, starred, unstarred (also in the ▾ menu beside "Select all loaded") |
 | <kbd>e</kbd> or <kbd>d</kbd> | Archive: done with it (the selection if there is one, else the open message) |
-| <kbd>#</kbd> or <kbd>Delete</kbd> | Move to Trash (asks first, as the button does) |
+| <kbd>#</kbd>, <kbd>Delete</kbd> or <kbd>Backspace</kbd> | Move to Trash (asks first, as the button does) |
 | <kbd>s</kbd> · <kbd>Shift U</kbd> · <kbd>Shift I</kbd> | Star or unstar · mark unread · mark read |
 | <kbd>c</kbd> or <kbd>⌘N</kbd> | New message |
 | <kbd>r</kbd> / <kbd>a</kbd> / <kbd>f</kbd> or <kbd>⌘R</kbd> / <kbd>⌘⇧R</kbd> / <kbd>⌘⇧F</kbd> | Reply / reply all / forward |
 | <kbd>⌘Enter</kbd> | Send the message you are writing |
-| <kbd>Esc</kbd> | Back to the list; close a menu or dialog |
+| <kbd>Esc</kbd> | Clear the selection; back to the list; close a menu or dialog |
 
 In the macOS app the menus also give <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> (undo, redo), <kbd>⌘X</kbd> <kbd>⌘C</kbd>
 <kbd>⌘V</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘H</kbd> (hide) and <kbd>⌘Q</kbd> (quit). The window has
@@ -322,7 +327,8 @@ python3 scripts/install_macos_workbench.py
 ```
 
 The binary assets are included in the package; ordinary users do not need image tooling to open
-the app. The same `app-icon.icns` is the [desktop app](#download-the-app)'s icon; neither is signed.
+the app. The same `app-icon.icns` is the [desktop app](#download-the-app)'s icon. The source-checkout launcher is not
+signed; the released macOS app is signed and notarized.
 
 ## Privacy
 
@@ -339,9 +345,10 @@ Gmail re-reads only what changed. Delete it to clear it. There is no telemetry o
 sending persist locally, including attachment bytes, without additional application-level encryption. OS swap, browser extensions
 and screenshots are part of the local machine's privacy boundary.
 
-The workbench data directory stores registry connection settings (including IMAP usernames), hashed mailbox
-identities, account-scoped hashed message IDs, manual categories, sender rules (a keyed hash of each address, never the address), legacy completion flags and revisions, which categories are bundled, pane widths, the list cache, and for learning (`learning.sqlite`, `personal.json`) each model decision's scores and yes/no facts plus the personal head learned from your categories (numbers only, derived from your mail: keep them private). Explicitly saved drafts contain recipients, body and attachment content in the private local draft store; operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
-and the private launch URL are private files; IMAP passwords use the OS vault. Logs exclude mail content.
+The workbench data directory (`data_dir/workbench/`) stores, in `accounts.json`, registry connection settings
+(including IMAP usernames) and hashed mailbox identities; in `workflow.sqlite`, account-scoped hashed message IDs, manual categories, sender rules (a keyed hash of each address, never the address), legacy completion flags and revisions, which categories are bundled and pane widths; in `cache.sqlite`, the list cache; and for learning (`learning.sqlite`, `personal.json`), each model decision's scores and yes/no facts plus the personal head learned from your categories (numbers only, derived from your mail: keep them private). Explicitly saved drafts contain recipients, body and attachment content in the private local draft store
+(`mail/mail.sqlite`); operation receipts may include rejected SMTP recipient addresses for recovery. OAuth credentials
+(`accounts/`) and the private launch URL (`launch.json`) are private files; IMAP passwords use the OS vault. Logs exclude mail content.
 Read the full [privacy model](privacy.md).
 
 Provider network access is still needed to fetch mail. On-device means local classification/organization,
@@ -373,6 +380,8 @@ EMAIL_TOWN_UI_ENGINE=webkit uv run --extra dev --with playwright python scripts/
 ```
 
 Browser tests use clearly labeled synthetic mail from two accounts and exercise actual loopback HTTP actions,
-filters, plaintext preview, category undo and persistence, keyboard use, and four viewport widths in
-light/dark themes. They do not establish live OAuth/provider behavior for unauthorized accounts. Real cross-provider
+filters, plaintext preview, category undo and persistence, keyboard use, and four viewport widths (390, 768,
+1280 and 1440 px) in light/dark themes. They do not establish live OAuth/provider behavior for unauthorized accounts. Real cross-provider
 acceptance still needs separately authorized accounts, new-mail/expiry/reconnection checks and client feedback tests.
+Mail-action tests use mock providers (compose, attachments, drafts, reply, bulk Trash and Restore, uncertain
+sends); they do not prove a real provider round trip, which needs an authorized test mailbox.

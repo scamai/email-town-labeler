@@ -7,7 +7,7 @@ A short tour for contributors. The contracts between modules are specified in
 
 ```mermaid
 flowchart TB
-  cli["cli.py<br/>setup, login, run, once, backfill, status,<br/>undo, model, personalize, service, doctor"]
+  cli["cli.py<br/>setup, login, run, once, backfill, status, undo,<br/>labels, triage, model, learn, personalize,<br/>contacts, service, doctor, gcp-setup, desktop"]
   cli --> eng["engine.py<br/>Engine"]
   eng --> gc["gmail/client.py<br/>GmailClient (retries, batching)"]
   eng --> lm["gmail/labels.py<br/>LabelMap (class <-> label id)"]
@@ -22,11 +22,19 @@ flowchart TB
   be --> feat["features.py<br/>email_text(record)"]
   eng --> lrn["learn.py<br/>personal head on stored scores,<br/>re-tuned thresholds"]
   lrn --> st
+  cli --> lrn
   cli --> pers["personalize.py<br/>refit head from corrections"]
   cli --> svc["service.py<br/>launchd / systemd --user / Task Scheduler"]
   cli --> cfg["config.py<br/>TOML + paths"]
   cli --> upd["update_check.py<br/>newer release? (interactive only, daily)"]
+  cli --> wf["workflow.py<br/>triage searches, label visibility"]
+  wf --> gc
+  cli --> desk["desktop/<br/>server.py (loopback HTTP), manager.py (Workbench),<br/>providers.py (Gmail, Graph, IMAP/SMTP), cache.py,<br/>learning.py, state.py, mail.py, web/ (UI)"]
+  desk --> mdl
+  desk --> pol
+  desk --> lrn
   gc <--> G[("Gmail API")]
+  desk <--> P[("Gmail API, Microsoft Graph,<br/>IMAP/SMTP")]
   upd -.-> R[("GitHub Releases<br/>latest.json")]
 ```
 

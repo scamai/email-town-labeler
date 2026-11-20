@@ -53,8 +53,10 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 - `new sender` on someone you know: they are not in your contacts yet (only addresses you have
   *sent* mail to count). It goes away once you reply; `email-town-labeler contacts rebuild` rescans
   older sent mail with the current `contacts_scan_days`.
-- Correct labels in Gmail as you go; then run `email-town-labeler personalize` (embedding/ONNX models
-  only). See [models.md](models.md#learning-from-your-corrections-personalize).
+- Correct labels in Gmail as you go; the service learns from them on its own (every `[learn] interval_hours`,
+  24 by default), or run `email-town-labeler learn` to do it now. It works with every model; `personalize`
+  refits an embedding/ONNX model's own head and runs `learn` for the others. See
+  [models.md](models.md#improving-from-use-learn).
 - Mail you never want touched: put a label on it with a Gmail filter and list that label in
   `[gmail] skip_label_names`.
 - Start over: `email-town-labeler undo` removes every `e/...` label, and only those.
@@ -86,7 +88,7 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 | Symptom | Fix |
 |---|---|
 | `Permission denied` on `/data` | Use the named volume from `compose.yaml`. For a bind mount, make the host directory owned by uid 10001 (`sudo chown -R 10001:10001 ./data`), or build with `--build-arg UID=$(id -u) --build-arg GID=$(id -g)`. |
-| Container `unhealthy` right after start | Not logged in yet. Copy the client secret and run `docker compose run --rm email-town-labeler login --headless` (see the [README](../README.md#docker)). |
+| Container `unhealthy` right after start | Not logged in yet. Copy the client secret and run `docker compose run --rm email-town-labeler login --headless` (see Docker in the [README](../README.md#get-started-in-5-minutes)). |
 | Container `unhealthy` later | `email-town-labeler status` says why: not logged in; no successful poll yet 15 minutes after setup; or the last successful poll is older than `max(10 x poll_seconds, 15 min)`. Check `docker compose logs`. |
 | Login prompt does not accept input | Use `docker compose run` (interactive, TTY), not `docker compose up`. |
 
