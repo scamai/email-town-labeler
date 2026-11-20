@@ -35,7 +35,7 @@ v0.1.2 没有 Windows 文件（它的 Windows 构建未通过发布检查）；v
 如果 `email-town-labeler desktop` 已经在同一个数据目录运行，应用会在它上面打开窗口，关闭窗口后它继续运行。
 
 应用与 CLI 使用相同的配置和数据目录（`EMAIL_TOWN_LABELER_HOME` 同样可以改变位置）。模型不在应用里：
-没有 `config.toml` 时，工作台使用已发布的本机模型 `town-modernbert-int8`，在第一次分类邮件时下载一次并校验
+没有 `config.toml` 或其中没有 `[model] ref` 时，工作台使用已发布的本机模型 `town-modernbert-int8`，在第一次分类邮件时下载一次并校验
 sha256（下载 263 MB，解压后 382 MB）；下载期间列表上方会提示，邮件照常可读。`config.toml` 中指定的模型（包括纯关键词的 `rules`）始终优先。日志是数据目录中的 `workbench/desktop.log`
 （macOS `~/Library/Application Support/email-town-labeler/`，Windows `%LOCALAPPDATA%\email-town-labeler\`，
 Linux `~/.local/share/email-town-labeler/`），不包含邮件内容。要检查下载的应用，用 `--self-check` 运行它；
@@ -70,7 +70,7 @@ email-town-labeler desktop --background
 
 首次安装可使用 `uv tool install 'email-town-labeler[onnx,desktop]'`；使用本分支源码时运行
 `uv tool install --editable '.[onnx,desktop]'`。`desktop` extra 为 IMAP 提供系统钥匙串支持。
-分类使用 `config.toml` 中的模型；没有配置时使用 `town-modernbert-int8`（首次下载 263 MB）。分类内容不上传。桌面工作台的收发功能
+分类使用 `config.toml` 中的模型；没有配置模型时使用 `town-modernbert-int8`（首次下载 263 MB）。分类内容不上传。桌面工作台的收发功能
 与只负责标签的 CLI 服务分开。
 
 命令会打开浏览器里的本机界面。重复执行会打开同一个运行实例；关闭浏览器不会停止后台进程。
@@ -150,7 +150,8 @@ Exchange 本地部署不等于 Microsoft Graph 邮箱；需管理员允许的 IM
 - 加载失败、暂停账户和真正的空文件夹有不同提示；一个账户出错不会清掉其他账户的已载入邮件。
 - Gmail 已有项目分类标签会直接显示；没有这类标签的邮件、Microsoft 和 IMAP 邮件使用共享的本机模型；自己的已发送邮件不分类。
 - **People** 是模型判断“不属于任何类别”的邮件：由人写给你的邮件（同事回复、转发的往来），不是服务自动发的，所以不需要分类。还在等模型分类的邮件也暂时列在这里，分类的提示里会单独算作“等待分类”。
-- 本机手动分类优先于自动分类。它目前不写回服务端，也不加入旧 CLI 的学习反馈。
+- 本机手动分类优先于自动分类，不写回服务端。
+- **模型会从你选的分类里学习**：每次模型分类都把模型对七个类别的分数和八个是/否特征（邮件列表头、Gmail 标签页、日历邀请）存进 `learning.sqlite`，以邮件的不透明 ID 为键，只有数字，没有邮件内容。你在一封邮件上设的分类就是对那次判断的纠正（**Undo** 会撤回）；模型给的分类 7 天没被改动，算一次弱确认。发件人规则不计入，免得一条规则把同一个发件人变成几十个样本。攒够 30 次纠正后，工作台最多每天一次用和 [`learn`](models.md#improving-from-use-learn) 相同的代码在模型之上拟合一个小的个人分类头，只有它在留出的邮件上比原模型更好才启用；同时重新调整 Action needed 和推广的阈值。列表里模型给的分类会立即用存好的分数重新判断（不再跑模型），新邮件到达时也用这个分类头。在 `config.toml` 里设 `[learn] auto = false` 可关闭；删除工作台目录里的 `personal.json` 即回到原始模型。
 - **按发件人决定一次**：更改分类的对话框里有 **Always use this category for mail from …**。勾上后，这个发件人已载入的其他邮件和以后发来的邮件都用这个分类，优先于服务商标签和模型（单封邮件上手动设的分类仍以那封为准）。比如一份订阅被分进了待处理，勾一次，它和以后每一期都会进订阅的合并行。提示条里的 **Undo** 会撤掉这条规则；再打开对话框时勾选框是勾上的，取消勾选即删除规则。规则只作用于收到的邮件，只保存在本机。
 - 有 HTML 版本的邮件按发件人的排版显示（和 Gmail 一样）：版式、颜色、按钮和内嵌图片。HTML 先按白名单清理（去掉脚本、表单、框架、SVG 和事件属性；链接只保留 http、https、mailto），再放进一个不能运行代码、不能提交表单、除图片外不能联网的隔离框里；链接在系统浏览器打开。点 **Plain text** 切到该邮件的纯文本版本，图片显示在正文下方。CID 内嵌的 PNG、JPEG、GIF、WebP、AVIF、BMP 自动从邮箱加载（每张最多 8 MiB，纯文本预览合计最多 32 MiB）。HTTPS 外链图片默认不加载，点击 **Show images**（排版视图）或 **Load external images**（纯文本）后仅对这封邮件启用；它可能让发件人知道你打开了邮件。不支持的来源、SVG 或过大的内嵌图片可通过原邮件或下载附件查看。Gmail/Outlook 支持跳回原邮件页面；也可直接在工作台回复、转发、添加及下载附件。
 
@@ -241,6 +242,7 @@ python3 scripts/install_macos_workbench.py
 
 - `accounts.json`：账户名称、服务商、连接设置和邮箱身份哈希；IMAP 用户名属于个人数据。
 - `workflow.sqlite`：账户隔离的消息哈希、手动分类、旧版完成标记、操作版本，发件人规则（只存地址的带密钥哈希，不存地址本身），以及哪些分类合并显示和栏宽；没有邮件内容。
+- `learning.sqlite`：每次模型分类的消息哈希、模型分数、八个是/否特征和最终分类，只有数字，没有邮件内容；`personal.json`：从你的修改学到的个人分类头和阈值。两者都来自你的邮件，请勿外传。
 - `cache.sqlite`：邮件列表缓存（主题、发件人、日期、已读/星标、分类及其模型和规则版本、ID 及 Gmail 同步位置），不含正文、摘要或附件；仅当前用户可读写，未额外加密。
 - `mail/mail.sqlite`：草稿正文、附件和操作回执，仅当前用户可访问，未额外加密；部分 SMTP 发送回执可能保留收件人地址。
 - `accounts/`：OAuth 令牌，文件权限为仅当前用户读写；IMAP 密码存于系统凭据服务。

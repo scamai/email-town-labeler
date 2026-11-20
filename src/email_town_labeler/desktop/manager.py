@@ -24,6 +24,7 @@ from .accounts import Accounts, display_name, imap_settings, password_store
 from .cache import ListCache
 from .htmlview import MAX_HTML, remote_count, sanitize
 from .images import body_images, valid_image_bytes
+from .learning import Learner
 from .mail import FOLDERS, MAIL_ACTIONS, MailStore, compose_data, recipient_headers
 from .providers import (
     MICROSOFT_TOKEN,
@@ -51,8 +52,9 @@ def shorts(keys, limit=20) -> str:
     return ",".join(short(k) for k in keys[:limit]) + more
 
 
-# With no config.toml (a fresh desktop app), classify with the published on-device model instead of the
-# CLI's keyword-only `rules` default. It is downloaded once on first use; a config file's model always wins.
+# With no `[model] ref` in config.toml (a fresh desktop app, or a file that only sets e.g. `[learn]`), classify
+# with the published on-device model instead of the CLI's keyword-only `rules` default. It is downloaded once
+# on first use; a model named in config.toml always wins.
 DESKTOP_MODEL = "town-modernbert-int8"
 
 ACCOUNT_DEFAULT_NAMES = {"gmail": "Gmail", "gmail-existing": "Gmail", "microsoft": "Microsoft"}
@@ -123,14 +125,18 @@ class Workbench:
         self.refresh_again = False
         self.reader_factory, self.model = reader_factory, classifier
         self.cfg = load_config(default_paths.config_file)
-        self.model_ref = self.cfg.model_ref if default_paths.config_file.is_file() else DESKTOP_MODEL
+        self.model_ref = self.cfg.model_ref if self.cfg.is_explicit("model_ref") else DESKTOP_MODEL
         # What made a "model" category. Cached categories made by anything else (another model, an older
         # policy, other thresholds) are classified again instead of being carried forward forever.
         c = self.cfg
-        self.classifier_stamp = (
+        self.base_stamp = (
             f"{self.model_ref}|policy {POLICY_VERSION}|{c.min_confidence}|{c.action_threshold}"
             f"|{c.promotional_threshold}|{c.bulk_promotional_threshold}"
         )
+        # The categories you choose teach a personal head and thresholds (desktop/learning.py); a new one
+        # changes the stamp too.
+        self.learner = Learner(root, self.model_ref, self.cfg, self.state)
+        self.classifier_stamp = self.learner.stamp(self.base_stamp)
         self.model_status = None  # {"state": "downloading", "size": ...} while the model is fetched
         self.lock, self.model_lock = threading.RLock(), threading.RLock()
         # Woken on every visible change so a waiting /api/state answers at once.
@@ -215,6 +221,41 @@ class Workbench:
                         self.model.release_if_idle()
                 finally:
                     self.model_lock.release()
+            self._learn()
+
+    def _learn(self):
+        """A scheduled learning run; a new head or thresholds re-decide the listed model categories at once."""
+        model = self.model
+        if model is None:  # nothing classified yet in this process: nothing new to learn from
+            return
+        try:
+            if not self.learner.maybe_learn(getattr(model, "manifest", None)):
+                return
+            cfg = self.cfg.for_model(getattr(model, "manifest", None), self.learner.policy)
+            with self.lock:
+                tables = [self.messages, *self.folder_rows.values()]
+                keys = list({k for t in tables for k, m in t.items() if m.get("source") == "model"})
+            rescored = self.learner.rescore(keys)  # from the stored scores: the model does not run again
+        except Exception as e:  # noqa: BLE001 - learning is an improvement; mail stays usable without it
+            log.warning("learning run failed (%s)", type(e).__name__)
+            return
+        with self.lock:  # the tables again: a folder switch may have swapped them meanwhile
+            tables = [self.messages, *self.folder_rows.values()]
+            self.classifier_stamp = self.learner.stamp(self.base_stamp)
+            for key, (pred, bulk) in rescored.items():
+                result = decide(
+                    pred, known_contact=False, new_address=False, primary=False, cfg=cfg, bulk=bulk
+                )
+                self.predictions[key] = (result.cls, result.pred.prob)
+                for table in tables:
+                    if table.get(key, {}).get("source") == "model":
+                        table[key].update(
+                            category=result.cls,
+                            confidence=result.pred.prob,
+                            classified_by=self.classifier_stamp,
+                        )
+            self._touch()
+        log.info("learned settings applied to %d listed message(s)", len(rescored))
 
     def close(self):
         # Archive/Trash and sends still inside their undo window go to the mailbox now, not never.
@@ -235,6 +276,7 @@ class Workbench:
                     self.model.close()
             finally:
                 self.model_lock.release()
+        self.learner.close()
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -597,9 +639,10 @@ class Workbench:
                     with self.lock:
                         self.model_status = None
                         self._touch()
-            predictions = self.model.predict([full for _key, full in items])
+            fulls = [full for _key, full in items]
+            predictions, scores, feats = self.learner.predict(self.model.predict(fulls), fulls)
             # Never infer new-sender/contact knowledge across unrelated accounts.
-            cfg = self.cfg.for_model(self.model.manifest)
+            cfg = self.cfg.for_model(self.model.manifest, self.learner.policy)
             results = [
                 decide(
                     prediction,
@@ -611,6 +654,13 @@ class Workbench:
                 )
                 for (_key, full), prediction in zip(items, predictions, strict=True)
             ]
+        try:  # numbers only (scores and yes/no facts), for learning from the categories you choose
+            for (key, full), pred, result, z, f in zip(
+                items, predictions, results, scores, feats, strict=True
+            ):
+                self.learner.record(key, result.cls, pred, z, f, full.get("internal_date"))
+        except Exception as e:  # noqa: BLE001 - never lose a classification over its learning record
+            log.warning("learning record not saved (%s)", type(e).__name__)
         with self.lock:
             for (key, _full), result in zip(items, results, strict=True):
                 self.predictions[key] = (result.cls, result.pred.prob)
