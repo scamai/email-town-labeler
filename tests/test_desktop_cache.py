@@ -195,3 +195,30 @@ def test_cached_categories_without_a_learning_record_are_classified_once_more(tm
     (root / "learning.sqlite").unlink()
     assert _restart(root, paths).calls == 1
     assert _restart(root, paths).calls == 0  # recorded now: the cached category stands again
+
+
+def test_a_category_being_redone_stays_on_screen_until_the_model_answers(tmp_path):
+    # After a policy change the list must not turn into People (and lose its bundles) while the model works.
+    paths, root, aid = _first_run(tmp_path)
+    paths.config_file.write_text('[model]\nref = "rules"\n[policy]\nbulk_promotional_threshold = 0.4\n')
+    release, asked = threading.Event(), threading.Event()
+
+    class HeldModel(CountingModel):
+        def predict(self, records):
+            asked.set()
+            release.wait(10)
+            return super().predict(records)
+
+    reader = BatchReader([_record("labelled"), _record("guessed", category=None)])
+    wb = Workbench(root, paths, reader_factory=lambda a: reader, classifier=HeldModel())
+    wb._restore_cache()  # what start() shows first: the cached list, its categories from the old policy
+    worker = threading.Thread(target=wb._refresh)
+    worker.start()
+    assert asked.wait(10)  # the list is in and the model is working on the stale category
+    rows = {r["id"]: r for r in wb.snapshot()["messages"]}
+    guessed = rows[message_key(aid, "guessed")]
+    assert (guessed["category"], guessed["source"]) == ("orders", "model")
+    release.set()
+    worker.join(10)
+    assert wb.snapshot()["messages"] and wb.model.calls == 1  # and it was still classified again
+    wb.close()

@@ -36,7 +36,7 @@ from .providers import (
     save_microsoft_token,
 )
 from .setup import MICROSOFT_CLIENT_ID, google_client_config
-from .state import BUNDLEABLE, LocalState, message_key
+from .state import BUNDLEABLE, RULE_CATEGORIES, LocalState, message_key
 
 log = logging.getLogger("email_town_labeler.desktop")
 
@@ -525,22 +525,28 @@ class Workbench:
 
     def _rows(self, aid, records, folder) -> dict:
         incoming = {}
+        with self.lock:
+            listed = dict(self.messages if folder == self.folder else self.folder_rows.get(folder, {}))
         for rec in records:
             key = message_key(aid, rec["provider_id"])
             category = rec.get("category")
             prediction = self.predictions.get(key)
+            old = listed.get(key)
+            # A category from an older model or policy stays on screen until the model has classified the
+            # message again (it is not in `predictions`, so _read_ahead still does), not "pending" meanwhile.
+            stale = not category and not prediction and old is not None and old.get("source") == "model"
             unread = "UNREAD" in rec.get("label_ids", [])
             source = (
                 "mailbox"
                 if category
                 else "model"
-                if prediction
+                if prediction or stale
                 else "none"
                 if folder not in CLASSIFIED_FOLDERS
                 else "pending"
             )
             if not category:
-                category = prediction[0] if prediction else "unknown"
+                category = prediction[0] if prediction else old["category"] if stale else "unknown"
             incoming[key] = {
                 "id": key,
                 "account_id": aid,
@@ -553,8 +559,12 @@ class Workbench:
                 "unread": unread,
                 "starred": "STARRED" in rec.get("label_ids", []),
                 "source": source,
-                "confidence": prediction[1] if prediction else None,
-                "classified_by": self.classifier_stamp if source == "model" else None,
+                "confidence": prediction[1] if prediction else old.get("confidence") if stale else None,
+                "classified_by": old.get("classified_by")
+                if stale
+                else self.classifier_stamp
+                if source == "model"
+                else None,
             }
         return incoming
 
@@ -1270,6 +1280,9 @@ class Workbench:
             ]
             if rule and not senders:
                 raise ValueError("These messages have no sender address to remember")
+            if rule == "set" and data.get("category") not in RULE_CATEGORIES:
+                # Checked before anything is saved: a refused rule must not leave the category half-changed.
+                raise ValueError("Choose a category for this sender")
             before = self.state.edit(ids, data.get("action"), data.get("category"))
             # Local only: Done / Reopen / category never touch the mailbox, so this line is their whole record.
             log.info(

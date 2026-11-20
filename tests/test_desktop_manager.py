@@ -569,3 +569,20 @@ def test_the_none_of_these_class_is_shown_as_people(tmp_path):
     names = {c["id"]: c["name"] for c in workbench.snapshot()["categories"]}
     assert names["unknown"] == "People" and "Unclassified" not in names.values()
     workbench.close()
+
+
+def test_a_refused_sender_rule_changes_nothing(tmp_path):
+    # People and New sender are not decisions a rule can make: refusing the rule must not keep the category.
+    workbench, readers, first, _second = _workbench(tmp_path)
+    readers[first] = FakeReader([_from("n1", "a@example.test")])
+    workbench._refresh()
+    (row,) = workbench.snapshot()["messages"]
+    for category in ("unknown", "new_sender"):
+        with pytest.raises(ValueError, match="Choose a category for this sender"):
+            workbench.action(
+                {"ids": [row["id"]], "action": "category", "category": category, "sender_rule": "set"}
+            )
+        (after,) = workbench.snapshot()["messages"]
+        assert (after["category"], after["source"]) == (row["category"], row["source"])
+    assert workbench.sender_rules == {}
+    workbench.close()

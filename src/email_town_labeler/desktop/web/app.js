@@ -439,6 +439,21 @@
   }
   // What the list shows. `omit` names one filter to ignore, for counts; any omit also keeps bundled
   // mail, since counts are about all of it ("bundle" ignores only the bundling).
+  // What a message's category reads as. Mail still waiting for the model is not People yet, and your own
+  // Sent mail is never classified, so neither borrows People's name.
+  function categoryLabel(message) {
+    if (message.source === "pending") return "Sorting…";
+    if (message.source === "none") return "Not classified";
+    return categoryById(message.category)?.name || message.category || "People";
+  }
+  // Actions apply to the selection: never to mail the view no longer shows (inside a bundle, filtered out).
+  function trimSelection() {
+    if (!state.selected.size) return;
+    const shown = new Set(filteredMessages().map((message) => message.id));
+    state.selected.forEach((id) => {
+      if (!shown.has(id)) state.selected.delete(id);
+    });
+  }
   function filteredMessages(omit = "") {
     const query = state.filters.search.trim().toLowerCase();
     const today = localMidnight();
@@ -463,7 +478,7 @@
       const categoryOk =
         omit === "category" ||
         state.filters.category === "all" ||
-        message.category === state.filters.category;
+        (message.category === state.filters.category && message.source !== "none");
       const queryOk =
         !query ||
         `${message.subject || ""} ${message.sender || ""}`.toLowerCase().includes(query);
@@ -564,6 +579,7 @@
       const button = sidebarEntry(`category-filter${active ? " is-active" : ""}${total ? "" : " is-empty"}`, category.name, unread, summary);
       // Choosing the selected category again shows every category.
       button.dataset.categoryFilter = active ? "all" : category.id;
+      button.dataset.focusKey = `category-${category.id}`; // keeps focus when the filter value flips
       button.dataset.category = category.id;
       button.setAttribute("aria-pressed", String(active));
       els.categoryFilters.append(button);
@@ -588,7 +604,8 @@
     };
     for (const message of filteredMessages("category")) {
       const current = message.category || "unknown";
-      for (const id of [current, "all"]) {
+      // Sent mail counts in the folder's total but under no category: it is never classified.
+      for (const id of message.source === "none" ? ["all"] : [current, "all"]) {
         bump(id, "total");
         if (message.unread) bump(id, "unread");
         if (["model", "mailbox"].includes(message.source)) bump(id, "automatic");
@@ -701,6 +718,7 @@
     }
   });
   function renderScope() {
+    trimSelection();
     renderCounts();
     renderChips();
     renderFilters();
@@ -888,7 +906,10 @@
       ).format(newest),
     );
     const archive = row.querySelector(".bundle-archive");
-    archive.setAttribute("aria-label", `Archive all ${n} in ${name}`);
+    // One action takes at most 500 messages: say so instead of promising all of a larger bundle.
+    const scope = ids.length < n ? `the newest ${ids.length} of ${n}` : `all ${n}`;
+    archive.setAttribute("aria-label", `Archive ${scope} in ${name}`);
+    archive.title = ids.length < n ? `Archives the newest ${ids.length}; run it again for the rest` : "";
     archive.disabled = !(window.EmailTownMailHost?.mailAllowed?.("archive", ids) ?? true);
   }
   function syncRow(row, message) {
@@ -929,7 +950,7 @@
     const category = row.querySelector(".category-badge");
     const categoryId = message.category || "unknown";
     category.dataset.category = categoryId;
-    setText(category, categoryById(message.category)?.name || message.category || "People");
+    setText(category, categoryLabel(message));
     category.title = `Classification: ${sourceName(message.source)}`;
     category.hidden = categoryId === "unknown"; // no category is not worth a chip on every row
     const account = row.querySelector(".row-account");
@@ -1271,11 +1292,7 @@
     );
     els.previewSource.title = `Classification: ${sourceName(message.source)}`;
     els.previewSource.hidden = state.accounts.length < 2;
-    els.previewCategory.textContent = text(
-      categoryById(message.category)?.name ||
-        message.category ||
-        "People",
-    );
+    els.previewCategory.textContent = text(categoryLabel(message));
     els.previewCategory.dataset.category = message.category || "unknown";
     els.previewUnread.hidden = !message.unread;
     els.previewSubject.textContent = text(message.subject || "No subject");
@@ -1419,11 +1436,7 @@
           (message) => message.id === state.activeId,
         );
         if (current) {
-          els.previewCategory.textContent = text(
-            categoryById(current.category)?.name ||
-              current.category ||
-              "People",
-          );
+          els.previewCategory.textContent = text(categoryLabel(current));
           els.previewCategory.dataset.category = current.category || "unknown";
         }
       }
@@ -1464,7 +1477,8 @@
       ...new Set(chosen.map((m) => senderParts(m.sender).address.toLowerCase()).filter((a) => a.includes("@"))),
     ];
     const received = chosen.every((m) => m.source !== "none");
-    $("senderRuleRow").hidden = !addresses.length || !received;
+    $("senderRuleRow").dataset.eligible = String(Boolean(addresses.length) && received);
+    syncSenderRule();
     const ruled = chosen.length > 0 && chosen.every((m) => m.sender_rule);
     $("senderRuleCheck").checked = ruled;
     $("senderRuleCheck").dataset.ruled = String(ruled);
@@ -1474,6 +1488,11 @@
     $("senderRuleText").textContent = `Always use this category for mail from ${who}`;
     $("senderRuleRow").title = addresses.length === 1 ? addresses[0] : "";
     els.categoryDialog.showModal();
+  }
+  // A sender rule chooses a real category; People and New sender are not decisions (state.RULE_CATEGORIES).
+  function syncSenderRule() {
+    const ruleable = !["unknown", "new_sender"].includes(els.categorySelect.value);
+    $("senderRuleRow").hidden = $("senderRuleRow").dataset.eligible !== "true" || !ruleable;
   }
   function renderJobs() {
     els.demoBanner.hidden = !state.demo;
@@ -1690,10 +1709,7 @@
     if (state.activeId) {
       const active = state.messages.find((m) => m.id === state.activeId);
       els.previewUnread.hidden = !active.unread;
-      els.previewCategory.textContent =
-        categoryById(active.category)?.name ||
-        active.category ||
-        "People";
+      els.previewCategory.textContent = text(categoryLabel(active));
       els.previewCategory.dataset.category = active.category || "unknown";
     }
     renderSyncStatus();
@@ -2180,6 +2196,7 @@
   els.previewCategoryButton.addEventListener("click", () => {
     if (state.activeId) showCategoryDialog([state.activeId]);
   });
+  els.categorySelect.addEventListener("change", syncSenderRule);
   els.categoryForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const ids = JSON.parse(els.categoryDialog.dataset.ids || "[]");

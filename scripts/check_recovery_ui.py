@@ -19,6 +19,7 @@ from playwright.sync_api import expect, sync_playwright
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop.manager import Workbench
 from email_town_labeler.desktop.server import LocalServer
+from email_town_labeler.desktop.state import BUNDLEABLE
 
 
 class RecoveryMailbox(FixtureReader):
@@ -64,6 +65,9 @@ def workbench(root: Path):
 
     manager = Workbench(root / "workbench", paths, reader_factory=factory)
     manager.demo = True
+    # These checks count message rows; the fixture's mail is all Updates, which the Inbox would bundle.
+    for category in BUNDLEABLE:
+        manager.set_bundled(category, False)
     for name in ("Alpha fixture", "Beta fixture"):
         manager.accounts.add(name, "gmail", {"config_dir": str(root / name)})
     manager._refresh()
@@ -531,6 +535,7 @@ def check_unauthorized_preview(page, manager, readers):
 def main():
     selected = os.environ.get("EMAIL_TOWN_UI_ENGINE")
     engines = (selected,) if selected else ("chromium", "webkit")
+    failures = []
     with sync_playwright() as playwright:
         for engine in engines:
             root = Path(tempfile.mkdtemp(prefix=f"email-town-recovery-{engine}-"))
@@ -559,14 +564,19 @@ def main():
                     try:
                         check(page, manager, readers)
                         assert not errors, errors
+                        print(f"{engine}: {check.__name__} pass")
+                    except AssertionError as error:  # run the rest too; the exit status still fails
+                        failures.append(f"{engine}: {check.__name__}: {str(error).splitlines()[0]}")
+                        print(f"{engine}: {check.__name__} FAIL")
                     finally:
                         context.close()
-                    print(f"{engine}: {check.__name__} pass")
             finally:
                 browser.close()
                 server.shutdown()
                 server.server_close()
                 manager.close()
+    if failures:
+        raise SystemExit("recovery UI FAILED:\n" + "\n".join(failures))
     print(f"recovery UI passed ({', '.join(engines)})")
 
 
