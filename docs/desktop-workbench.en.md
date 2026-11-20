@@ -207,7 +207,8 @@ Sender rules are not used, so one rule does not turn a single sender into dozens
 code as [`learn`](models.md#improving-from-use-learn) and keeps it only if it beats the unchanged model on
 held-out messages; it also re-tunes the action and promotional thresholds. The listed model categories are
 re-decided from the stored scores at once (the model does not run again), and new mail uses the head as it
-arrives. `[learn] auto = false` in `config.toml` turns it off; deleting `personal.json` in the workbench folder
+arrives. Mail listed before learning existed is classified once more so it can be learned from too.
+`[learn] auto = false` in `config.toml` turns it off; deleting `personal.json` in the workbench folder
 goes back to the model as shipped.
 
 **Decide once per sender.** The category dialog offers **Always use this category for mail from …**. With it,
