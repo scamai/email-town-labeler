@@ -36,7 +36,7 @@ messages below and one above the opened message, so nearby messages can open wit
 Inline previews are limited to 8 MiB per image and 32 MiB of Blob data per open message; switching messages
 or losing authentication cancels pending loads and revokes those URLs. Bodies are never written to disk.
 The list itself is cached on disk so a restart shows mail at once: `workbench/cache.sqlite` (mode 0600) holds the
-subject, sender, date, read/star state, category and IDs of the loaded window of each folder (at most 1,000 rows
+subject, sender, date, read/star state, category (and which model and policy version chose it) and IDs of the loaded window of each folder (at most 1,000 rows
 per account and folder), plus each Gmail account's header metadata (Subject/From/Date, labels) and history cursor.
 It holds no bodies, snippets or attachments, has no application-level encryption (rely on full-disk encryption),
 and is rewritten after every sync; rows of an account that is no longer connected are deleted on the next start.

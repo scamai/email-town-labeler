@@ -145,3 +145,45 @@ def test_gmail_resumes_from_saved_metadata_and_history_cursor():
     other.identity = "another-mailbox"
     other.restore_state(state)
     assert other.history_id is None and other.cache == {}  # never resume another mailbox's state
+
+
+def _wait_ready(wb):
+    for _ in range(300):
+        if wb.snapshot()["accounts"][0]["status"] == "ready":
+            return
+        threading.Event().wait(0.01)
+
+
+def _restart(root, paths):
+    model = CountingModel()
+    reader = BatchReader([_record("labelled"), _record("guessed", category=None)])
+    wb = Workbench(root, paths, reader_factory=lambda a: reader, classifier=model)
+    wb.start()
+    _wait_ready(wb)
+    wb.close()
+    return model
+
+
+def test_a_new_policy_or_threshold_classifies_cached_model_categories_again(tmp_path):
+    paths, root = _root(tmp_path)
+    paths.config_file.write_text('[model]\nref = "rules"\n')
+    readers = {}
+    wb = Workbench(root, paths, reader_factory=lambda a: readers[a["id"]], classifier=CountingModel())
+    aid = wb.accounts.add("One", "imap", {"host": "one.example", "username": "u", "port": 993})["id"]
+    readers[aid] = BatchReader([_record("labelled"), _record("guessed", category=None)])
+    wb._refresh()
+    wb.close()
+    assert _restart(root, paths).calls == 0  # same model and policy: the cached category stands
+    # A changed threshold changes what the policy returns: the cached decision is redone, once.
+    paths.config_file.write_text('[model]\nref = "rules"\n[policy]\nbulk_promotional_threshold = 0.4\n')
+    assert _restart(root, paths).calls == 1
+    assert _restart(root, paths).calls == 0
+
+
+def test_categories_cached_before_classifier_stamps_are_classified_again(tmp_path):
+    paths, root, aid = _first_run(tmp_path)
+    cache = ListCache(root / "cache.sqlite")
+    (_saved, rows) = cache.load_rows({aid})[(aid, "inbox")]
+    assert any(r.get("classified_by") for r in rows)
+    cache.save_rows(aid, "inbox", [{k: v for k, v in r.items() if k != "classified_by"} for r in rows])
+    assert _restart(root, paths).calls == 1  # a decision from an earlier version is not carried forward

@@ -29,6 +29,7 @@ ROW_FIELDS = (
     "starred",
     "source",
     "confidence",
+    "classified_by",  # which model and policy made a "model" category (manager.classifier_stamp)
 )
 
 
