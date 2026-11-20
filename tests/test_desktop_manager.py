@@ -514,3 +514,50 @@ def test_clearing_a_sender_rule_and_rules_survive_a_restart(tmp_path):
             {"ids": ids[:1], "action": "category", "category": "travel", "sender_rule": "always"}
         )
     workbench.close()
+
+
+class SplitModel:
+    """Unsure marketing: promotional 0.55 or a newsletters/promotional split, never above 0.55."""
+
+    manifest = ModelManifest("fixture", "1", "rules")
+
+    def predict(self, records):
+        out = []
+        for record in records:
+            if record.get("split"):
+                probs = {"newsletters": 0.40, "promotional": 0.35, "unknown": 0.25}
+            else:
+                probs = {"promotional": 0.55, "newsletters": 0.15, "unknown": 0.30}
+            best = max(probs, key=probs.get)
+            out.append(Prediction(best, probs[best], probs))
+        return out
+
+
+def test_desktop_classifies_bulk_mail_by_its_own_headers(tmp_path):
+    workbench, readers, first, _ = _workbench(tmp_path)
+    workbench.model = SplitModel()
+    bulk = {"list-unsubscribe": "<mailto:u@x.test>"}
+
+    class HeaderReader(FakeReader):
+        def detail(self, provider_id):
+            self.detail_calls += 1
+            return {
+                "body_text": "body",
+                "headers": bulk if provider_id.startswith("list") else {},
+                "label_ids": ["CATEGORY_PROMOTIONS"] if provider_id == "tab" else [],
+                "split": provider_id.endswith("split"),
+            }
+
+    ids = ["list", "list-split", "tab", "direct", "direct-split"]
+    readers[first] = HeaderReader([_record(i, category=None) for i in ids])
+    workbench._refresh()
+    rows = {row["id"]: row["category"] for row in workbench.snapshot()["messages"]}
+    shown = {i: rows[message_key(first, i)] for i in ids}
+    assert shown == {
+        "list": "promotional",  # 0.55 clears the 0.5 bulk bar (promotional_threshold is 0.6)
+        "list-split": "newsletters",  # 0.40 + 0.35 of bulk classes clears min_confidence
+        "tab": "promotional",  # Gmail's Promotions tab counts as bulk
+        "direct": "unknown",
+        "direct-split": "unknown",
+    }
+    workbench.close()

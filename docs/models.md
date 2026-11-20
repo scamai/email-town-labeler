@@ -120,9 +120,10 @@ Every model predicts a probability for each of seven classes (from
 
 Models predict these seven classes and nothing else. The engine then applies the labeling
 policy (`[policy]`): `action_needed` once its probability reaches `action_threshold`, otherwise
-the top class, with `promotional` held to `promotional_threshold` and never used for a known
-contact. If the chosen class's probability is below `model.min_confidence` (default 0.55;
-`action_needed` uses `action_threshold` instead), the message is treated as `unknown`; an
+the top class, with `promotional` held to `promotional_threshold` (bulk mail: the lower of that and
+`bulk_promotional_threshold`) and never used for a known contact. If the chosen class's probability
+is below `model.min_confidence` (default 0.55; `action_needed` uses `action_threshold` instead; on
+bulk mail the bulk classes may pool their probability), the message is treated as `unknown`; an
 `unknown` Primary-tab message from someone you have never written to becomes `new_sender`
 (label `e/new sender`), a rule after the model, not a model class. Finally
 `model.unknown_action` decides whether `unknown` gets a label (`"label"`) or is only recorded

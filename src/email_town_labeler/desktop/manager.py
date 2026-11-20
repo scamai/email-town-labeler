@@ -14,6 +14,7 @@ from email.utils import parseaddr
 from pathlib import Path
 
 from ..config import Paths, load_config
+from ..features import bulk_mail
 from ..gmail.auth import save_credentials
 from ..models import catalog
 from ..models.worker import load_service_model
@@ -582,15 +583,17 @@ class Workbench:
                         self._touch()
             predictions = self.model.predict([full for _key, full in items])
             # Never infer new-sender/contact knowledge across unrelated accounts.
+            cfg = self.cfg.for_model(self.model.manifest)
             results = [
                 decide(
                     prediction,
                     known_contact=False,
                     new_address=False,
                     primary=False,
-                    cfg=self.cfg.for_model(self.model.manifest),
+                    cfg=cfg,
+                    bulk=bulk_mail(full),
                 )
-                for prediction in predictions
+                for (_key, full), prediction in zip(items, predictions, strict=True)
             ]
         with self.lock:
             for (key, _full), result in zip(items, results, strict=True):

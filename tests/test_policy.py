@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from email_town_labeler.config import Config
+from email_town_labeler.config import Config, ConfigError
 from email_town_labeler.policy import apply_policy, confident_class, decide, new_sender_class
 from email_town_labeler.taxonomy import CLASSES
 from email_town_labeler.types import Prediction
@@ -147,3 +147,50 @@ def test_decide_end_to_end():
         P(promotional=0.5, updates=0.5), known_contact=False, new_address=False, primary=True, cfg=CFG
     )
     assert out.pred.cls == "updates" and out.pred.prob == 0.5 and out.cls == "unknown"
+
+
+# -- bulk mail: its own promotional bar, and bulk classes may pool their probability -----------------
+def test_bulk_mail_uses_the_lower_promotional_bar():
+    strict = Config(promotional_threshold=0.8)  # town-modernbert's recommendation
+    pred = P(promotional=0.62, updates=0.2, unknown=0.18)
+    assert apply_policy(pred, known_contact=False, cfg=strict).cls == "updates"
+    assert apply_policy(pred, known_contact=False, cfg=strict, bulk=True).cls == "promotional"
+    # the lower of the two bars: a promotional_threshold below the bulk bar still applies to bulk mail
+    loose = Config(promotional_threshold=0.3, bulk_promotional_threshold=0.5)
+    assert apply_policy(P(promotional=0.4, updates=0.35), known_contact=False, cfg=loose, bulk=True).cls == (
+        "promotional"
+    )
+    # a known contact is never promotional, bulk or not
+    assert apply_policy(pred, known_contact=True, cfg=strict, bulk=True).cls == "updates"
+
+
+def test_bulk_classes_pool_their_probability_for_the_confidence_bar():
+    split = P(newsletters=0.46, promotional=0.45, unknown=0.09)
+    assert confident_class(apply_policy(split, known_contact=False, cfg=CFG), CFG) == "unknown"
+    p = apply_policy(split, known_contact=False, cfg=CFG, bulk=True)
+    assert confident_class(p, CFG, bulk=True) == "newsletters"  # 0.46 + 0.45 >= 0.55
+    # only bulk classes pool, and only on bulk mail
+    assert (
+        confident_class(Prediction("orders", 0.4, {"orders": 0.4, "updates": 0.4}), CFG, bulk=True)
+        == "unknown"
+    )
+    weak = Prediction("updates", 0.3, {"updates": 0.3, "promotional": 0.1, "unknown": 0.6})
+    assert confident_class(weak, CFG, bulk=True) == "unknown"  # 0.4 in all is still below the bar
+
+
+def test_decide_bulk_end_to_end():
+    strict = Config(promotional_threshold=0.8)  # town-modernbert's recommendation
+
+    def d(pred, bulk):
+        return decide(pred, known_contact=False, new_address=False, primary=False, cfg=strict, bulk=bulk).cls
+
+    marketing = P(promotional=0.73, newsletters=0.11, travel=0.07, unknown=0.09)  # a loyalty mailing
+    assert d(marketing, bulk=False) == "unknown"  # was the outcome for all bulk mail before
+    assert d(marketing, bulk=True) == "promotional"
+    person = P(unknown=0.98, action_needed=0.01, updates=0.01)  # a colleague's reply: never bulk-pooled
+    assert d(person, bulk=True) == "unknown"
+
+
+def test_config_rejects_a_bulk_bar_outside_0_1():
+    with pytest.raises(ConfigError, match="bulk_promotional_threshold"):
+        Config(bulk_promotional_threshold=1.5).validate()

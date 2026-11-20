@@ -566,3 +566,20 @@ def test_run_forever_unloads_an_idle_model_after_each_poll(env, caplog):
         eng.run_forever(stop)
     assert calls == ["idle?", "idle?", "idle?", "release"]
     assert "could not unload the model" in caplog.text
+
+
+def test_bulk_marketing_gets_promotional_where_one_to_one_mail_does_not(env):
+    # town-modernbert's 0.8 promotional bar left consumer marketing (p 0.5-0.8) unlabeled; bulk mail
+    # (List-Unsubscribe, or Gmail's Promotions tab) now uses the 0.5 bulk bar.
+    eng, client, store = env(promotional_threshold=0.8)
+    eng.sync_once()
+    listed = client.add_message(cls="promotional", prob=0.62, **{"list-unsubscribe": "<mailto:u@x.test>"})
+    tabbed = client.add_message(
+        cls="promotional", prob=0.62, labels=("INBOX", "UNREAD", "CATEGORY_PROMOTIONS")
+    )
+    direct = client.add_message(cls="promotional", prob=0.62)
+    eng.sync_once()
+    assert lid(client, "promotional") in client.messages[listed]["label_ids"]
+    assert lid(client, "promotional") in client.messages[tabbed]["label_ids"]
+    assert store.decision(direct)["cls"] == "unknown"
+    assert lid(client, "promotional") not in client.messages[direct]["label_ids"]

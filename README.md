@@ -315,6 +315,7 @@ dry_run = false              # true: classify and record, never change Gmail
 # action_threshold = 0.2     # lower: more "action needed" (fewer missed, more false alarms)
 # promotional_threshold = 0.6  # higher: less uncertain mail filed under "promotional"
 #   left unset, these two come from the model (town-modernbert: 0.07 and 0.8)
+bulk_promotional_threshold = 0.5  # the "promotional" bar for list mail and Gmail's Promotions tab
 protect_known_contacts = true
 new_sender = true
 
