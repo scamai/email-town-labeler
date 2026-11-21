@@ -146,6 +146,7 @@ def launchd_plist(t: Target) -> str:
         "KeepAlive": {"SuccessfulExit": False},  # restart on crash, not after a clean stop
         "ThrottleInterval": 30,
         "ProcessType": "Background",
+        "Umask": 0o077,  # logs and anything else the job writes are owner-only
         "StandardOutPath": str(t.logs_dir / "service.out.log"),
         "StandardErrorPath": str(t.logs_dir / "service.err.log"),
         "EnvironmentVariables": {"PYTHONUNBUFFERED": "1"},
@@ -173,6 +174,7 @@ def systemd_unit(t: Target) -> str:
             f"ExecStart={' '.join(_systemd_quote(a) for a in t.argv)}",
             "Restart=on-failure",
             "RestartSec=30",
+            "UMask=0077",
             "Environment=PYTHONUNBUFFERED=1",
             "",
             "[Install]",

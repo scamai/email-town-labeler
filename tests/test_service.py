@@ -76,6 +76,7 @@ def test_macos_plan(tmp_path):
     assert d["ProgramArguments"] == [t.program[0], "--home", "/srv/jev data", "run"]
     assert d["RunAtLoad"] is True and d["KeepAlive"] == {"SuccessfulExit": False}
     assert d["StandardErrorPath"].startswith(str(tmp_path / "logs"))
+    assert d["Umask"] == 63
     assert [c.args for c in plan.commands] == [
         ["launchctl", "bootout", "gui/501/io.github.email-town-labeler"],
         ["launchctl", "bootstrap", "gui/501", str(path)],
@@ -240,3 +241,7 @@ def test_uninstall_stops_the_unit_before_deleting_its_file(tmp_path):
 
     assert service.uninstall(t, run=run, echo=lambda s: None)
     assert seen == [True] and not f.exists()
+
+
+def test_systemd_unit_sets_a_private_umask(tmp_path):
+    assert "UMask=0077" in service.systemd_unit(target("linux", tmp_path)).splitlines()
