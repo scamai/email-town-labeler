@@ -1702,7 +1702,8 @@
         if (old && old.unread !== m.unread)
           flips.push(`${k8(m.id)}:${m.unread ? "unread" : "read"}${m.id === state.activeId ? ":open" : ""}`);
       });
-      if (flips.length) uiLog("state-flags", { seq: Number(data.seq), changes: flips.slice(0, 20) });
+      if (flips.length)
+        uiLog("state-flags", { seq: Number(data.seq), count: flips.length, changes: flips.slice(0, 20) });
     }
     const snapshot = JSON.stringify(next);
     const changed = snapshot !== state.snapshot;

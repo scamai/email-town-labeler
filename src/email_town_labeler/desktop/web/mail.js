@@ -39,6 +39,10 @@
     pending: null,
     accountsKey: "",
     folderBusy: false,
+    // null, not undefined: the first render (nothing open) is not an "open change" worth logging
+    opened: null,
+    autoRead: null,
+    explicitFlag: null,
   };
   const accountFor = (id) =>
     host.state.accounts.find((account) => account.id === id);

@@ -239,6 +239,11 @@
   function onKey(event) {
     if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
       return;
+    // What the key acted on: the handler below may trash the open message and move on before it is logged.
+    const before = {
+      active: host()?.k8?.(host().state.activeId),
+      selected: host()?.state?.selected?.size || 0,
+    };
     const mod = MAC ? event.metaKey : event.ctrlKey;
     const key = event.key;
     const lower = key.length === 1 ? key.toLowerCase() : key;
@@ -310,8 +315,8 @@
       event.preventDefault();
       host()?.uiLog?.("key", {
         key: (event.shiftKey && key.length === 1 ? "shift+" : "") + key,
-        active: host().k8(host().state.activeId),
-        selected: host().state.selected?.size || 0,
+        active: before.active,
+        selected: before.selected,
       });
     }
   }
