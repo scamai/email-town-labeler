@@ -174,6 +174,11 @@ class Workbench:
         self.outbox, self.outbox_worker = deque(), None
         self.outbox_wake, self.flushing = threading.Event(), False
         self.outbox_jobs: dict[str, dict] = {}
+        # Set when the list must be read again once the outbox is empty: a message left the folder, a write
+        # failed or went unconfirmed, or a list was thrown away while writes were still queued. Listing again
+        # after every message instead (each write makes the list in flight stale) turned one 53-message
+        # trash into 47 discarded lists and held the account lock for 27 of its 45 seconds.
+        self.relist_after_outbox = False
         # Sends inside their undo window: request id -> (wake event, thread). Undo removes the entry and
         # wakes the thread, which then sends nothing; quitting wakes them all and they send at once.
         self.held_sends: dict[str, tuple[threading.Event, threading.Thread]] = {}
@@ -510,10 +515,18 @@ class Workbench:
                     or folder != self.folder
                     or epoch != self.epochs.get(aid, 0)
                 ):
-                    log.info(
-                        "list %s: discarded (folder or mailbox changed while loading); loading again", folder
-                    )
-                    self.refresh_again = True
+                    if folder != self.folder or not self.accounts.get(aid)["enabled"] or not self.outbox_jobs:
+                        log.info(
+                            "list %s: discarded (folder or mailbox changed while loading); loading again",
+                            folder,
+                        )
+                        self.refresh_again = True
+                    else:  # a write is still queued or running: read the list once the outbox is empty
+                        log.info(
+                            "list %s: discarded (mailbox changed while loading); loading after the writes",
+                            folder,
+                        )
+                        self.relist_after_outbox = True
                     return
                 removed = {k for k, v in self.messages.items() if v["account_id"] == aid} - incoming.keys()
                 for key in removed:
@@ -1014,7 +1027,8 @@ class Workbench:
                 "failed": 0,
             }
             delay = self.undo_seconds if action in UNDOABLE else 0.0
-            self.outbox.append((request_id, action, selected, time.monotonic() + delay))
+            now = time.monotonic()
+            self.outbox.append((request_id, action, selected, now + delay, now))
             if self.outbox_worker is None or not self.outbox_worker.is_alive():
                 self.outbox_worker = threading.Thread(
                     target=self._drain_outbox, name="workbench-outbox", daemon=True
@@ -1030,14 +1044,15 @@ class Workbench:
                     return
                 wait = 0.0 if self.flushing else self.outbox[0][3] - time.monotonic()
                 if wait <= 0:
-                    request_id, action, selected, _not_before = self.outbox.popleft()
+                    request_id, action, selected, _not_before, queued = self.outbox.popleft()
             if wait > 0:  # inside its undo window: Undo (or quitting) wakes this early
                 self.outbox_wake.wait(wait)
                 self.outbox_wake.clear()
                 continue
             try:
-                result = self._mutate_messages(selected, action, request_id)
-            except Exception:  # noqa: BLE001 - a network failure may follow remote acceptance
+                result = self._mutate_messages(selected, action, request_id, queued=queued)
+            except Exception as e:  # noqa: BLE001 - a network failure may follow remote acceptance
+                log.warning("mail action %s: result unknown (%s)", action, type(e).__name__)
                 result = {
                     "status": "unknown",
                     "succeeded": [],
@@ -1058,7 +1073,15 @@ class Workbench:
                     self.outbox_jobs.pop(request_id, None)
                     self._touch()
             self.mail_store.finish(request_id, result)
-            self.refresh()
+            with self.lock:
+                # A read or star that succeeded is already on the row; only leaving the folder, a failure
+                # or a thrown-away list needs the mailbox read again, and then once, after the last write.
+                self.relist_after_outbox |= action in LEAVES_FOLDER or result["status"] != "complete"
+                relist = self.relist_after_outbox and not self.outbox
+                if relist:
+                    self.relist_after_outbox = False
+            if relist:
+                self.refresh()
 
     def mail_undo(self, request_id) -> dict:
         """Take back an Archive/Trash or a send that has not reached the mailbox yet: nothing is sent."""
@@ -1140,9 +1163,11 @@ class Workbench:
                 job[field] += 1
                 self._touch()
 
-    def _mutate_messages(self, selected, action, request_id):
+    def _mutate_messages(self, selected, action, request_id, *, queued=None):
         result = {"status": "pending", "succeeded": [], "failed": [], "message": "Working…"}
         started = time.perf_counter()
+        queued_ms = (time.monotonic() - queued) * 1000 if queued is not None else 0.0
+        reasons = {}  # message key -> exception class, for the log only
         lock_wait = provider = slowest = 0.0
         for item in selected:
             aid, key = item["account_id"], item["id"]
@@ -1161,16 +1186,17 @@ class Workbench:
                         provider, slowest = provider + spent, max(slowest, spent)
                     with self.lock:
                         self.epochs[aid] = self.epochs.get(aid, 0) + 1
-                        self.bodies.pop(key, None)
-                        if action in ("trash", "archive", "restore"):
+                        if action in LEAVES_FOLDER:
+                            self.bodies.pop(key, None)
                             self.messages.pop(key, None)
-                        elif key in self.messages:
+                        elif key in self.messages:  # a read or star leaves the body as it was: keep it
                             field = "unread" if action in ("read", "unread") else "starred"
                             self.messages[key][field] = action in ("unread", "star")
                         self._touch()
                 result["succeeded"].append(key)
                 self._progress(request_id, "done")
             except Exception as exc:  # noqa: BLE001 - preserve successes across independent accounts
+                reasons[key] = type(exc).__name__
                 self._progress(request_id, "failed")
                 result["failed"].append(
                     {
@@ -1193,14 +1219,15 @@ class Workbench:
         )
         log.info(
             "mail action %s: %d messages, %d ok [%s], %d failed [%s] in %.0f ms "
-            "(waiting for the account %.0f ms, provider calls %.0f ms, slowest call %.0f ms)",
+            "(queued %.0f ms, waiting for the account %.0f ms, provider calls %.0f ms, slowest call %.0f ms)",
             action,
             len(selected),
             len(result["succeeded"]),
             shorts(result["succeeded"]),
             len(result["failed"]),
-            shorts(f["id"] for f in result["failed"]),
+            ",".join(f"{short(f['id'])}:{reasons.get(f['id'], '?')}" for f in result["failed"][:20]),
             (time.perf_counter() - started) * 1000,
+            queued_ms,
             lock_wait * 1000,
             provider * 1000,
             slowest * 1000,
