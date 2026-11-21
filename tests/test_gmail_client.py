@@ -593,3 +593,65 @@ def test_units_budget_spends_a_minute_at_once_but_never_more_in_any_60_seconds()
     for t, _ in log:  # a refilling bucket would allow 2x the budget in the first minute; this must not
         assert sum(u for s, u in log if t <= s < t + 60) <= 4800
     assert (METADATA_GET_UNITS, FULL_GET_UNITS) == (20, 60)
+
+
+def test_a_timeout_gets_one_fresh_connection_retry_but_a_fast_failure_keeps_all_of_them(caplog):
+    for exc, attempts in (
+        (TimeoutError("timed out"), 2),
+        (BrokenPipeError(32, "Broken pipe"), 4),
+    ):
+        g = FakeGmail()
+        g.fail_next(10, method="getProfile", exc=exc)
+        c, _ = make(g)
+        caplog.clear()
+        with caplog.at_level("INFO", logger="email_town_labeler.gmail"), pytest.raises(type(exc)):
+            c.profile()
+        assert g.calls.count("getProfile") == attempts, exc
+        assert f"retry {attempts - 1}/{attempts - 1} in" in caplog.text, caplog.text  # the real limit
+    g = FakeGmail()  # a timeout wrapped as google_auth_httplib2 does
+    transport = type("TransportError", (Exception,), {})
+    g.fail_next(10, method="getProfile", exc=transport(TimeoutError("timed out")))
+    c, _ = make(g)
+    with pytest.raises(transport):
+        c.profile()
+    assert g.calls.count("getProfile") == 2
+
+
+def test_batch_timeout_gets_one_retry():
+    g = FakeGmail()
+    ids = fill(g, 5)
+    g.fail_next(10, method="batch", exc=TimeoutError("timed out"))
+    c, _ = make(g)
+    with pytest.raises(TimeoutError):
+        c.get_records(ids)
+    assert g.calls.count("batch") == 2
+
+
+def test_reconnect_log_names_the_wrapped_cause_without_its_message(caplog):
+    g = FakeGmail()
+    transport = type("TransportError", (Exception,), {})
+    not_found = type("ServerNotFoundError", (Exception,), {})
+    g.fail_next(1, method="getProfile", exc=transport(not_found("secret-host")))
+    c, _ = make(g)
+    with caplog.at_level("INFO", logger="email_town_labeler.gmail"):
+        c.profile()
+    assert "(TransportError(ServerNotFoundError))" in caplog.text and "secret-host" not in caplog.text
+
+
+def test_quota_wait_of_a_second_or_more_is_logged_and_a_short_one_is_not(caplog):
+    g = FakeGmail()
+    ids = fill(g, 10)
+    c, clock = make(g, units_per_minute=100)
+    with caplog.at_level("INFO", logger="email_town_labeler.gmail"):
+        c.get_metadata(ids[:5], ["Subject"])  # 100 units: the whole window
+        c.get_metadata(ids[5:6], ["Subject"])  # waits ~60 s
+        assert "gmail quota: waiting 60.0s for 20 units" in caplog.text
+        caplog.clear()
+        clock.t += 59.5  # the next spend ages out in 0.5 s
+        c.get_metadata(ids[6:7], ["Subject"])
+        c.get_metadata(ids[7:8], ["Subject"])
+        c.get_metadata(ids[8:9], ["Subject"])
+        c.get_metadata(ids[9:10], ["Subject"])
+        c.get_metadata(ids[0:1], ["Subject"])
+    assert any(w < 1.0 for w in clock.waits[1:])
+    assert "gmail quota" not in caplog.text
