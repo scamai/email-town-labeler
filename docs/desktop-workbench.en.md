@@ -48,7 +48,8 @@ mail content. To make "what happened to this message" answerable it records, by 
 each message's opaque key: every open and how (click, `j`/`k`, Shift+J, auto-advance, arrows), selection
 changes, handled shortcut keys, mailbox actions and their per-message results, each open-to-read decision,
 and read/star changes the mailbox reported on sync. The page's events pass through a filter that keeps
-only short tokens, so subjects, addresses and text cannot be written. To check a download, run the binary with `--self-check`; it reports what the app can load
+only short tokens, so subjects, addresses and text cannot be written. Other libraries are logged only from WARNING, and then by logger name, level and
+exception type without their text, because such a line can carry a request URL or a credential. To check a download, run the binary with `--self-check`; it reports what the app can load
 without opening a window or touching your data:
 
 ```sh

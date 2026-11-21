@@ -276,6 +276,53 @@ def test_frozen_app_falls_back_to_certifi_only_without_usable_system_cas(
     assert os.environ.get("SSL_CERT_FILE") == (certifi.where() if want_certifi else None)
 
 
+# ─── desktop.log ───
+
+
+@pytest.fixture
+def frozen_log(tmp_path, monkeypatch):
+    """_log_to as the frozen app runs it, without touching this process's real fds 1/2 or root logger."""
+    import logging
+
+    root, own = logging.getLogger(), logging.getLogger("email_town_labeler")
+    saved = (list(root.handlers), root.level, own.level)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(os, "dup2", lambda *args: None)
+    monkeypatch.setattr(sys, "stdout", sys.stdout)
+    monkeypatch.setattr(sys, "stderr", sys.stderr)
+    path = tmp_path / "desktop.log"
+    window._log_to(path)
+    yield path
+    for handler in [h for h in root.handlers if h not in saved[0]]:
+        root.removeHandler(handler)
+        handler.stream.close()
+    root.setLevel(saved[1])
+    own.setLevel(saved[2])
+
+
+def test_desktop_log_keeps_the_apps_events_and_no_library_text(frozen_log):
+    """Google's sign-in server logged its redirect line, OAuth `code` and `state` included, at INFO into
+    desktop.log; a library WARNING can carry a provider response body. Only the app's own text is kept."""
+    import logging
+
+    logging.getLogger("google_auth_oauthlib.flow").info(
+        '"%s" %s %s', "GET /?state=S7ATE&code=4/C0DE HTTP/1.1", "200", "60"
+    )
+    logging.getLogger("googleapiclient.http").warning("Invalid JSON content from response: %s", b"<body>")
+    try:
+        raise TimeoutError("mail.example.com timed out")
+    except TimeoutError:
+        logging.getLogger("urllib3.connectionpool").exception("retrying %s", "/gmail/v1/users/me/messages/x")
+    logging.getLogger("email_town_labeler.desktop").info("list inbox (gmail): 3 messages in 5 ms")
+
+    text = frozen_log.read_text()
+    assert "INFO email_town_labeler.desktop: list inbox (gmail): 3 messages in 5 ms" in text
+    assert "google_auth_oauthlib" not in text and "C0DE" not in text and "S7ATE" not in text
+    assert "WARNING googleapiclient.http: details withheld\n" in text and "<body>" not in text
+    assert "ERROR urllib3.connectionpool: details withheld (TimeoutError)\n" in text
+    assert "mail.example.com" not in text and "/gmail/v1" not in text and "Traceback" not in text
+
+
 # ─── self-check ───
 
 

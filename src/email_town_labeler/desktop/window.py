@@ -301,9 +301,27 @@ def _log_to(path: Path) -> None:
             except OSError:
                 pass
     sys.stdout = sys.stderr = stream
-    logging.basicConfig(
-        level=logging.INFO, stream=stream, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.addFilter(_withhold_foreign_text)
+    root = logging.getLogger()
+    root.addHandler(handler)
+    # The app's own events at INFO; other libraries only from WARNING, and then without their text (below).
+    # At INFO, Google's sign-in server logged its redirect line with the OAuth `code` and `state`.
+    root.setLevel(logging.WARNING)
+    logging.getLogger("email_town_labeler").setLevel(logging.INFO)
+
+
+def _withhold_foreign_text(record: logging.LogRecord) -> bool:
+    """desktop.log holds event names, short keys and counts. A library's record keeps its logger, level and
+    exception type, never its text: it can carry a request line, a provider response body or a credential."""
+    if record.name == "email_town_labeler" or record.name.startswith("email_town_labeler."):
+        return True
+    kind = record.exc_info[1].__class__.__name__ if record.exc_info and record.exc_info[1] else ""
+    record.msg = f"details withheld{f' ({kind})' if kind else ''}"
+    record.args = ()
+    record.exc_info = record.exc_text = record.stack_info = None
+    return True
 
 
 def trust_store() -> None:
