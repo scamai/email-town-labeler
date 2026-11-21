@@ -93,7 +93,24 @@ UNDO_SECONDS = 5.0
 STATE_WAIT = 10.0
 
 
+GOOGLE_SIGN_IN_EXPIRED = "Google sign-in expired. Reconnect the account from its ⋯ menu"
+
+
+def sign_in_expired(exc: BaseException | None) -> bool:
+    """google-auth's RefreshError that retrying cannot fix (invalid_grant: revoked, or the 7-day expiry of an
+    app in Google's Testing status), anywhere in the cause chain. Only reconnecting the account helps."""
+    for _ in range(8):  # a bounded walk: a cause chain is short, never trust it to be acyclic
+        if exc is None:
+            return False
+        if type(exc).__name__ == "RefreshError" and not getattr(exc, "retryable", False):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
 def safe_error(exc: Exception) -> str:
+    if sign_in_expired(exc):
+        return GOOGLE_SIGN_IN_EXPIRED
     if isinstance(exc, (ProviderError, ValueError)):
         # Our own ValueErrors contain no remote mail content. Callers never pass parse errors through.
         return str(exc)[:240]
@@ -513,11 +530,12 @@ class Workbench:
                 self._touch()
         except Exception as e:  # noqa: BLE001 - account isolation boundary; never expose raw provider errors
             # Never include remote exception strings: subjects/addresses can appear in provider errors.
+            log.warning("sync %s failed (%s)", folder, type(e).__name__)
             with self.lock:
                 self.account_status[aid].update(
                     status="error",
                     error=safe_error(e)
-                    if isinstance(e, ProviderError)
+                    if isinstance(e, ProviderError) or sign_in_expired(e)
                     else "Sync failed. Check your sign-in and network (" + type(e).__name__ + ")",
                 )
                 self.readers.pop(aid, None)
