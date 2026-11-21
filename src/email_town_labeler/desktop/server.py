@@ -32,7 +32,7 @@ APP_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: https:; connect-src 'self'; "
     "frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 )
-SLOW_GET_MS = 500  # GETs are logged only when slower than this; /api/state is a long poll and never logged
+SLOW_GET_MS = 500  # a GET that worked is logged only when slower; /api/state is a long poll and never logged
 log = logging.getLogger("email_town_labeler.desktop.http")
 ui_log = logging.getLogger("email_town_labeler.desktop.ui")
 # What the page may write into desktop.log: event names, message-key prefixes, counts and command words.
@@ -117,15 +117,21 @@ class Handler(BaseHTTPRequestHandler):
         super().send_response(code, message)
 
     def handle_one_request(self):
-        """Time each API request into desktop.log: method, path (never the query), status and ms."""
+        """Time each API request into desktop.log: method, path (never the query), status and ms. Every POST,
+        and a GET that failed or was slow; the formatted view as `/view` or `/view/image`, never its token."""
         self._status, started = None, time.perf_counter()
         super().handle_one_request()
         command, raw = getattr(self, "command", None), getattr(self, "path", "") or ""
         path = urlsplit(raw).path
-        if not command or not path.startswith("/api/") or path in ("/api/state", "/api/ui-log"):
+        if path.startswith("/view/"):
+            path = "/view/image" if "/image/" in path else "/view"
+        elif not path.startswith("/api/") or path in ("/api/state", "/api/ui-log"):
+            return
+        if not command:
             return
         ms = (time.perf_counter() - started) * 1000
-        if command == "POST" or ms >= SLOW_GET_MS:
+        failed = self._status is None or self._status >= 400
+        if command == "POST" or ms >= SLOW_GET_MS or failed:
             log.info("%s %s %s %.0f ms", command, path, self._status, ms)
 
     def _response(

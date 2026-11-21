@@ -128,6 +128,12 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Opening mail while an account is busy no longer stalls the reading pane.** After a prefetch the page asked
+  for each neighbouring message one by one, even when the server had skipped that busy account. Each such read
+  waited for the account (up to 20 s, then failed) and held one of the page's few connections: right after one
+  start, five of them plus the state long-poll left nothing for a mark-read, which reached the app 8.6 s late.
+  The prefetch now answers which messages it holds, and the page reads only those. desktop.log also records
+  every failing GET (it logged only slow ones), the formatted view as `/view`, and what a prefetch skipped.
 - **Bulk Trash, Archive and Read no longer set off a storm of list reloads.** Every message written made the list
   being loaded stale, so it was thrown away and loaded again at once, and that list held the account lock the next
   write needed: one 53-message trash logged 94 lists and 47 discards and spent 27 of its 45 seconds waiting for the

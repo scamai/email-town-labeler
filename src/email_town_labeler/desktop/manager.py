@@ -779,21 +779,27 @@ class Workbench:
 
     def prefetch(self, keys) -> dict:
         """Fetch the bodies of the messages next to the open one, in one batch per account, so the next
-        open is instant. Best effort: a busy account is skipped rather than waited for."""
+        open is instant. Best effort: a busy account is skipped rather than waited for.
+
+        `ids` names the asked messages whose body is now cached: the page reads only those, so a skipped
+        account never turns into one blocking single-message read per neighbour."""
         if not isinstance(keys, list) or any(not isinstance(k, str) for k in keys):
             raise ValueError("Prefetch takes a list of message ids")
+        asked = list(dict.fromkeys(keys[:PREFETCH_MAX]))
         wanted: dict[str, list[tuple[str, str]]] = {}
         with self.lock:
-            for key in keys[:PREFETCH_MAX]:
+            for key in asked:
                 item = self.messages.get(key)
                 if item is not None and key not in self.bodies:
                     wanted.setdefault(item["account_id"], []).append((key, item["provider_id"]))
-        fetched = 0
+        fetched = skipped = 0
         for aid, items in wanted.items():
             reader, reader_lock = self.readers.get(aid), self.reader_locks.get(aid)
             if reader is None or reader_lock is None or self.previews_waiting.get(aid):
+                skipped += len(items)
                 continue
             if not reader_lock.acquire(timeout=0.5):
+                skipped += len(items)
                 continue
             try:
                 pids = [pid for _key, pid in items]
@@ -803,6 +809,7 @@ class Workbench:
                     fulls = {pid: reader.detail(pid) for pid in pids}
             except Exception as e:  # noqa: BLE001 - prefetch never fails the open it serves
                 log.info("prefetch skipped (%s)", type(e).__name__)
+                skipped += len(items)
                 continue
             finally:
                 reader_lock.release()
@@ -810,7 +817,17 @@ class Workbench:
                 if pid in fulls:
                     self._cache_body(key, fulls[pid])
                     fetched += 1
-        return {"fetched": fetched}
+        with self.lock:
+            ready = [key for key in asked if key in self.bodies]
+        if fetched or skipped:
+            log.info(
+                "prefetch: %d asked, %d fetched, %d skipped (account busy or offline), %d ready",
+                len(asked),
+                fetched,
+                skipped,
+                len(ready),
+            )
+        return {"fetched": fetched, "ids": ready}
 
     def detail(self, key: str) -> dict:
         full = self._detail(key)

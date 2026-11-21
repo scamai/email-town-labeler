@@ -153,3 +153,26 @@ def test_api_requests_are_timed_in_the_log_without_ids_or_queries(server, caplog
     lines = [r.getMessage() for r in caplog.records]
     assert len(lines) == 1 and re.fullmatch(r"POST /api/mark-read 200 \d+ ms", lines[0]), lines
     assert "secret-message-id" not in lines[0]
+
+
+def test_a_fast_failing_get_and_the_formatted_view_are_logged_without_ids_or_tokens(server, caplog):
+    """A GET was logged only when slow, so a quick 400 (account busy, message gone) left no trace."""
+
+    def gone(key):
+        raise ValueError("Message is no longer in the loaded list")
+
+    server.manager.detail = gone
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop.http"):
+        request(server, "/api/message?id=secret-message-id", auth=True)
+        request(server, "/view/secret-view-token")  # expired or unknown token: 404
+        request(server, "/view/secret-view-token/image/secret-attachment")
+        deadline = time.monotonic() + 2
+        while len(caplog.records) < 3 and time.monotonic() < deadline:
+            time.sleep(0.01)
+    lines = [r.getMessage() for r in caplog.records]
+    assert len(lines) == 3, lines
+    assert re.fullmatch(r"GET /api/message 400 \d+ ms", lines[0]), lines
+    assert re.fullmatch(r"GET /view 404 \d+ ms", lines[1]) and re.fullmatch(
+        r"GET /view/image 404 \d+ ms", lines[2]
+    )
+    assert "secret" not in caplog.text
