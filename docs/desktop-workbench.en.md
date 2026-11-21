@@ -128,11 +128,13 @@ The app on the Releases page (through v0.1.6) **ships no Google sign-in client a
 | Outlook.com / Hotmail / Microsoft 365 | Not yet | Needs your own public-client registration in Microsoft Entra, entered under **Use your own Microsoft app registration**; a later version will ship one |
 | NetEase 163 / 126 | No | Needs an IMAP ID handshake that is not implemented |
 
-Browser sign-in with **Google / Gmail** (no app password, no 2-Step Verification needed) arrives once a release ships
-the Google sign-in client and Google has verified the `gmail.modify` scope. Until then, builds made with
-`scripts/build_app.py --google-client` let only the project's registered test users sign in, and they reauthorize
-from the account's **⋯** menu every 7 days ([why](google-cloud-setup.md#4-audience-testing-vs-production-external-only)).
-Non-Google mailboxes do not depend on Google's review at all.
+Browser sign-in with **Google / Gmail** (no app password, no 2-Step Verification needed) arrives in releases once
+Google has verified the `gmail.modify` scope. Builds made with `scripts/build_app.py --google-client` offer it
+already: since 2026-11-21 the project's sign-in client is published ("In production") but not verified, so Google
+shows **"Google hasn't verified this app"** during sign-in (**Advanced → Go to Email Town (unsafe)**), at most 100
+Google accounts can ever sign in through it before verification, and sign-ins no longer expire every 7 days
+([why](google-cloud-setup.md#4-audience-testing-vs-production-external-only)). Non-Google mailboxes do not depend
+on Google's review at all.
 
 Suggested settings exist for Gmail, iCloud, Yahoo, AOL, Fastmail, Zoho and QQ Mail; they stay editable under
 **Server settings**. Outlook.com, Hotmail and Live addresses are routed to Microsoft sign-in, because Outlook.com
