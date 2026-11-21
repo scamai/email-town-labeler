@@ -26,6 +26,7 @@ from . import learn
 from .config import Config
 from .contacts import recipient_addresses, sender_address
 from .features import bulk_mail
+from .gmail.client import describe_error
 from .policy import Decision, decide
 from .state import Store
 from .taxonomy import UNKNOWN
@@ -55,7 +56,7 @@ def is_history_expired(exc: BaseException) -> bool:
 
 def _err_name(exc: BaseException) -> str:
     status = getattr(getattr(exc, "resp", None), "status", None) or getattr(exc, "status_code", None)
-    return f"{type(exc).__name__}{f' {status}' if status else ''}"
+    return f"{describe_error(exc)}{f' {status}' if status else ''}"
 
 
 class Engine:
@@ -68,12 +69,13 @@ class Engine:
         cfg: Config,
         *,
         clock: Callable[[], float] = time.time,
+        timer: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] | None = None,
         batch_size: int = BATCH,
         learn_path: Path | None = None,
     ):
         self.client, self.labels, self.model, self.store = client, labels, model, store
-        self.clock, self._sleep_fn, self.batch_size = clock, sleep, batch_size
+        self.clock, self.timer, self._sleep_fn, self.batch_size = clock, timer, sleep, batch_size
         self.config = cfg  # as loaded; self.cfg adds the model's / learned thresholds
         self.learn_path = Path(learn_path) if learn_path is not None else None
         self.artifact: learn.Artifact | None = None
@@ -324,7 +326,9 @@ class Engine:
         if on:  # the teacher labeled it before we did
             self.store.record_teacher(mid, tids[_pick(set(on), on)])
         counts["by_class"][cls] = counts["by_class"].get(cls, 0) + 1
-        log.debug("decided %s -> %s (model %s p=%.3f) applied=%s", mid, cls, pred.cls, pred.prob, apply)
+        log.debug(
+            "decided %s -> %s (model %s p=%.3f) applied=%s", str(mid)[:8], cls, pred.cls, pred.prob, apply
+        )
 
     def classify_ids(self, ids: list[str], counts: dict[str, Any] | None = None) -> dict[str, Any]:
         """Fetch (deduped, skipping already decided ids), filter eligibility, predict in batches, apply."""
@@ -432,7 +436,7 @@ class Engine:
             self.store.record_feedback(mid, d["cls"], corrected)
             self.store.set_current(mid, ",".join(sorted(final)) or None)
             n += 1
-            log.info("feedback %s: %s -> %s", mid, d["cls"], corrected)
+            log.info("feedback %s: %s -> %s", str(mid)[:8], d["cls"], corrected)
         return n
 
     # -- polling ------------------------------------------------------------------------------
@@ -496,6 +500,7 @@ class Engine:
 
     def sync_once(self) -> dict[str, Any]:
         t0 = self.clock()
+        m0 = self.timer()  # monotonic: wall time jumps across a Mac sleep
         self.store.set("model_id", self.model_id)
         self.reload_learned()
         start = self.store.get("history_id")
@@ -537,7 +542,7 @@ class Engine:
             counts["skipped"],
             counts["already_decided"],
             counts["feedback"],
-            int((now - t0) * 1000),
+            int((self.timer() - m0) * 1000),
             " bootstrapped"
             if counts.get("bootstrapped")
             else " recovered"

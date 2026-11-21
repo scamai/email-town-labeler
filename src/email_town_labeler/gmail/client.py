@@ -42,6 +42,7 @@ API_DISABLED_REASONS = {"accessNotConfigured", "SERVICE_DISABLED"}  # errors[] /
 MAX_BATCH = 50  # Gmail accepts 100 per batch but throttles above ~50
 MAX_BACKOFF = 64.0
 TRANSPORT_RETRIES = 3  # fresh-connection retries after a transport error: about 0.5 s, 1 s, 2 s
+TIMEOUT_RETRIES = 1  # a timeout already cost a full socket timeout (60 s): one fresh connection, then give up
 # Quota units per messages.get (Gmail usage limits, as of 2026-05-01): 60 for format=full/raw/html,
 # otherwise the base 20. https://developers.google.com/workspace/gmail/api/reference/quota
 FULL_GET_UNITS = 60
@@ -104,6 +105,30 @@ def is_transport_error(e: BaseException) -> bool:
     )
 
 
+def _wrapped_cause(e: BaseException) -> BaseException | None:
+    """The exception `e` wraps (google_auth_httplib2 raises TransportError(exc)), if it is a different type."""
+    for c in (e.args[0] if e.args else None, e.__cause__, e.__context__):
+        if isinstance(c, BaseException) and type(c) is not type(e):
+            return c
+    return None
+
+
+def describe_error(e: BaseException) -> str:
+    """Type names only, never message text: 'TransportError(ServerNotFoundError)' for a wrapped error."""
+    c = _wrapped_cause(e)
+    return f"{type(e).__name__}({type(c).__name__})" if c is not None else type(e).__name__
+
+
+def is_timeout(e: BaseException) -> bool:
+    """A socket timeout, bare or wrapped (a timed-out network costs the full socket timeout per attempt)."""
+    seen = 0
+    while e is not None and seen < 4:
+        if isinstance(e, TimeoutError):
+            return True
+        e, seen = _wrapped_cause(e), seen + 1
+    return False
+
+
 def _retry_after(e: BaseException) -> float:
     resp = getattr(e, "resp", None)
     try:
@@ -154,6 +179,8 @@ class _UnitWindow:
                 self.spent.append((now, units))
                 return
             wait = self.spent[0][0] + 60 - now
+            if wait >= 1.0:
+                log.info("gmail quota: waiting %.1fs for %d units", wait, units)
             self.sleep(wait)
             if self.clock() < now + wait:  # fake sleeps may not move the clock
                 self.spent.popleft()
@@ -233,13 +260,16 @@ class GmailClient:
                     conn.close()
             pool.clear()
 
+    def _retry_limit(self, e: BaseException) -> int:
+        return min(self.transport_retries, TIMEOUT_RETRIES) if is_timeout(e) else self.transport_retries
+
     def _reconnect(self, e: BaseException, n: int) -> None:
         """Before transport retry n (1-based): drop the pool, then wait about 0.5 s, 1 s, 2 s..."""
         self._drop_connections()
         wait = 0.5 * 2.0 ** (n - 1) + random.uniform(0, 0.25)
         log.info(
             "gmail connection failed (%s); reconnecting, retry %d/%d in %.1fs",
-            type(e).__name__,
+            describe_error(e),
             n,
             self.transport_retries,
             wait,
@@ -252,7 +282,7 @@ class GmailClient:
             try:
                 return req.execute()
             except Exception as e:  # HttpError, or transport errors without a status
-                if is_transport_error(e) and reconnects < self.transport_retries:
+                if is_transport_error(e) and reconnects < self._retry_limit(e):
                     reconnects += 1
                     self._reconnect(e, reconnects)
                     continue
@@ -377,7 +407,7 @@ class GmailClient:
             try:
                 batch.execute()
             except Exception as e:  # whole batch failed
-                if is_transport_error(e) and reconnects < self.transport_retries:
+                if is_transport_error(e) and reconnects < self._retry_limit(e):
                     reconnects += 1
                     self._reconnect(e, reconnects)
                     continue  # the same ids again; callbacks of a failed batch delivered nothing

@@ -583,3 +583,53 @@ def test_bulk_marketing_gets_promotional_where_one_to_one_mail_does_not(env):
     assert lid(client, "promotional") in client.messages[tabbed]["label_ids"]
     assert store.decision(direct)["cls"] == "unknown"
     assert lid(client, "promotional") not in client.messages[direct]["label_ids"]
+
+
+def test_poll_ms_comes_from_the_monotonic_timer_not_the_wall_clock(env, caplog):
+    eng, client, store = env()
+    eng.sync_once()
+    start = eng.clock.t
+    mono = [0.0]
+
+    def timer():
+        mono[0] += 0.1
+        return mono[0]
+
+    eng.timer = timer
+    real_history = client.history
+
+    def history(h):
+        eng.clock.t += 3600  # the Mac slept mid-poll
+        return real_history(h)
+
+    client.history = history
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.engine"):
+        eng.sync_once()
+    ms = int(caplog.text.split("ms=")[1].split()[0])
+    assert ms < 1000
+    assert float(store.get("last_ok_poll_start")) == start and float(store.get("last_poll")) == start + 3600
+
+
+def test_a_wrapped_transport_failure_names_its_cause_and_never_its_message(env, caplog):
+    eng, client, _ = env(poll_seconds=60)
+    eng.sync_once()
+    transport = type("TransportError", (Exception,), {})
+    not_found = type("ServerNotFoundError", (Exception,), {})
+    client.fail("history", transport(not_found("secret-host")), times=1)
+    stop = threading.Event()
+    eng._sleep_fn = lambda s: stop.set()
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.engine"):
+        eng.run_forever(stop)
+    assert "poll failed (TransportError(ServerNotFoundError), 1 in a row)" in caplog.text
+    assert "secret-host" not in caplog.text
+
+
+def test_feedback_log_carries_only_the_id_prefix(env, caplog):
+    eng, client, _ = env(dry_run=False)
+    eng.sync_once()
+    mid = client.add_message(cls="orders", msg_id="abcdef0123456789")
+    eng.sync_once()
+    client.user_remove_label(mid, lid(client, "orders"))
+    with caplog.at_level(logging.DEBUG, logger="email_town_labeler.engine"):
+        assert eng.sync_once()["feedback"] == 1
+    assert "feedback abcdef01:" in caplog.text and mid not in caplog.text
