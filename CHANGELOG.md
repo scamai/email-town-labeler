@@ -128,6 +128,13 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **The background service writes its log once.** Every line went both to the rotating
+  `logs/email-town-labeler.log` and to stderr, which launchd appends to `logs/service.err.log` and never rotates (a
+  byte-identical 4.3 MB copy after 27 days on one Mac). Run as a service, stderr now gets warnings, errors and
+  crash output only (a native crash leaves a trace there too); a terminal still sees everything. Why the service
+  stopped, with its traceback, is now in the rotating log. Log files are created owner-only (0600), and the
+  launchd job and systemd unit run with umask 077. Reinstall the service (`service uninstall && service install`)
+  for the umask; the existing `service.err.log` can be deleted.
 - **The service's poll log says what happened.** `poll ok ... ms=` no longer counts time the Mac slept (one poll
   read `ms=6008883`, 100 minutes); a failure names the error it wraps, `poll failed (TransportError(ServerNotFoundError),
   ...)` instead of a bare `TransportError` (91 of 172 warnings in one month); a network that times out instead of

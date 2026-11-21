@@ -536,9 +536,8 @@ def cmd_run(ctx: Ctx) -> int:
                 prev[sig] = signal.signal(sig, lambda *_: stop.set())
         eng.run_forever(stop)
     except Exception:
-        log.exception(
-            "service stopped by an error"
-        )  # the file log gets the traceback; _dispatch prints and exits 1
+        # the file log gets the timestamped reason and traceback; _dispatch still prints it and exits 1
+        log.exception("service stopped by an error")
         raise
     finally:
         for sig, h in prev.items():
