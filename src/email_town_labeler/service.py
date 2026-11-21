@@ -8,6 +8,7 @@ import plistlib
 import re
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,7 @@ Runner = Callable[..., Any]  # subprocess.run-compatible
 class Cmd:
     args: list[str]
     may_fail: bool = False  # e.g. "stop it if it was running"
+    retries: int = 0  # tries again a second apart before failing
 
 
 @dataclass
@@ -200,7 +202,9 @@ def plan_install(t: Target) -> Plan:
             files={f: launchd_plist(t)},
             commands=[
                 Cmd(["launchctl", "bootout", f"{dom}/{label}"], may_fail=True),
-                Cmd(["launchctl", "bootstrap", dom, str(f)]),
+                # bootout returns while the old job is still stopping (a poll in flight, the model worker);
+                # bootstrap meanwhile fails with "5: Input/output error". launchd kills it after 20 s.
+                Cmd(["launchctl", "bootstrap", dom, str(f)], retries=30),
             ],
             notes=[f"LaunchAgent {label} starts at login; logs in {t.logs_dir}"],
         )
@@ -315,17 +319,27 @@ def parse_status(t: Target, returncode: int, stdout: str, file_exists: bool) -> 
 
 
 # -- side effects ---------------------------------------------------------------------------------
-def apply(plan: Plan, *, run: Runner = subprocess.run, echo: Callable[[str], None] = print) -> bool:
+def apply(
+    plan: Plan,
+    *,
+    run: Runner = subprocess.run,
+    echo: Callable[[str], None] = print,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
     for path, text in plan.files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         echo(f"wrote {path}")
     for c in plan.commands:
-        try:
-            r = run(c.args, capture_output=True, text=True)
-            rc, err = r.returncode, (r.stderr or "").strip()
-        except OSError as e:
-            rc, err = 127, str(e)
+        for attempt in range(c.retries + 1):
+            try:
+                r = run(c.args, capture_output=True, text=True)
+                rc, err = r.returncode, (r.stderr or "").strip()
+            except OSError as e:
+                rc, err = 127, str(e)
+            if rc == 0 or c.may_fail or attempt == c.retries:
+                break
+            sleep(1.0)
         if rc != 0 and not c.may_fail:
             echo(f"✗ {' '.join(c.args)} failed ({rc}): {err[:300]}")
             return False
@@ -349,7 +363,13 @@ def systemd_user_available(run: Runner = subprocess.run) -> bool:
         return False
 
 
-def install(t: Target, *, run: Runner = subprocess.run, echo: Callable[[str], None] = print) -> bool:
+def install(
+    t: Target,
+    *,
+    run: Runner = subprocess.run,
+    echo: Callable[[str], None] = print,
+    sleep: Callable[[float], None] = time.sleep,
+) -> bool:
     plan = plan_install(t)
     if t.platform == "linux" and not systemd_user_available(run):
         f = service_file(t)
@@ -358,7 +378,7 @@ def install(t: Target, *, run: Runner = subprocess.run, echo: Callable[[str], No
         echo(f"Unit file for when it is ({f}):\n\n{systemd_unit(t)}")
         echo("Otherwise run in the foreground under your own supervisor:  " + " ".join(t.argv))
         return False
-    return apply(plan, run=run, echo=echo)
+    return apply(plan, run=run, echo=echo, sleep=sleep)
 
 
 def uninstall(t: Target, *, run: Runner = subprocess.run, echo: Callable[[str], None] = print) -> bool:
