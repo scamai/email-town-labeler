@@ -422,9 +422,10 @@ def test_prefetch_reads_neighbours_in_one_batch_and_skips_cached_and_busy(tmp_pa
     readers[first].batches.clear()
     workbench.detail(keys[0])  # opened: cached already
     readers[first].batches.clear()
-    assert workbench.prefetch(keys[:10]) == {"fetched": PREFETCH_MAX - 1}
+    assert workbench.prefetch(keys[:10]) == {"fetched": PREFETCH_MAX - 1, "ids": keys[:PREFETCH_MAX]}
     assert len(readers[first].batches) == 1  # one request, not one per message
-    assert workbench.prefetch(keys[:PREFETCH_MAX]) == {"fetched": 0}  # all cached now
+    # all cached now: nothing fetched, and the page may read every one of them
+    assert workbench.prefetch(keys[:PREFETCH_MAX]) == {"fetched": 0, "ids": keys[:PREFETCH_MAX]}
     # A busy account is skipped, never waited on: the open it serves must not slow down.
     lock = workbench.reader_locks[first]
     with lock:
@@ -432,7 +433,7 @@ def test_prefetch_reads_neighbours_in_one_batch_and_skips_cached_and_busy(tmp_pa
         t = threading.Thread(target=lambda: result.update(workbench.prefetch(keys[10:])))
         t.start()
         t.join(2)
-    assert result == {"fetched": 0}
+    assert result == {"fetched": 0, "ids": []}  # nothing for the page to read: it opens them itself later
     with pytest.raises(ValueError):
         workbench.prefetch("not a list")
     workbench.close()

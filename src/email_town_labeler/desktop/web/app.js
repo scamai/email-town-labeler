@@ -1223,11 +1223,16 @@
       );
       if (!near.length) return;
       try {
-        await api("/api/prefetch", {
+        const data = await api("/api/prefetch", {
           method: "POST",
           body: JSON.stringify({ ids: near }),
         });
-        near.forEach((other) => messageDetail(other).catch(() => {}));
+        // Only what the server now holds: a busy account was skipped, and asking for its messages one by
+        // one would queue each behind the account for up to 20 s and hold one of the page's connections.
+        const ready = new Set(data.ids || []);
+        near
+          .filter((other) => ready.has(other))
+          .forEach((other) => messageDetail(other).catch(() => {}));
       } catch (_) {
         // Best effort: the open itself still reads the message.
       }

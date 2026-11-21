@@ -4,8 +4,9 @@ Run: ``uv run --with playwright python scripts/check_prefetch_ui.py``
 
 The fixture mailbox takes 1 s per body. Opening the first message really waits, so "Reading message…"
 must appear (the placeholder still works); the three below it are then fetched in one batch, and
-pressing j must draw the next body at once without the placeholder ever showing. All data is
-synthetic; captures go to a temporary directory.
+pressing j must draw the next body at once without the placeholder ever showing. When the server skips
+the prefetch (a busy account), the page reads only the message it opened. All data is synthetic;
+captures go to a temporary directory.
 """
 
 from __future__ import annotations
@@ -114,8 +115,25 @@ def main() -> int:
                 assert elapsed < BODY_DELAY, f"the next body waited {elapsed:.2f} s: not prefetched"
                 assert not errors, errors
                 page.screenshot(path=str(out / f"{engine}-next.png"))
+
+                # A busy account: the server skips the prefetch. The page must not ask for each neighbour
+                # one by one (each such read queued behind the account for up to 20 s and held a connection).
+                prefetch = manager.prefetch
+                manager.prefetch = lambda keys: {"fetched": 0, "ids": []}
+                manager.bodies.clear()
+                page.reload()
+                expect(rows).to_have_count(4)
+                reads = []
+                page.on("request", lambda r, reads=reads: "/api/message?" in r.url and reads.append(r.url))
+                rows.nth(0).locator(".row-open").click()
+                expect(body).to_contain_text("Synthetic body.", timeout=3000)
+                page.wait_for_timeout(600)  # the prefetch fires 150 ms after the open
+                manager.prefetch = prefetch
+                assert len(reads) == 1, f"{len(reads)} message reads after a skipped prefetch: {reads}"
+                assert not errors, errors
                 browser.close()
                 print(f"{engine}: next message drawn in {elapsed * 1000:.0f} ms without a placeholder")
+                print(f"{engine}: a skipped prefetch reads only the open message")
     finally:
         server.shutdown()
         server.server_close()
