@@ -115,3 +115,10 @@ def test_done_reopen_category_and_undo_are_logged_as_local_edits(served, caplog)
     assert ui_line({"type": "workflow-action", "action": "done", "via": "preview", "ids": [key[:8]]}) == (
         f"workflow-action action=done via=preview ids={key[:8]}"
     )
+
+
+def test_state_flags_keeps_how_many_flags_changed_when_the_list_is_cut():
+    """A 45-message read logged 20 changes and no total; the page now sends the count with the cut list."""
+    changes = [f"{i:08x}:read" for i in range(20)]
+    line = ui_line({"type": "state-flags", "ms": 1, "seq": 9, "count": 45, "changes": changes})
+    assert "count=45" in line and changes[-1] in line

@@ -128,6 +128,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **desktop.log's page events say what was acted on.** A shortcut was logged after its action, so Backspace or
+  `e` on an open message named the message the app had moved on to, with `selected=0` (all 9 such lines in one
+  log). It now names the message and selection the key acted on. A `state-flags` line cut to 20 changes also
+  carries the total (`count=45`), and a page load no longer logs `open-changed from=- to=-`.
 - **Reinstalling a running service on macOS no longer leaves it stopped.** `service install` booted the old job
   out and loaded the new one at once; while the old process was still stopping, launchd refused with
   "Bootstrap failed: 5: Input/output error", and install reported "service not installed" with nothing
