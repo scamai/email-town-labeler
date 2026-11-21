@@ -1,5 +1,6 @@
 """The categories you choose in the desktop workbench teach a personal head (desktop/learning.py)."""
 
+import os
 from pathlib import Path
 
 from email_town_labeler import learn
@@ -148,4 +149,5 @@ def test_undo_takes_the_correction_back_and_only_numbers_are_stored(tmp_path):
     stored = (tmp_path / "wb" / DB_NAME).read_bytes()
     for private in (SUBJECT, SENDER, "approve my access"):
         assert private.encode() not in stored
-    assert (tmp_path / "wb" / DB_NAME).stat().st_mode & 0o077 == 0
+    if os.name != "nt":  # Windows has no POSIX modes: the file's privacy there is the user profile's ACL
+        assert (tmp_path / "wb" / DB_NAME).stat().st_mode & 0o077 == 0
