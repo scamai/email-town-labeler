@@ -271,7 +271,7 @@ class GmailClient:
             "gmail connection failed (%s); reconnecting, retry %d/%d in %.1fs",
             describe_error(e),
             n,
-            self.transport_retries,
+            self._retry_limit(e),
             wait,
         )
         self.sleep(wait)

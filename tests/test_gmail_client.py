@@ -595,7 +595,7 @@ def test_units_budget_spends_a_minute_at_once_but_never_more_in_any_60_seconds()
     assert (METADATA_GET_UNITS, FULL_GET_UNITS) == (20, 60)
 
 
-def test_a_timeout_gets_one_fresh_connection_retry_but_a_fast_failure_keeps_all_of_them():
+def test_a_timeout_gets_one_fresh_connection_retry_but_a_fast_failure_keeps_all_of_them(caplog):
     for exc, attempts in (
         (TimeoutError("timed out"), 2),
         (BrokenPipeError(32, "Broken pipe"), 4),
@@ -603,9 +603,11 @@ def test_a_timeout_gets_one_fresh_connection_retry_but_a_fast_failure_keeps_all_
         g = FakeGmail()
         g.fail_next(10, method="getProfile", exc=exc)
         c, _ = make(g)
-        with pytest.raises(type(exc)):
+        caplog.clear()
+        with caplog.at_level("INFO", logger="email_town_labeler.gmail"), pytest.raises(type(exc)):
             c.profile()
         assert g.calls.count("getProfile") == attempts, exc
+        assert f"retry {attempts - 1}/{attempts - 1} in" in caplog.text, caplog.text  # the real limit
     g = FakeGmail()  # a timeout wrapped as google_auth_httplib2 does
     transport = type("TransportError", (Exception,), {})
     g.fail_next(10, method="getProfile", exc=transport(TimeoutError("timed out")))

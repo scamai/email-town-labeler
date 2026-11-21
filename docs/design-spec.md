@@ -115,7 +115,9 @@ class GmailClient:
 Retries 429 / 5xx / 403 rateLimitExceeded|userRateLimitExceeded with exponential backoff + jitter.
 A transport error (`is_transport_error`: OSError, http.client.HTTPException, httplib2's
 ServerNotFoundError, google.auth's TransportError) closes and clears the pooled connections and is
-retried `transport_retries` times after about 0.5 s, 1 s, 2 s, without using up `max_retries`.
+retried `transport_retries` times after about 0.5 s, 1 s, 2 s, without using up `max_retries`. A timeout
+(bare or wrapped) is retried once only (`TIMEOUT_RETRIES`): each attempt already waited the full socket timeout.
+Logs name an error by type and the type it wraps, `TransportError(ServerNotFoundError)`, never by its text.
 
 ### gmail/auth.py
 ```python

@@ -128,6 +128,12 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **The service's poll log says what happened.** `poll ok ... ms=` no longer counts time the Mac slept (one poll
+  read `ms=6008883`, 100 minutes); a failure names the error it wraps, `poll failed (TransportError(ServerNotFoundError),
+  ...)` instead of a bare `TransportError` (91 of 172 warnings in one month); a network that times out instead of
+  refusing gives up after one fresh connection, not four 60-second attempts (one poll took 6.5 minutes); a
+  feedback line logs the 8-character message prefix, not the whole id; and a Gmail quota wait of a second or more
+  is logged.
 - **Signing in to Gmail no longer writes the OAuth code into desktop.log.** Google's sign-in helper logged
   its redirect line, with the one-time authorization `code` and `state`, at INFO; the app wrote every library's
   INFO lines to desktop.log. The log now keeps the app's own events and other libraries only from WARNING, and
