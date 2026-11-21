@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -387,6 +389,59 @@ def test_run_wires_signals_and_logs(app, monkeypatch):
     assert rc == 0 and seen["stop"] is not None
     log = (app.paths.logs_dir / "email-town-labeler.log").read_text()
     assert "poll ok [dry-run]" in log and "made-up" not in log
+
+
+def _drive_run(app, monkeypatch, capsys, *, tty, action):
+    app.paths.ensure()
+    app.paths.token.write_text("{}")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: tty, raising=False)
+    monkeypatch.setattr("email_town_labeler.engine.Engine.run_forever", action)
+    capsys.readouterr()
+    rc, _ = app.call("run")
+    return rc, capsys.readouterr().err, (app.paths.logs_dir / "email-town-labeler.log").read_text()
+
+
+def _log_two_levels(self, stop=None):
+    logging.getLogger("email_town_labeler.engine").info("poll ok marker")
+    logging.getLogger("email_town_labeler.engine").warning("poll slow marker")
+
+
+def test_run_service_stderr_keeps_only_warnings(app, monkeypatch, capsys):
+    rc, err, log = _drive_run(app, monkeypatch, capsys, tty=False, action=_log_two_levels)
+    assert rc == 0
+    assert "poll ok marker" in log and "poll slow marker" in log
+    assert "poll ok marker" not in err and "poll slow marker" in err
+
+
+def test_run_on_a_terminal_still_echoes_info(app, monkeypatch, capsys):
+    rc, err, log = _drive_run(app, monkeypatch, capsys, tty=True, action=_log_two_levels)
+    assert rc == 0 and "poll ok marker" in err and "poll ok marker" in log
+
+
+def test_run_logs_a_fatal_error_to_the_file_and_still_exits_1(app, monkeypatch, capsys):
+    def boom(self, stop=None):
+        raise RuntimeError("boom")
+
+    rc, err, log = _drive_run(app, monkeypatch, capsys, tty=False, action=boom)
+    assert rc == 1 and "boom" in err
+    assert "service stopped by an error" in log and "Traceback" in log and "boom" in log
+
+
+@pytest.mark.skipif(os.name == "nt", reason="no POSIX modes")
+def test_run_log_file_is_owner_only(app, monkeypatch, capsys):
+    _drive_run(app, monkeypatch, capsys, tty=False, action=_log_two_levels)
+    assert (app.paths.logs_dir / "email-town-labeler.log").stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="no POSIX modes")
+def test_rotated_log_files_stay_owner_only(tmp_path):
+    cli.setup_logging(0, tmp_path / "logs")
+    h = next(h for h in logging.getLogger("email_town_labeler").handlers if hasattr(h, "doRollover"))
+    h.doRollover()
+    logging.getLogger("email_town_labeler").warning("after rotation")
+    h.flush()
+    for f in (tmp_path / "logs").glob("email-town-labeler.log*"):
+        assert f.stat().st_mode & 0o777 == 0o600, f
 
 
 def test_service_commands(app):

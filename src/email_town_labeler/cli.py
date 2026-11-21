@@ -7,6 +7,7 @@ Exit codes: 0 ok, 1 error, 2 usage.
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import logging
 import os
@@ -293,6 +294,28 @@ def _known_error(e: BaseException) -> tuple[str, str] | None:
 _HANDLER_TAG = "_email_town_labeler_cli"
 
 
+class _PrivateRotatingFileHandler(RotatingFileHandler):
+    """Log file created 0600 and kept 0600 through rotation (POSIX; Windows has no such modes)."""
+
+    def __init__(self, filename: Path, **kw: Any) -> None:
+        self._private(Path(filename))
+        super().__init__(filename, **kw)
+
+    @staticmethod
+    def _private(path: Path) -> None:
+        if os.name == "nt":
+            return
+        try:
+            os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o600))
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
+    def _open(self):  # a rotation recreates the file; make it private before anything is written
+        self._private(Path(self.baseFilename))
+        return super()._open()
+
+
 def setup_logging(verbose: int, logs_dir: Path | None = None) -> None:
     root = logging.getLogger("email_town_labeler")
     for h in [h for h in root.handlers if getattr(h, _HANDLER_TAG, False)]:
@@ -300,11 +323,15 @@ def setup_logging(verbose: int, logs_dir: Path | None = None) -> None:
         h.close()
     level = logging.DEBUG if verbose > 1 else logging.INFO if (verbose or logs_dir) else logging.WARNING
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+    console = logging.StreamHandler(sys.stderr)
+    if logs_dir is not None and not (sys.stderr is not None and sys.stderr.isatty()):
+        # a service: the file log is complete; launchd/journald's copy of stderr keeps warnings and crashes only
+        console.setLevel(logging.WARNING)
+    handlers: list[logging.Handler] = [console]
     if logs_dir is not None:
         logs_dir.mkdir(parents=True, exist_ok=True)
         handlers.append(
-            RotatingFileHandler(
+            _PrivateRotatingFileHandler(
                 logs_dir / "email-town-labeler.log", maxBytes=1_000_000, backupCount=5, encoding="utf-8"
             )
         )
@@ -495,15 +522,24 @@ def cmd_setup(ctx: Ctx) -> int:
 
 def cmd_run(ctx: Ctx) -> int:
     setup_logging(ctx.args.verbose, ctx.paths.ensure().logs_dir)
-    update_check.log_known_update(ctx.paths, lambda: ctx.cfg)  # reads the cache only; never fetches
-    eng = ctx.engine(dry_run=ctx.args.dry_run, service=True)
+    try:
+        faulthandler.enable()  # a native crash leaves a trace on fd 2 (service.err.log)
+    except (OSError, ValueError, RuntimeError, AttributeError):  # stderr closed or replaced
+        pass
     stop = threading.Event()
     prev: dict[int, Any] = {}
-    if threading.current_thread() is threading.main_thread():
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            prev[sig] = signal.signal(sig, lambda *_: stop.set())
     try:
+        update_check.log_known_update(ctx.paths, lambda: ctx.cfg)  # reads the cache only; never fetches
+        eng = ctx.engine(dry_run=ctx.args.dry_run, service=True)
+        if threading.current_thread() is threading.main_thread():
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                prev[sig] = signal.signal(sig, lambda *_: stop.set())
         eng.run_forever(stop)
+    except Exception:
+        log.exception(
+            "service stopped by an error"
+        )  # the file log gets the traceback; _dispatch prints and exits 1
+        raise
     finally:
         for sig, h in prev.items():
             signal.signal(sig, h)
