@@ -255,14 +255,18 @@ class Workbench:
 
     def _poll(self):
         while not self.stop.wait(60):
-            self.refresh()
-            if self.model_lock.acquire(blocking=False):
-                try:
-                    if self.model is not None and hasattr(self.model, "release_if_idle"):
-                        self.model.release_if_idle()
-                finally:
-                    self.model_lock.release()
+            self.refresh()  # its end checks whether the model has been idle (_release_idle_model)
             self._learn()
+
+    def _release_idle_model(self):
+        """End the model worker after 10 idle minutes. Checked when a refresh has finished classifying: checked
+        right after starting one, it ended the worker that refresh was about to need (respawned 1-16 s later)."""
+        if self.model_lock.acquire(blocking=False):
+            try:
+                if self.model is not None and hasattr(self.model, "release_if_idle"):
+                    self.model.release_if_idle()
+            finally:
+                self.model_lock.release()
 
     def _learn(self):
         """A scheduled learning run; a new head or thresholds re-decide the listed model categories at once."""
@@ -465,6 +469,8 @@ class Workbench:
                 self._touch()
             if again and not self.stop.is_set():
                 self.refresh()
+            else:
+                self._release_idle_model()
 
     def _account(self, account):
         aid = account["id"]

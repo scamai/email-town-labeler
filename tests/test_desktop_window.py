@@ -280,7 +280,7 @@ def test_frozen_app_falls_back_to_certifi_only_without_usable_system_cas(
 
 
 @pytest.fixture
-def frozen_log(tmp_path, monkeypatch):
+def frozen_log_to(monkeypatch):
     """_log_to as the frozen app runs it, without touching this process's real fds 1/2 or root logger."""
     import logging
 
@@ -290,14 +290,38 @@ def frozen_log(tmp_path, monkeypatch):
     monkeypatch.setattr(os, "dup2", lambda *args: None)
     monkeypatch.setattr(sys, "stdout", sys.stdout)
     monkeypatch.setattr(sys, "stderr", sys.stderr)
-    path = tmp_path / "desktop.log"
-    window._log_to(path)
-    yield path
+    yield window._log_to
     for handler in [h for h in root.handlers if h not in saved[0]]:
         root.removeHandler(handler)
         handler.stream.close()
     root.setLevel(saved[1])
     own.setLevel(saved[2])
+
+
+@pytest.fixture
+def frozen_log(tmp_path, frozen_log_to):
+    path = tmp_path / "desktop.log"
+    frozen_log_to(path)
+    return path
+
+
+def test_a_second_launch_never_rotates_the_running_apps_log(tmp_path, frozen_log_to):
+    """Rotation ran before the process knew it would serve the workbench: a second launch renamed the log
+    the running app was still writing to (and a third replaced that file)."""
+    log = tmp_path / "desktop.log"
+    log.write_text("x" * (window.LOG_LIMIT + 1))
+    inode = log.stat().st_ino
+    with InstanceLock(tmp_path):  # the running app
+        frozen_log_to(log)
+    assert not (tmp_path / "desktop.log.1").exists() and log.stat().st_ino == inode
+
+
+def test_the_app_that_will_serve_the_workbench_rotates_a_full_log(tmp_path, frozen_log_to):
+    log = tmp_path / "desktop.log"
+    log.write_text("x" * (window.LOG_LIMIT + 1))
+    frozen_log_to(log)
+    assert (tmp_path / "desktop.log.1").stat().st_size == window.LOG_LIMIT + 1
+    assert log.stat().st_size < 1000
 
 
 def test_desktop_log_keeps_the_apps_events_and_no_library_text(frozen_log):

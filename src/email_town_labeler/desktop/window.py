@@ -287,7 +287,9 @@ def _log_to(path: Path) -> None:
     from ..gmail.auth import _write_private
 
     try:
-        if path.is_file() and path.stat().st_size > LOG_LIMIT:
+        # Only the process that will serve this workbench rotates: a second launch (`open -n`, a second
+        # double-click) would otherwise rename the log the running app is still writing to.
+        if path.is_file() and path.stat().st_size > LOG_LIMIT and not _served_elsewhere(path.parent):
             os.replace(path, path.with_name(path.name + ".1"))
         if not path.exists():
             _write_private(path, "")
@@ -310,6 +312,19 @@ def _log_to(path: Path) -> None:
     # At INFO, Google's sign-in server logged its redirect line with the OAuth `code` and `state`.
     root.setLevel(logging.WARNING)
     logging.getLogger("email_town_labeler").setLevel(logging.INFO)
+
+
+def _served_elsewhere(root: Path) -> bool:
+    """True when another process holds this workbench's lock (it is running and owns desktop.log)."""
+    from ..lock import AlreadyRunning, InstanceLock
+
+    try:
+        InstanceLock(root).acquire().release()
+    except AlreadyRunning:
+        return True
+    except OSError:  # cannot tell: leave the log alone
+        return True
+    return False
 
 
 def _withhold_foreign_text(record: logging.LogRecord) -> bool:

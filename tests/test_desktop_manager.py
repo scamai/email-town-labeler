@@ -678,3 +678,23 @@ def test_list_lines_name_the_account_and_keep_connect_time_out_of_lock_wait(tmp_
         connect = float(line.split("connect ")[1].split(" ms")[0])
         assert wait < 150 <= connect, line
     workbench.close()
+
+
+def test_the_idle_model_is_released_only_after_a_refresh_has_classified(tmp_path):
+    """The poll started a refresh and checked for 10 idle minutes at once, before that refresh had listed
+    anything: new mail at the 10-minute mark ended the worker and respawned it 1-16 s later."""
+    workbench, readers, first, second = _workbench(tmp_path)
+    readers[first], readers[second] = FakeReader([_record("a")]), FakeReader([])
+    events = []
+
+    class Model:
+        def release_if_idle(self):
+            events.append("idle check")
+            return False
+
+    workbench.model = Model()
+    read_ahead = workbench._read_ahead
+    workbench._read_ahead = lambda *args: events.append("classified") or read_ahead(*args)
+    workbench._refresh()
+    assert events == ["classified", "classified", "idle check"], events
+    workbench.close()
