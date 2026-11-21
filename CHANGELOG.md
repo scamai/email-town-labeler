@@ -128,6 +128,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Signing in to Gmail no longer writes the OAuth code into desktop.log.** Google's sign-in helper logged
+  its redirect line, with the one-time authorization `code` and `state`, at INFO; the app wrote every library's
+  INFO lines to desktop.log. The log now keeps the app's own events and other libraries only from WARNING, and
+  those by logger, level and exception type, never their text.
 - **An expired Google sign-in says so.** When Google ends a Gmail sign-in (after 7 days while the app is in
   Google's Testing status, or after a password change), the desktop account now reads "Google sign-in
   expired. Reconnect the account from its ⋯ menu" instead of "Sync failed. Check your sign-in and network
