@@ -128,6 +128,13 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Bulk Trash, Archive and Read no longer set off a storm of list reloads.** Every message written made the list
+  being loaded stale, so it was thrown away and loaded again at once, and that list held the account lock the next
+  write needed: one 53-message trash logged 94 lists and 47 discards and spent 27 of its 45 seconds waiting for the
+  account, and a mark-read queued behind it waited 42 seconds. A list thrown away while writes are queued is now
+  read again once, after the last write; a read or star that succeeded needs no new list at all (the row already
+  shows it), and keeps the message's cached body. desktop.log's action line adds how long it queued and, for each
+  failed message, the error type; an action whose whole result is unknown is logged too.
 - **An expired Google sign-in is no longer retried every minute.** The desktop app rebuilt the account's reader
   on every 60-second check: one more rejected token refresh and one more warning a minute (20 in a row in one
   desktop.log), with the error banner cleared and set again each time. It now stops checking that account until

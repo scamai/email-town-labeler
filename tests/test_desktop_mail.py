@@ -453,8 +453,8 @@ def test_bulk_action_logs_where_its_time_went(tmp_path, caplog):
     shorts = ",".join(i[:8] for i in ids)
     assert lines[0] == f"mail action archive queued: 2 message(s) {shorts}"
     assert re.fullmatch(
-        rf"mail action archive: 2 messages, 2 ok \[{shorts}\], 0 failed \[\] in \d+ ms \(waiting for the "
-        r"account \d+ ms, provider calls \d+ ms, slowest call \d+ ms\)",
+        rf"mail action archive: 2 messages, 2 ok \[{shorts}\], 0 failed \[\] in \d+ ms \(queued \d+ ms, "
+        r"waiting for the account \d+ ms, provider calls \d+ ms, slowest call \d+ ms\)",
         lines[1],
     ), lines
     assert not any(i in line for i in ids for line in lines)  # key prefixes only, never whole keys
@@ -798,4 +798,117 @@ def test_snapshot_tells_the_page_how_long_undo_lasts(tmp_path):
     w, _readers, _first, _second = setup_mail(tmp_path)
     w.undo_seconds = 2.5
     assert w.snapshot()["undo_seconds"] == 2.5
+    w.close()
+
+
+class CountingReader(MailReader):
+    """Counts lists; each list and each write takes a little time, as a real mailbox does."""
+
+    def __init__(self, records, **kw):
+        super().__init__(records, **kw)
+        self.lists = 0
+
+    def list(self, limit):
+        self.lists += 1
+        time.sleep(0.005)
+        return super().list(limit)
+
+    def mutate(self, mid, action):
+        time.sleep(0.005)
+        super().mutate(mid, action)
+
+
+def settle(w, deadline=5.0):
+    end = time.monotonic() + deadline
+    while (w.snapshot()["refreshing"] or w.outbox_jobs) and time.monotonic() < end:
+        time.sleep(0.01)
+
+
+def counting_mail(tmp_path, n=20, **kw):
+    w, readers, first, second = _workbench(tmp_path)  # real refreshes, no undo window
+    readers[first] = CountingReader([_record(f"m{i}") for i in range(n)], **kw)
+    readers[second] = CountingReader([_record("other")])
+    w._refresh()
+    return w, readers[first], readers[second], first
+
+
+def test_a_bulk_action_reads_the_list_again_once_not_once_per_message(tmp_path, caplog):
+    """Each write made the list in flight stale, the stale list was thrown away and read again at once, and
+    that list held the account lock the next write needed: one 53-message trash logged 94 lists and 47
+    discards and spent 27 of its 45 s waiting for the account."""
+    w, mine, other, first = counting_mail(tmp_path)
+    before = mine.lists, other.lists
+    ids = [m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first]
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "trash"})["job_id"]
+        for _ in range(3):  # the minute's check, and other refreshes, arriving while the trash runs
+            w.refresh()
+            time.sleep(0.02)
+        assert finished(w, job)["status"] == "complete"
+        settle(w)
+    assert mine.lists - before[0] <= 5, mine.lists - before[0]  # one per refresh asked for, plus the last
+    assert other.lists - before[1] <= 5
+    assert caplog.text.count("loading again") <= 1, caplog.text
+    assert not [m for m in w.snapshot()["messages"] if m["account_id"] == first]  # the last list is in
+    w.close()
+
+
+def test_a_successful_read_needs_no_new_list_but_a_failed_one_does(tmp_path):
+    w, mine, other, first = counting_mail(tmp_path, n=2)
+    key = next(m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first)
+    before = mine.lists, other.lists
+    assert finished(w, flag_request(w, key, "star"))["status"] == "complete"
+    settle(w)
+    assert (mine.lists, other.lists) == before  # the row already shows it; nothing to read again
+    mine.fail_write = True
+    assert finished(w, flag_request(w, key, "unstar"))["status"] == "failed"
+    settle(w)
+    assert mine.lists == before[0] + 1  # the mailbox is read again to show what it really holds
+    w.close()
+
+
+def test_action_log_names_why_a_message_failed_and_how_long_it_queued(tmp_path, caplog):
+    w, _mine, _other, first = counting_mail(tmp_path, n=2, fail_write=True)
+    ids = [m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first]
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        finished(w, w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "read"})["job_id"])
+        settle(w)
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("private provider text")
+
+        w._mutate_messages = broken
+        job = w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids[:1], "action": "star"})["job_id"]
+        assert finished(w, job)["status"] == "unknown"
+    failed = ",".join(f"{k[:8]}:ProviderError" for k in ids)
+    assert f"0 ok [], 2 failed [{failed}]" in caplog.text and "(queued " in caplog.text
+    assert "mail action star: result unknown (RuntimeError)" in caplog.text
+    assert "private provider text" not in caplog.text and "Fixture failure" not in caplog.text
+    w.close()
+
+
+def test_a_read_or_star_keeps_the_cached_body_and_trash_drops_it(tmp_path):
+    w, _mine, _other, first = counting_mail(tmp_path, n=2)
+    key = next(m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first)
+    w.detail(key)
+    for action in ("read", "star", "unstar"):
+        finished(w, flag_request(w, key, action))
+        assert key in w.bodies, action  # opening it again needs no provider read
+    finished(w, flag_request(w, key, "trash"))
+    assert key not in w.bodies
+    w.close()
+
+
+def test_an_action_waiting_behind_another_logs_its_queue_time(tmp_path, caplog):
+    """A mark-read behind a running bulk trash waited 42 s and its line said 'in 281 ms'."""
+    w, reader, ids = setup_outbox(tmp_path)
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        first = flag_request(w, ids[0], "star")  # held at the provider until the gate opens
+        second = flag_request(w, ids[1], "star")
+        time.sleep(0.3)
+        release_writes(reader)
+        finished(w, first), finished(w, second)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("mail action star: 1")]
+    queued = [float(line.split("(queued ")[1].split(" ms")[0]) for line in lines]
+    assert len(queued) == 2 and queued[0] < 100 and queued[1] >= 250, lines
     w.close()
