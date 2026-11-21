@@ -332,7 +332,7 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
             if path in ("/api/refresh", "/api/load-more"):
-                manager.refresh(more=path == "/api/load-more")
+                manager.refresh(more=path == "/api/load-more", retry_signed_out=True)  # the user asked
                 result = {"ok": True}
             elif path == "/api/folder":
                 result = manager.change_folder(data.get("folder"))
