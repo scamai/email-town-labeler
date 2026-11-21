@@ -622,3 +622,58 @@ def test_an_expired_google_sign_in_says_reconnect_and_is_logged(tmp_path, caplog
     assert "sync inbox failed (RuntimeError)" in caplog.text
     assert "sync inbox failed (RefreshError)" in caplog.text
     workbench.close()
+
+
+def _settle(workbench, deadline=5.0):
+    end = time.monotonic() + deadline
+    while workbench.snapshot()["refreshing"] and time.monotonic() < end:
+        time.sleep(0.01)
+
+
+def test_an_expired_sign_in_is_not_retried_every_minute_until_refresh_or_reconnect(tmp_path, caplog):
+    """Each 60 s check rebuilt the expired account's reader: one rejected token refresh and one warning a
+    minute, the error banner cleared and set again each time (20 in a row in one owner's desktop.log)."""
+    workbench, readers, first, second = _workbench(tmp_path)
+    built = []
+    factory = workbench.reader_factory
+    workbench.reader_factory = lambda account: built.append(account["id"]) or factory(account)
+    readers[first] = ExpiredReader(RefreshError("invalid_grant: Token has been expired or revoked."))
+    readers[second] = FakeReader([_record("fine")])
+    with caplog.at_level("WARNING", logger="email_town_labeler.desktop"):
+        for _ in range(3):  # the scheduled check, three minutes running
+            workbench._refresh()
+    assert built.count(first) == 1, built
+    assert caplog.text.count("sync inbox failed (RefreshError) account " + first[:8]) == 1
+    assert "not checked again until Refresh or Reconnect" in caplog.text
+    assert workbench.account_status[first]["error"].startswith("Google sign-in expired")
+    assert workbench.account_status[second]["status"] == "ready"  # the other account keeps syncing
+
+    workbench.refresh(retry_signed_out=True)  # the Refresh button
+    _settle(workbench)
+    assert built.count(first) == 2
+    workbench.enable(first, True)  # enabling (or reconnecting) the account asks again too
+    _settle(workbench)
+    assert built.count(first) == 3
+    workbench.close()
+
+
+def test_list_lines_name_the_account_and_keep_connect_time_out_of_lock_wait(tmp_path, caplog):
+    workbench, readers, first, second = _workbench(tmp_path)
+    readers[first] = FakeReader([_record("a")])
+    readers[second] = FakeReader([_record("b")])
+    factory = workbench.reader_factory
+
+    def slow_connect(account):
+        time.sleep(0.2)  # a token refresh and getProfile before the first list
+        return factory(account)
+
+    workbench.reader_factory = slow_connect
+    with caplog.at_level("INFO", logger="email_town_labeler.desktop"):
+        workbench._refresh()
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("list inbox (")]
+    assert {line.split()[3].rstrip("):") for line in lines} == {first[:8], second[:8]}, lines
+    for line in lines:
+        wait = float(line.split("lock wait ")[1].split(" ms")[0])
+        connect = float(line.split("connect ")[1].split(" ms")[0])
+        assert wait < 150 <= connect, line
+    workbench.close()

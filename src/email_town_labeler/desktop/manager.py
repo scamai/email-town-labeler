@@ -163,6 +163,9 @@ class Workbench:
         self.synced = {}
         self.folder_rows = {}
         self.readers, self.messages, self.account_status = {}, {}, {}
+        # Accounts whose sign-in Google ended: the 60 s check skips them (each try is one more rejected token
+        # refresh and one more warning) until Refresh, enabling or reconnecting the account asks again.
+        self.signed_out: set[str] = set()
         self.predictions, self.bodies = {}, OrderedDict()
         self.jobs, self.undos = {}, OrderedDict()
         # Mail actions, including open-to-read, run one after another in the background ("outbox"). Until
@@ -413,10 +416,12 @@ class Workbench:
                     # Local edits and clock-only changes need no notify: re-check at least twice a second.
                     self.changed.wait(min(0.5, remaining))
 
-    def refresh(self, *, more=False):
+    def refresh(self, *, more=False, retry_signed_out=False):
         with self.lock:
             if more:
                 self.limit = min(1000, self.limit + 100)
+            if retry_signed_out:
+                self.signed_out.clear()
             if self.stop.is_set():
                 return
             if self.refreshing:
@@ -435,10 +440,12 @@ class Workbench:
                 if not self.stop.is_set():
                     self._account(account)
 
+        with self.lock:
+            signed_out = set(self.signed_out)
         workers = [
             threading.Thread(target=update, args=(a,), daemon=True)
             for a in self.accounts.all()
-            if a["enabled"]
+            if a["enabled"] and a["id"] not in signed_out
         ]
         try:
             for worker in workers:
@@ -465,6 +472,7 @@ class Workbench:
         started = time.perf_counter()
         try:
             with reader_lock:
+                locked, connect = time.perf_counter(), ""
                 reader = self.readers.get(aid)
                 if reader is None:
                     reader = self.reader_factory(account)
@@ -474,18 +482,21 @@ class Workbench:
                         except Exception as e:  # noqa: BLE001 - unusable saved state: read cold
                             log.warning("saved list state not used (%s)", type(e).__name__)
                     self.readers[aid] = reader
+                    connect = f", connect {(time.perf_counter() - locked) * 1000:.0f} ms"
                 kwargs = {} if folder == "inbox" else {"folder": folder}
                 if getattr(reader, "progressive", False):
                     kwargs["progress"] = lambda partial: self._show_partial(aid, partial, folder, epoch)
                 listed = time.perf_counter()
                 records, truncated = reader.list(self.limit, **kwargs)
                 log.info(
-                    "list %s (%s): %d messages in %.0f ms (lock wait %.0f ms)",
+                    "list %s (%s %s): %d messages in %.0f ms (lock wait %.0f ms%s)",
                     folder,
                     account.get("provider", "?"),
+                    aid[:8],  # an opaque random id, not mail data: tells two accounts' lines apart
                     len(records),
                     (time.perf_counter() - listed) * 1000,
-                    (listed - started) * 1000,
+                    (locked - started) * 1000,
+                    connect,
                 )
                 if getattr(reader, "identity", None):
                     try:
@@ -530,12 +541,21 @@ class Workbench:
                 self._touch()
         except Exception as e:  # noqa: BLE001 - account isolation boundary; never expose raw provider errors
             # Never include remote exception strings: subjects/addresses can appear in provider errors.
-            log.warning("sync %s failed (%s)", folder, type(e).__name__)
+            expired = sign_in_expired(e)
+            log.warning(
+                "sync %s failed (%s) account %s%s",
+                folder,
+                type(e).__name__,
+                aid[:8],
+                "; not checked again until Refresh or Reconnect" if expired else "",
+            )
             with self.lock:
+                if expired:
+                    self.signed_out.add(aid)
                 self.account_status[aid].update(
                     status="error",
                     error=safe_error(e)
-                    if isinstance(e, ProviderError) or sign_in_expired(e)
+                    if isinstance(e, ProviderError) or expired
                     else "Sync failed. Check your sign-in and network (" + type(e).__name__ + ")",
                 )
                 self.readers.pop(aid, None)
@@ -1352,6 +1372,7 @@ class Workbench:
     def enable(self, account_id: str, enabled: bool):
         self.accounts.enable(account_id, enabled)
         with self.lock:
+            self.signed_out.discard(account_id)
             self.account_status.setdefault(account_id, {}).update(status="waiting" if enabled else "paused")
             self._touch()
         if enabled:
@@ -1504,6 +1525,7 @@ class Workbench:
                 )
             with self.lock:
                 self.readers.pop(aid, None)
+                self.signed_out.discard(aid)
                 self.jobs[job] = {
                     "id": job,
                     "status": "complete",
@@ -1511,6 +1533,7 @@ class Workbench:
                 }
             self.refresh()
         except Exception as e:  # noqa: BLE001 - async connection jobs report safe errors in the UI
+            log.warning("connecting a %s account failed (%s)", provider, type(e).__name__)
             with self.lock:
                 self.readers.pop(aid, None)
                 self.jobs[job] = {

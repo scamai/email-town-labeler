@@ -128,6 +128,12 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **An expired Google sign-in is no longer retried every minute.** The desktop app rebuilt the account's reader
+  on every 60-second check: one more rejected token refresh and one more warning a minute (20 in a row in one
+  desktop.log), with the error banner cleared and set again each time. It now stops checking that account until
+  **Refresh**, enabling it again or **Reconnect**. desktop.log's list and sync-failure lines name the account by
+  the first 8 characters of its random id, a list's `lock wait` no longer includes connecting (shown as
+  `connect N ms`), and a failed account connection is logged.
 - **The background service writes its log once.** Every line went both to the rotating
   `logs/email-town-labeler.log` and to stderr, which launchd appends to `logs/service.err.log` and never rotates (a
   byte-identical 4.3 MB copy after 27 days on one Mac). Run as a service, stderr now gets warnings, errors and
