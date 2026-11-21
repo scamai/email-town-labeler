@@ -128,6 +128,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **An expired Google sign-in says so.** When Google ends a Gmail sign-in (after 7 days while the app is in
+  Google's Testing status, or after a password change), the desktop account now reads "Google sign-in
+  expired. Reconnect the account from its ⋯ menu" instead of "Sync failed. Check your sign-in and network
+  (RefreshError)", and every failed sync is written to desktop.log.
 - **Mail waiting for the model, and your own Sent mail, no longer read as People.** The reader says
   **Sorting…** for the first and **Not classified** for the second, and Sent mail is not counted or listed
   under People.

@@ -24,6 +24,7 @@ Still glance over the output before posting. See [CONTRIBUTING.md](../CONTRIBUTI
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Stops working after about a week; `invalid_grant`, "Token has been expired or revoked" | External OAuth app in **Testing** status: Google expires its refresh tokens after 7 days | `email-town-labeler login`. To stop it recurring, publish the app to **In production**: [google-cloud-setup.md, step 4](google-cloud-setup.md#4-audience-testing-vs-production-external-only). |
+| Desktop app: "Google sign-in expired. Reconnect the account from its ⋯ menu" | The same 7-day expiry, or a password change | Account **⋯** → **Reconnect** and sign in again. The account's last list stays on screen until then. |
 | `invalid_grant` right after changing your Google password | Google revokes tokens with Gmail scopes on password change | `email-town-labeler login` |
 | `access_denied`, "has not completed the Google verification process" | Testing status and your address is not a test user | Add it under **Audience > Test users**, or publish the app. |
 | "Google hasn't verified this app" | Expected for your own unverified app | **Advanced > Go to email-town-labeler (unsafe)** |

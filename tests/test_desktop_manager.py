@@ -586,3 +586,39 @@ def test_a_refused_sender_rule_changes_nothing(tmp_path):
         assert (after["category"], after["source"]) == (row["category"], row["source"])
     assert workbench.sender_rules == {}
     workbench.close()
+
+
+class RefreshError(Exception):  # stands in for google.auth.exceptions.RefreshError, matched by name
+    def __init__(self, *args, retryable=False):
+        super().__init__(*args)
+        self.retryable = retryable
+
+
+class ExpiredReader(FakeReader):
+    def __init__(self, error):
+        super().__init__([])
+        self.error = error
+
+    def list(self, limit):
+        raise self.error
+
+
+def test_an_expired_google_sign_in_says_reconnect_and_is_logged(tmp_path, caplog):
+    workbench, readers, first, second = _workbench(tmp_path)
+    try:
+        raise RefreshError("invalid_grant: Token has been expired or revoked.")
+    except RefreshError as cause:
+        wrapped = RuntimeError("wrapped")
+        wrapped.__cause__ = cause
+    readers[first] = ExpiredReader(wrapped)  # a refresh deep inside a request arrives wrapped
+    readers[second] = ExpiredReader(RefreshError("server busy", retryable=True))
+    with caplog.at_level("WARNING", logger="email_town_labeler.desktop"):
+        workbench._refresh()
+    status = workbench.account_status
+    assert status[first]["status"] == "error"
+    assert status[first]["error"] == "Google sign-in expired. Reconnect the account from its ⋯ menu"
+    assert "Token has been" not in status[first]["error"]
+    assert status[second]["error"].startswith("Sync failed.")  # retryable: not a reason to reconnect
+    assert "sync inbox failed (RuntimeError)" in caplog.text
+    assert "sync inbox failed (RefreshError)" in caplog.text
+    workbench.close()
