@@ -121,9 +121,10 @@ email-town-labeler desktop --no-browser
 | Outlook.com / Hotmail / Microsoft 365 | 暂时不能 | 需要自己在 Microsoft Entra 注册公共客户端应用，把应用 ID 填进 **Use your own Microsoft app registration**；普通用户做不了，等后续版本内置 |
 | 网易 163 / 126 | 不能 | 需要 IMAP ID 握手，尚未支持 |
 
-点“Google / Gmail”浏览器登录（不需要应用专用密码、也不用开两步验证），要等发布版内置 Google 登录客户端，并通过 Google 对
-`gmail.modify` 权限的审核。在那之前，用 `scripts/build_app.py --google-client` 构建的内部版本只允许项目里登记的测试用户登录，
-且每 7 天要在账户的“⋯”里重新授权一次（[原因](google-cloud-setup.md#4-audience-testing-vs-production-external-only)）。
+点“Google / Gmail”浏览器登录（不需要应用专用密码、也不用开两步验证），要等 Google 审核通过 `gmail.modify` 权限后才会进入发布版。
+用 `scripts/build_app.py --google-client` 构建的版本现在就能用：从 2026-11-21 起，项目的登录客户端已发布（“In production”）但未经审核，
+所以登录时 Google 会显示“Google hasn't verified this app”（点 **Advanced → Go to Email Town (unsafe)**）；审核前，这个客户端
+总共最多只能让 100 个 Google 账号登录；登录也不再每 7 天过期（[原因](google-cloud-setup.md#4-audience-testing-vs-production-external-only)）。
 非 Google 邮箱完全不受 Google 审核影响。
 
 已内置 Gmail、iCloud、Yahoo、AOL、Fastmail、Zoho、QQ 邮箱的建议设置，可在“Server settings”中修改。Outlook.com、Hotmail、Live

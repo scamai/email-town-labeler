@@ -24,8 +24,11 @@ python scripts/release_macos.py --output dist/release
 Google Cloud project (`scamai-email-town`, External audience, scope `gmail.modify`). The build copies it into
 the package as `desktop/sign_in.json`, deletes it from the source tree afterwards, and fails if the app does not
 carry it; the repository is public, so the file is git-ignored and never committed. Without it, the app ships
-no Google sign-in and users import their own client file or use app passwords. Until Google verifies the
-project, only its test users (Google Auth Platform → Audience, at most 100) can sign in.
+no Google sign-in and users import their own client file or use app passwords. Since 2026-11-21 the project is
+**In production but unverified**: anyone running a build that carries the client can sign in after Google's
+"unverified app" warning, and every new Google account counts against a 100-user cap that lasts the project's
+lifetime and cannot be reset. Ship the client in a public release only when that is intended; **Back to testing**
+(Google Auth Platform → Audience) limits sign-in to test users again, with 7-day sign-ins.
 
 The result is `dist/release/Email-Town-<version>-macos-<arch>.dmg` and `release-receipt.json`. Add
 `--no-notarize` to sign and image a build without submitting it to Apple; its receipt says it is not notarized.
