@@ -128,6 +128,11 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **A second launch no longer rotates the running app's log, and the model is not ended just before it is
+  needed.** desktop.log was rotated (above 1 MB) before the process knew whether another instance was already
+  serving the workbench, so a second launch could rename the log the running app was writing to. And the
+  10-idle-minute check ran right after starting a refresh, before it had listed anything: new mail at the
+  10-minute mark ended the model worker and started it again 1 to 16 seconds later (5 times in one log).
 - **Opening mail while an account is busy no longer stalls the reading pane.** After a prefetch the page asked
   for each neighbouring message one by one, even when the server had skipped that busy account. Each such read
   waited for the account (up to 20 s, then failed) and held one of the page's few connections: right after one
