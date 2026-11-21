@@ -245,3 +245,28 @@ def test_uninstall_stops_the_unit_before_deleting_its_file(tmp_path):
 
 def test_systemd_unit_sets_a_private_umask(tmp_path):
     assert "UMask=0077" in service.systemd_unit(target("linux", tmp_path)).splitlines()
+
+
+def test_install_waits_for_the_old_job_to_stop_before_failing(tmp_path):
+    """Reinstalling a running service: bootout returned while the old job was still stopping, bootstrap
+    failed with "5: Input/output error", and install reported "service not installed" with the plist
+    written but nothing loaded (seen on the owner's Mac, 2026-11-21)."""
+    t = target("macos", tmp_path)
+    calls, sleeps = [], []
+
+    def run(args, **kw):
+        calls.append(args[1])
+        busy = args[1] == "bootstrap" and calls.count("bootstrap") <= 3
+        return SimpleNamespace(
+            returncode=5 if busy else 0, stdout="", stderr="Bootstrap failed: 5" if busy else ""
+        )
+
+    assert service.install(t, run=run, echo=lambda s: None, sleep=sleeps.append)
+    assert calls == ["bootout", "bootstrap", "bootstrap", "bootstrap", "bootstrap"] and sleeps == [1.0] * 3
+
+    def never(args, **kw):  # a bootstrap that keeps failing still fails, after its retries
+        return SimpleNamespace(returncode=5 if args[1] == "bootstrap" else 0, stdout="", stderr="5")
+
+    sleeps.clear()
+    assert not service.install(t, run=never, echo=lambda s: None, sleep=sleeps.append)
+    assert len(sleeps) == 30

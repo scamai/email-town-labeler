@@ -128,6 +128,10 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Reinstalling a running service on macOS no longer leaves it stopped.** `service install` booted the old job
+  out and loaded the new one at once; while the old process was still stopping, launchd refused with
+  "Bootstrap failed: 5: Input/output error", and install reported "service not installed" with nothing
+  running. It now tries again for up to 30 seconds (launchd kills a job that has not stopped after 20).
 - **A second launch no longer rotates the running app's log, and the model is not ended just before it is
   needed.** desktop.log was rotated (above 1 MB) before the process knew whether another instance was already
   serving the workbench, so a second launch could rename the log the running app was writing to. And the
