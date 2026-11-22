@@ -83,8 +83,11 @@ docker build -f docker/Dockerfile -t email-town-labeler:dev .   # container imag
 CI runs lint, a format check, tests, a wheel build and a smoke test of the installed wheel on
 Ubuntu with Python 3.10, 3.11, 3.12 and 3.13 and on macOS and Windows with 3.10 and 3.12, plus a
 Docker build. It runs on every push to `main` and on pull requests; a pull request that is already
-merged when its run reads its state leaves the tests to the run on `main`. Please make
-sure `pytest`, `ruff check .` and `ruff format --check .` pass locally.
+merged when its run reads its state leaves the tests to the run on `main`. The macOS lanes run on
+the project's own Mac, never on a GitHub-hosted runner, and only for `main` (a push or a manual
+run): a pull request runs Ubuntu and Windows, and a macOS failure shows on `main` after the merge.
+If your change touches macOS-specific code, run the tests on a Mac before you open the pull request.
+Please make sure `pytest`, `ruff check .` and `ruff format --check .` pass locally.
 
 Tests that need an optional extra must skip cleanly when it is missing
 (`pytest.importorskip("sentence_transformers")`).

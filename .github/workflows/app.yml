@@ -2,9 +2,14 @@ name: Desktop app
 
 # Builds the double-click Email Town app (scripts/build_app.py, PyInstaller) on each platform, smoke-tests
 # the build (scripts/smoke_app.py: bundle self-check, a window on a fresh temporary home, clean quit, no
-# process left) and uploads the zips. Never on push or pull_request: hosted minutes are a cost decision
-# (a macOS job bills at 10x). Run it from Actions > Desktop app > Run workflow, or push a v* tag, which
-# also attaches the Windows and Linux zips to that GitHub release. The same two scripts run locally on your own machine.
+# process left) and uploads the zips. Never on push or pull_request. Run it from Actions > Desktop app > Run
+# workflow, or push a v* tag, which also attaches the Windows and Linux zips to that GitHub release. The same
+# two scripts run locally on your own machine.
+#
+# Windows and Linux build here, on GitHub's runners. macOS builds on our own Mac (macserver), never on a
+# GitHub-hosted runner: job build-macos calls app-macos.yml as it is on main, because the Mac's runner group
+# admits that file only at refs/heads/main. It still builds the tree this run is for (the tag, or main); a
+# manual run from any other branch builds Windows and Linux only.
 
 on:
   workflow_dispatch:
@@ -26,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, windows-latest, ubuntu-latest]  # macos-14 images are retired (job cancelled, 2026-11-08)
+        os: [windows-latest, ubuntu-latest]  # macOS: job build-macos, on our own Mac
     defaults:
       run:
         shell: bash
@@ -35,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # uv's managed CPython, as in a local `uv` build: its OpenSSL reads macOS's /etc/ssl/cert.pem.
+      # uv's managed CPython, as in a local `uv` build.
       - uses: astral-sh/setup-uv@v6
 
       - name: GTK 3 and WebKitGTK 4.1 (Linux)
@@ -61,7 +66,6 @@ jobs:
       - name: Smoke test
         run: |
           case "$RUNNER_OS" in
-            macOS)   "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town.app/Contents/MacOS/Email Town" ;;
             Windows) "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town/Email Town.exe" ;;
             Linux)   xvfb-run -a "$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- dist/email-town/email-town ;;
           esac
@@ -82,6 +86,13 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
+
+  # Keep app-macos.yml's steps in step with the build job above.
+  build-macos:
+    name: build (macOS, on macserver)
+    uses: scamai/email-town-labeler/.github/workflows/app-macos.yml@main
+    permissions:
+      contents: read
 
   release:
     name: attach to the GitHub release

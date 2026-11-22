@@ -72,7 +72,8 @@ build at 11 s, the app at 136 MB and the zip at 49 MB. `smoke_app.py` runs the s
 checks the server, a second start and a clean quit, and never touches your mail data. Linux also needs
 `pywebview[gtk]` (PyGObject) and the GTK development packages; the
 [Desktop app workflow](../.github/workflows/app.yml) lists them. That workflow builds and smoke-tests all
-three platforms; it runs only when started by hand or by a `v*` tag.
+three platforms; it runs only when started by hand or by a `v*` tag. Its macOS build runs on the project's own
+Mac ([app-macos.yml](../.github/workflows/app-macos.yml)), only for `main` or a `v*` tag.
 
 ## Open from source
 

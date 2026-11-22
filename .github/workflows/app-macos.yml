@@ -1,0 +1,70 @@
+name: Desktop app (macOS)
+
+# The macOS half of app.yml (Desktop app): build the app, smoke-test it and upload the zip, on our own Mac
+# (macserver), never on a GitHub-hosted runner (owner, 2026-11-21). app.yml calls this file as it is on main
+# (`uses: scamai/email-town-labeler/.github/workflows/app-macos.yml@main`): the Mac's runner group admits only
+# workflow files pinned to refs/heads/main, and for a called workflow it checks the called file's ref, not the
+# caller's. A tag run of app.yml still builds the tag: checkout reads the caller's ref and commit.
+#
+# The condition on the job is read from main's copy of this file, whoever calls it: it runs only for this
+# repository, on a push (main or a v* tag) or a manual run from main or a tag, never for a pull request, so
+# code from a fork never reaches the Mac. The zip is a test artifact: the macOS release asset is the signed,
+# notarized disk image (docs/releasing.md). Keep the steps in step with app.yml's build job.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (macOS)
+    if: >-
+      github.repository == 'scamai/email-town-labeler'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: [self-hosted, macOS, macserver-public]
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    env:
+      EMAIL_TOWN_LABELER_NO_UPDATE_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      # uv's managed CPython, as in a local `uv` build: its OpenSSL reads macOS's /etc/ssl/cert.pem. It installs in
+      # the runner user's home; setup-python would need admin rights on a self-hosted Mac.
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install the app extra and the build tools
+        run: |
+          # uv's Python in the runner's tool cache, not the Mac account's shared ~/.local/share/uv
+          export UV_PYTHON_INSTALL_DIR="$RUNNER_TOOL_CACHE/uv-python"
+          uv venv --python-preference only-managed --python 3.12 .venv
+          echo "PY=.venv/bin/python" >> "$GITHUB_ENV"
+          uv pip install --python .venv/bin/python ".[app]" --group app-build
+
+      - name: Build
+        run: '"$PY" scripts/build_app.py --zip'
+
+      - name: Smoke test
+        run: '"$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town.app/Contents/MacOS/Email Town"'
+
+      # The app's own log (desktop.log) and the smoke log explain a failed smoke test; no mail is in them.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-logs-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/smoke-home/**/*.log
+            ${{ runner.temp }}/smoke-home/**/*.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: email-town-${{ runner.os }}
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
