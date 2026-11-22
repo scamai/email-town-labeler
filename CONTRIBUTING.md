@@ -113,6 +113,8 @@ build its real opener). A test of the update check turns it on itself with a fak
 1. For anything larger than a small fix, open an issue first to agree on the approach.
 2. Keep PRs focused; include tests.
 3. Fill in the PR template, including the privacy checklist.
+4. A pull request merges when the `ci-ok` check passes: it sums up every CI lane of the run (lint, format, tests,
+   wheel, Docker). `main` does not require the branch to be up to date with it.
 
 ## Proposing a model
 

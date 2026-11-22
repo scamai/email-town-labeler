@@ -201,3 +201,47 @@ jobs:
           docker run --rm email-town-labeler:ci --version
           docker run --rm email-town-labeler:ci --help
           test "$(docker run --rm --entrypoint id email-town-labeler:ci -u)" != "0"
+
+  # The one check branch protection requires (ruleset on main). It passes only when every lane of this run passed,
+  # or was skipped by design and for that design's reason: pr-state off pull requests, the tests of a pull request
+  # that was already merged, the Mac lanes anywhere but a push or manual run on main. Anything else (a failure, a
+  # cancellation, a lane skipped because the run was cancelled before it started) fails it. It runs with always(),
+  # never !cancelled(): a cancelled run must report a failure here, because a skipped required check counts as passed.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [pr-state, test, test-macos, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every lane passed or was skipped by design
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          PR_MERGED: ${{ needs.pr-state.outputs.merged == 'true' }}
+        run: |
+          on_pr=false; [ "$GITHUB_EVENT_NAME" = pull_request ] && on_pr=true
+          mac_run=false
+          if [ "$GITHUB_REPOSITORY" = scamai/email-town-labeler ] && [ "$GITHUB_REF" = refs/heads/main ] \
+             && { [ "$GITHUB_EVENT_NAME" = push ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; }; then mac_run=true; fi
+          may_skip() {  # is a skip of this lane by design in this run?
+            case "$1" in
+              pr-state)   [ "$on_pr" = false ] ;;
+              test)       [ "$PR_MERGED" = true ] ;;
+              test-macos) [ "$mac_run" = false ] ;;
+              *)          false ;;
+            esac
+          }
+          [ "$(jq 'length' <<< "$NEEDS")" -gt 0 ] || { echo "::error::no lanes to check"; exit 1; }
+          bad=()
+          while IFS=' ' read -r job result; do
+            echo "$job: $result"
+            case "$result" in
+              success) ;;
+              skipped) may_skip "$job" || bad+=("$job (skipped, but it should have run)") ;;
+              *)       bad+=("$job ($result)") ;;
+            esac
+          done < <(jq -r 'to_entries[] | "\(.key) \(.value.result)"' <<< "$NEEDS")
+          if [ "${#bad[@]}" -gt 0 ]; then
+            echo "::error::not passed: ${bad[*]}"
+            exit 1
+          fi
