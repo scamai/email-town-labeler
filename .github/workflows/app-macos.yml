@@ -40,6 +40,8 @@ jobs:
 
       - name: Install the app extra and the build tools
         run: |
+          # uv's Python in the runner's tool cache, not the Mac account's shared ~/.local/share/uv
+          export UV_PYTHON_INSTALL_DIR="$RUNNER_TOOL_CACHE/uv-python"
           uv venv --python-preference only-managed --python 3.12 .venv
           echo "PY=.venv/bin/python" >> "$GITHUB_ENV"
           uv pip install --python .venv/bin/python ".[app]" --group app-build

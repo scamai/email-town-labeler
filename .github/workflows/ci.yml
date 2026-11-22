@@ -168,6 +168,8 @@ jobs:
 
       - name: Python ${{ matrix.python }} (uv-managed, first on PATH)
         run: |
+          # in the runner's tool cache, not the Mac account's shared ~/.local/share/uv (whose 3.10 lacks venv)
+          export UV_PYTHON_INSTALL_DIR="$RUNNER_TOOL_CACHE/uv-python"
           uv venv --seed --python-preference only-managed --python "${{ matrix.python }}" "$RUNNER_TEMP/py"
           echo "$RUNNER_TEMP/py/bin" >> "$GITHUB_PATH"
 
