@@ -81,9 +81,9 @@ docker build -f docker/Dockerfile -t email-town-labeler:dev .   # container imag
 ```
 
 CI runs lint, a format check, tests, a wheel build and a smoke test of the installed wheel on
-Ubuntu with Python 3.10, 3.11, 3.12 and 3.13 and on macOS and Windows with 3.10 and 3.13, plus a
+Ubuntu with Python 3.10, 3.11, 3.12 and 3.13 and on macOS and Windows with 3.10 and 3.12, plus a
 Docker build. It runs on every push to `main` and on pull requests; a pull request that is already
-merged when its run starts leaves the tests to the run on `main`. Please make
+merged when its run reads its state leaves the tests to the run on `main`. Please make
 sure `pytest`, `ruff check .` and `ruff format --check .` pass locally.
 
 Tests that need an optional extra must skip cleanly when it is missing

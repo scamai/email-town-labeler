@@ -1,8 +1,9 @@
 name: CI
 
-# The test matrix runs once per change, on the tree that lands: the push run on main. A pull request's run
-# tests it too, unless the PR is already merged when that run starts (most PRs here merge seconds after they
-# open); then only main's run tests it, instead of both runs testing the same change side by side.
+# The test matrix runs at least once per change, on the tree that lands: the push run on main. A pull
+# request's run tests it too, unless the PR is already merged when that run's first job reads its state
+# (most PRs here merge seconds after they open). So a change is usually tested once and at most twice,
+# instead of always twice, side by side.
 
 on:
   push:
@@ -36,7 +37,10 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           # an API error reads as "not merged", so the tests run as they would without this job
-          merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .merged 2>/dev/null) || merged=false
+          merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .merged) || {
+            echo "::warning::could not read the state of #$PR; running the tests"
+            merged=false
+          }
           echo "merged=$merged" >> "$GITHUB_OUTPUT"
           if [ "$merged" = true ]; then
             echo "::notice::#$PR is already merged: the push run on main tests the tree that landed, so the tests are skipped here"
@@ -53,17 +57,18 @@ jobs:
       # every lane reports: a Windows failure must not hide what Linux and macOS say about the same commit
       fail-fast: false
       matrix:
-        # Linux runs every Python in pyproject's classifiers. macOS and Windows run the oldest and newest
-        # supported: their lanes test platform code (service.py, lock.py, paths, file modes, encodings), and
-        # every macOS or Windows test failure sampled from Oct 23-Nov 21 failed all of that platform's lanes at once.
-        # The desktop app bundles 3.12 and is built and smoke-tested on all three systems by app.yml.
+        # Linux runs every Python in pyproject's classifiers. macOS and Windows run two: 3.10, the oldest the
+        # README promises on every system, and 3.12, the interpreter app.yml bundles into the desktop app
+        # (`uv venv --python 3.12`). Their lanes test platform code (service.py, lock.py, paths, file modes,
+        # encodings). In the 26 failed runs whose jobs were read (Oct 23-Nov 21), every macOS or Windows test
+        # failure failed all of that system's Python lanes; the one single-lane failure was a setup-python download.
         os: [ubuntu-latest]
         python: ["3.10", "3.11", "3.12", "3.13"]
         include:
           - { os: macos-latest, python: "3.10" }
-          - { os: macos-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.12" }
           - { os: windows-latest, python: "3.10" }
-          - { os: windows-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.12" }
     defaults:
       run:
         shell: bash
