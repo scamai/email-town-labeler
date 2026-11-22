@@ -155,14 +155,17 @@ tests that skip without the extra, and documentation in `docs/models.md`.
    hints, and the test that checks that hint); set or replace the `@vX.Y.Z` suffix before the
    closing quote. Unpinned, they install `main`, which after step 4 is a
    development version, and a development version never runs the update check.
-2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` checks the tag matches the
+2. Tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` first runs CI (`ci.yml`) on the
+   tagged tree (Linux and Windows lanes and the Docker build; nothing is published if it fails; the
+   commit's macOS lanes ran on `main`), then checks the tag matches the
    version, publishes to PyPI via trusted publishing, pushes images to GHCR, and creates a
    GitHub release with `latest.json` (`{"version": "X.Y.Z"}`, what installed copies' update
    check fetches), then checks that `releases/latest` serves it. A tag that is not `vX.Y.Z` gets
    no `latest.json` and is published as a pre-release, so `releases/latest` stays on the last
    `X.Y.Z` (the same check confirms it).
 3. Build, sign and notarize the macOS app on a Mac with the company Developer ID and attach the image to the
-   release (`docs/releasing.md`); the tag's `Desktop app` workflow attaches the Windows and Linux zips. Give the
+   release (`docs/releasing.md`); the tag's `Desktop app` workflow attaches the Windows and Linux zips once
+   `release.yml` has created the release. Give the
    release a title and notes from the CHANGELOG section, as `gh release edit vX.Y.Z --title ... --notes-file ...`.
 4. Right after the release, set `__version__` on `main` to the next patch version with `.dev0`
    (`X.Y.(Z+1).dev0`): installs from `main` are then development versions, which never run the

@@ -13,6 +13,14 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # release.yml runs this workflow on the tagged tree before it publishes anything. The macOS lanes skip there
+  # (their runner admits this file only at refs/heads/main): the tagged commit's macOS result is its run on main.
+  workflow_call:
+    inputs:
+      dist-artifact:
+        description: Name of the uploaded dist/ artifact (release.yml uploads its own `dist`)
+        type: string
+        default: dist
 
 permissions:
   contents: read
@@ -136,7 +144,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
         with:
-          name: dist
+          name: ${{ inputs.dist-artifact || 'dist' }}
           path: dist/
           retention-days: 7
 

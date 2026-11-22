@@ -8,8 +8,21 @@ permissions:
   contents: read
 
 jobs:
+  # Nothing is published from a tree that fails CI: lint, format, tests, wheel build and smoke on Linux (3.10-3.13)
+  # and Windows (3.10, 3.12), and the Docker build, all on the tagged commit. Every publishing job needs build,
+  # which needs this. app.yml attaches its zips only after this workflow has published the release.
+  test:
+    name: CI on the tagged tree
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: read  # ci.yml's pull-request-state job asks for it (it skips on a tag)
+    with:
+      dist-artifact: ci-dist
+
   build:
     name: build distributions
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

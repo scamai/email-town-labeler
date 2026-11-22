@@ -3,8 +3,8 @@ name: Desktop app
 # Builds the double-click Email Town app (scripts/build_app.py, PyInstaller) on each platform, smoke-tests
 # the build (scripts/smoke_app.py: bundle self-check, a window on a fresh temporary home, clean quit, no
 # process left) and uploads the zips. Never on push or pull_request. Run it from Actions > Desktop app > Run
-# workflow, or push a v* tag, which also attaches the Windows and Linux zips to that GitHub release. The same
-# two scripts run locally on your own machine.
+# workflow, or push a v* tag, which also attaches the Windows and Linux zips to that GitHub release once
+# release.yml has tested the tag and published the release. The same two scripts run locally on your own machine.
 #
 # Windows and Linux build here, on GitHub's runners. macOS builds on our own Mac (macserver), never on a
 # GitHub-hosted runner: job build-macos calls app-macos.yml as it is on main, because the Mac's runner group
@@ -99,7 +99,9 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
+      actions: read     # to follow release.yml's run for this tag
       contents: write
     steps:
       # Windows and Linux only. The macOS release asset is the disk image signed with the company Developer ID
@@ -113,19 +115,32 @@ jobs:
         with:
           name: email-town-Linux
           path: dist
-      # release.yml creates the same release (wheels, latest.json); whichever workflow gets there second
-      # uploads into it. If this one is first it creates the release by release.yml's rule: a tag that is
-      # not vX.Y.Z is a pre-release and never releases/latest. latest.json arrives with release.yml.
+      # release.yml runs CI on the tagged tree and only then creates the release (wheels, latest.json). This job
+      # never creates it: it waits for that run and adds the zips to its release, so a tag whose tests fail
+      # publishes nothing, and releases/latest never points at a release without latest.json.
+      - name: Wait for release.yml to publish ${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for _ in $(seq 1 120); do  # 30 s apart, up to 60 min; a release run takes about 20
+            run=$(gh run list --workflow release.yml --branch "$GITHUB_REF_NAME" --event push --limit 1 \
+                    --json databaseId,status,conclusion --jq '.[0] // empty | "\(.databaseId) \(.status) \(.conclusion)"') \
+              || run=""  # an API error is not an answer: ask again
+            read -r id status conclusion <<< "$run"
+            if [ "$status" = completed ]; then
+              if [ "$conclusion" = success ]; then echo "release.yml run $id succeeded"; exit 0; fi
+              echo "::error::release.yml run $id for $GITHUB_REF_NAME concluded '$conclusion': nothing is published, so the zips are not attached"
+              exit 1
+            fi
+            sleep 30
+          done
+          echo "::error::release.yml has not finished for $GITHUB_REF_NAME after 60 min (last: ${run:-no run})"
+          exit 1
       - name: Attach the app zips
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           ls -la dist
-          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
-          else
-            PRE=()
-            [[ "${GITHUB_REF_NAME#v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || PRE=(--prerelease --latest=false)
-            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md." "${PRE[@]}"
-          fi
+          gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
