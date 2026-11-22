@@ -1,5 +1,9 @@
 name: CI
 
+# The test matrix runs once per change, on the tree that lands: the push run on main. A pull request's run
+# tests it too, unless the PR is already merged when that run starts (most PRs here merge seconds after they
+# open); then only main's run tests it, instead of both runs testing the same change side by side.
+
 on:
   push:
     branches: [main]
@@ -10,19 +14,56 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request cancels its older run. Every run on main (push, workflow_dispatch) has a
+  # group of its own and is never cancelled, so each merged tree gets a result.
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  pr-state:
+    name: pull request state
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: read
+    outputs:
+      merged: ${{ steps.state.outputs.merged }}
+    steps:
+      - id: state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # an API error reads as "not merged", so the tests run as they would without this job
+          merged=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .merged 2>/dev/null) || merged=false
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+          if [ "$merged" = true ]; then
+            echo "::notice::#$PR is already merged: the push run on main tests the tree that landed, so the tests are skipped here"
+          fi
+
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
+    needs: pr-state
+    # runs on push and workflow_dispatch (pr-state skipped) and on an unmerged pull request
+    if: ${{ !cancelled() && needs.pr-state.outputs.merged != 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
+      # every lane reports: a Windows failure must not hide what Linux and macOS say about the same commit
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.10", "3.12", "3.13"]
+        # Linux runs every Python in pyproject's classifiers. macOS and Windows run the oldest and newest
+        # supported: their lanes test platform code (service.py, lock.py, paths, file modes, encodings), and
+        # every macOS or Windows test failure sampled from Oct 23-Nov 21 failed all of that platform's lanes at once.
+        # The desktop app bundles 3.12 and is built and smoke-tested on all three systems by app.yml.
+        os: [ubuntu-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - { os: macos-latest, python: "3.10" }
+          - { os: macos-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.10" }
+          - { os: windows-latest, python: "3.13" }
     defaults:
       run:
         shell: bash

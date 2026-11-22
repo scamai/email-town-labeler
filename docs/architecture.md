@@ -155,4 +155,4 @@ model: no network, no weights, no real mail. See
 ## Cross-platform rules
 
 `pathlib` everywhere; paths from `platformdirs`; no shell-isms; OS-specific code only in
-`service.py`. CI runs on Linux, macOS and Windows with Python 3.10, 3.12 and 3.13.
+`service.py`. CI runs on Linux with Python 3.10 to 3.13, and on macOS and Windows with 3.10 and 3.13.
