@@ -33,7 +33,11 @@ a zip downloaded from this repository's Releases page:
 
 The window shows the same workbench as the browser version. Links to the original message in Gmail or
 Outlook, the Microsoft sign-in page and Google sign-in open in your default browser; attachment downloads
-ask where to save. **Closing the window stops the workbench** and its model process. If
+ask where to save. **On macOS, closing the window keeps Email Town running in the background**: it keeps
+syncing, sorting and finishing the mail actions you started, and its Dock icon brings the window back.
+**Quitting** (<kbd>⌘Q</kbd>, or Quit in the Dock) first finishes the mail actions already started, so a Trash
+of hundreds of messages runs to the end, then stops the workbench and its model process; it gives up only when
+nothing has finished for 90 seconds (offline). On Windows and Linux, closing the window quits the same way. If
 `email-town-labeler desktop` already serves the same data folder, the app opens a window on it instead and
 leaves it running when you close the window.
 
@@ -291,7 +295,8 @@ Apple Mail (Ctrl on Windows and Linux).
 | <kbd>Esc</kbd> | Clear the selection; back to the list; close a menu or dialog |
 
 In the macOS app the menus also give <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> (undo, redo), <kbd>⌘X</kbd> <kbd>⌘C</kbd>
-<kbd>⌘V</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘H</kbd> (hide) and <kbd>⌘Q</kbd> (quit). The window has
+<kbd>⌘V</kbd>, <kbd>⌘M</kbd> (minimize), <kbd>⌘W</kbd> (close; keeps running), <kbd>⌘H</kbd> (hide) and
+<kbd>⌘Q</kbd> (quit). The window has
 no right-click menu; use the keyboard to copy and paste.
 
 ## Appearance

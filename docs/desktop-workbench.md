@@ -31,8 +31,11 @@ v0.1.2 没有 Windows 文件（它的 Windows 构建未通过发布检查）；v
 - **Linux：** 在解压出的 `email-town` 文件夹中运行 `email-town`。
 
 窗口里显示的工作台和浏览器版相同。跳到 Gmail/Outlook 原邮件的链接、Microsoft 登录页面和 Google
-登录会在默认浏览器中打开；下载附件时会询问保存位置。**关闭窗口会停止工作台**及其模型进程。
-如果 `email-town-labeler desktop` 已经在同一个数据目录运行，应用会在它上面打开窗口，关闭窗口后它继续运行。
+登录会在默认浏览器中打开；下载附件时会询问保存位置。**在 macOS 上关闭窗口后，Email Town 留在后台**：继续同步、
+分类并完成你已经开始的邮件操作，点 Dock 图标即可回到窗口。**退出**（<kbd>⌘Q</kbd>，或在 Dock 中选“退出”）会先完成已经
+开始的邮件操作（几百封的批量删除也会做完），再停止工作台及其模型进程；只有 90 秒内一封都没完成（离线）时才放弃。
+Windows 和 Linux 上关闭窗口即退出，同样先完成这些操作。如果 `email-town-labeler desktop` 已经在同一个数据目录运行，
+应用会在它上面打开窗口，关闭窗口后它继续运行。
 
 应用与 CLI 使用相同的配置和数据目录（`EMAIL_TOWN_LABELER_HOME` 同样可以改变位置）。模型不在应用里：
 没有 `config.toml` 或其中没有 `[model] ref` 时，工作台使用已发布的本机模型 `town-modernbert-int8`，在第一次分类邮件时下载一次并校验
@@ -212,7 +215,7 @@ IMAP 发信需要额外填写 SMTP 服务器，并且只走 TLS（STARTTLS 或�
 | <kbd>Esc</kbd> | 取消选择；返回列表；关闭菜单或对话框 |
 
 macOS 应用的菜单另外提供 <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd>（撤销、重做）、<kbd>⌘X</kbd> <kbd>⌘C</kbd> <kbd>⌘V</kbd>、
-<kbd>⌘M</kbd>（最小化）、<kbd>⌘H</kbd>（隐藏）和 <kbd>⌘Q</kbd>（退出）。窗口没有右键菜单，请用键盘复制粘贴。
+<kbd>⌘M</kbd>（最小化）、<kbd>⌘W</kbd>（关闭窗口，应用留在后台）、<kbd>⌘H</kbd>（隐藏）和 <kbd>⌘Q</kbd>（退出）。窗口没有右键菜单，请用键盘复制粘贴。
 
 ## 语言与颜色
 

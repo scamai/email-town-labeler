@@ -133,6 +133,13 @@ contain breaking changes; they are called out.
 
 ### Fixed
 
+- **Quitting no longer drops a mail action halfway, and closing the window no longer quits on macOS.** Quitting
+  waited 15 seconds for the actions you had started and then stopped them: a 102-message Trash ended after 46,
+  and the other 56 stayed in the inbox. Quitting now finishes them first, out of sight, for as long as they
+  make progress (it gives up only after 90 seconds with nothing finished); on macOS it uses the system's "quit
+  later", so a logout waits too. On macOS, closing the window (red button or the new ⌘W) now keeps Email Town
+  running in the background, still syncing, sorting and finishing actions; its Dock icon brings the window
+  back. On Windows and Linux closing the window still quits, after the same finishing.
 - **desktop.log's page events say what was acted on.** A shortcut was logged after its action, so Backspace or
   `e` on an open message named the message the app had moved on to, with `selected=0` (all 9 such lines in one
   log). It now names the message and selection the key acted on. A `state-flags` line cut to 20 changes also

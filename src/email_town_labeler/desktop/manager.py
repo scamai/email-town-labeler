@@ -91,6 +91,9 @@ UNDOABLE = ("trash", "archive")
 UNDO_SECONDS = 5.0
 # Longest a /api/state long-poll is held before it answers "unchanged".
 STATE_WAIT = 10.0
+# Quitting finishes the mail actions already started (an Archive of 500 runs for minutes) for as long as they
+# make progress. One write gives up after 25 s, retried once; nothing finished for this long means offline.
+MAIL_STALL = 90.0
 
 
 GOOGLE_SIGN_IN_EXPIRED = "Google sign-in expired. Reconnect the account from its ⋯ menu"
@@ -302,17 +305,53 @@ class Workbench:
             self._touch()
         log.info("learned settings applied to %d listed message(s)", len(rescored))
 
-    def close(self):
-        # Archive/Trash and sends still inside their undo window go to the mailbox now, not never.
+    def pending_mail(self) -> int:
+        """Messages whose mailbox writes are queued or running, plus sends still to go out."""
+        with self.lock:
+            writes = sum(job["total"] - job["done"] - job["failed"] for job in self.outbox_jobs.values())
+            return writes + len(self.held_sends)
+
+    def finish_mail(self, stall: float | None = None) -> int:
+        """Send what waits in an undo window now, and wait for the queued writes while they make progress.
+
+        Returns the messages left unfinished: 0, unless nothing finished for `stall` seconds (offline). A fixed
+        15 s wait here used to stop a 102-message Trash after 46: quitting must not drop what the user did.
+        """
+        stall = MAIL_STALL if stall is None else stall
         self.flushing = True
         self.outbox_wake.set()
         with self.lock:
             held = list(self.held_sends.values())
         for wake, _thread in held:
             wake.set()
-        for thread in [self.outbox_worker, *(t for _wake, t in held)]:
+        left = self.pending_mail()
+        if left:
+            log.info("finishing %d queued mail message(s) before stopping", left)
+        started = last_change = time.monotonic()
+        waited, last, stalled = bool(left), left, False
+        while left and not self.stop.is_set():
+            time.sleep(0.05)
+            left = self.pending_mail()
+            if left != last:
+                last, last_change = left, time.monotonic()
+            elif time.monotonic() - last_change > stall:
+                stalled = True
+                break
+        if left:
+            why = f"none finished in {stall:.0f} s" if stalled else "the workbench was already stopping"
+            log.warning("stopping with %d mail message(s) unfinished: %s", left, why)
+        elif waited:
+            log.info("queued mail finished in %.0f ms", (time.monotonic() - started) * 1000)
+        # The worker writes the last receipt after its count reaches 0; a send runs after leaving held_sends.
+        # After a stall the worker is stuck in a network call: waiting longer for it gains nothing.
+        for thread in [self.outbox_worker, *(t for _wake, t in held)] if not left else []:
             if thread is not None and thread.is_alive():
                 thread.join(timeout=15)
+        return left
+
+    def close(self):
+        # Archive/Trash and sends still inside their undo window go to the mailbox now, not never.
+        self.finish_mail()
         self.stop.set()
         self._touch()
         if self.model_lock.acquire(timeout=1):

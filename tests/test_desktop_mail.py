@@ -912,3 +912,47 @@ def test_an_action_waiting_behind_another_logs_its_queue_time(tmp_path, caplog):
     queued = [float(line.split("(queued ")[1].split(" ms")[0]) for line in lines]
     assert len(queued) == 2 and queued[0] < 100 and queued[1] >= 250, lines
     w.close()
+
+
+def test_quitting_finishes_a_long_bulk_action_instead_of_cutting_it_off(tmp_path, monkeypatch, caplog):
+    """A fixed 15 s wait on quit stopped a 102-message Trash after 46 (the owner's mailbox, 2026-11-21):
+    the rest stayed in the inbox. Quitting now waits as long as messages keep finishing."""
+    from email_town_labeler.desktop import manager as manager_module
+
+    monkeypatch.setattr(manager_module, "MAIL_STALL", 0.3)  # far shorter than the whole job below
+    w, mine, _other, first = counting_mail(tmp_path, n=10)
+    slow = mine.mutate
+    # 10 x 120 ms = 1.2 s: each write outlasts a 50 ms check, so a wait counted from the start would stop it
+    mine.mutate = lambda mid, action: (time.sleep(0.12), slow(mid, action))[1]
+    ids = [m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first]
+    request = uuid.uuid4().hex
+    w.mail_action({"request_id": request, "ids": ids, "action": "trash"})
+    assert w.pending_mail() == 10
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop"):
+        w.close()
+    assert [a for _m, a in mine.writes].count("trash") == 10
+    assert w.mail_store.receipt(request)["status"] == "complete" and w.pending_mail() == 0
+    assert "finishing 10 queued mail message(s) before stopping" in caplog.text
+    assert "queued mail finished in" in caplog.text
+
+
+def test_quitting_gives_up_only_when_nothing_finishes_for_the_stall_time(tmp_path, caplog):
+    w, mine, _other, first = counting_mail(tmp_path, n=5)
+    stuck = threading.Event()
+    slow = mine.mutate
+
+    def mutate(mid, action):
+        if len(mine.writes) >= 2:
+            assert stuck.wait(10)  # offline: this write never returns while the test watches
+        slow(mid, action)
+
+    mine.mutate = mutate
+    ids = [m["id"] for m in w.snapshot()["messages"] if m["account_id"] == first]
+    w.mail_action({"request_id": uuid.uuid4().hex, "ids": ids, "action": "trash"})
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING, logger="email_town_labeler.desktop"):
+        left = w.finish_mail(stall=0.4)
+    assert left == 3 and time.monotonic() - started < 5
+    assert "stopping with 3 mail message(s) unfinished: none finished in 0 s" in caplog.text
+    stuck.set()
+    w.close()
