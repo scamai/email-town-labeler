@@ -586,6 +586,7 @@ per-project limits ([numbers](docs/google-cloud-setup.md#quota)).
 | fix something that isn't working | [Troubleshooting](docs/troubleshooting.md) |
 | use the desktop mail workbench | [Workbench guide](docs/desktop-workbench.en.md) · [本机工作台](docs/desktop-workbench.md) |
 | understand or contribute to the code | [Architecture](docs/architecture.md) · [Design spec](docs/design-spec.md) |
+| see where the app icon comes from, or change it | [Brand](docs/brand.md) |
 
 ## Contributing
 

@@ -77,6 +77,12 @@ if not (MAC or WINDOWS):
         )
     ]
 
+if MAC:
+    # The Icon Composer icon, compiled (scripts/build_desktop_brand.py): macOS 26 and later draw it with the
+    # system's glass, in light, dark and tinted looks, through CFBundleIconName below. A top-level data file
+    # lands in Contents/Resources; older macOS keep using app-icon.icns (CFBundleIconFile).
+    a.datas += [("Assets.car", str(ROOT / "brand" / "Assets.car"), "DATA")]
+
 pyz = PYZ(a.pure)  # noqa: F821
 
 exe = EXE(  # noqa: F821
@@ -110,6 +116,7 @@ if MAC:
         info_plist={
             "CFBundleName": "Email Town",
             "CFBundleDisplayName": "Email Town",
+            "CFBundleIconName": "AppIcon",  # in Assets.car; CFBundleIconFile (app-icon.icns) for macOS 14-15
             "CFBundleShortVersionString": short,
             "CFBundleVersion": __version__,
             "LSMinimumSystemVersion": "14.0",

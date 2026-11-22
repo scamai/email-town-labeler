@@ -321,11 +321,13 @@ The browser verification script measures all eight selected-filter palettes in b
 checks matching message-badge colors and preview updates. The minimum category text contrast is
 required to remain at least 4.5:1. These checks are not a complete accessibility certification.
 
-The envelope-and-house logo is authored in `desktop/web/logo.svg`; the same mark supplies the
-favicon and the macOS icon. Rebuild the PNG/ICNS resources on macOS, then refresh the launcher:
+The sealed-letter mark (a wax seal pressed with a little house) is drawn by
+`scripts/build_desktop_brand.py`, which writes the header mark `desktop/web/logo.svg`, the favicon and
+every app icon, including the macOS 26+ Icon Composer icon ([Brand](brand.md)). Rebuild them on macOS with
+Xcode 26 or later, then refresh the launcher:
 
 ```sh
-uv run --with playwright python scripts/build_desktop_brand.py
+uv run --with pillow python scripts/build_desktop_brand.py
 python3 scripts/install_macos_workbench.py
 ```
 
