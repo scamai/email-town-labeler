@@ -73,6 +73,11 @@ contain breaking changes; they are called out.
 
 ### Changed
 
+- **A new app icon: a sealed letter.** A lavender letter on a purple tile, closed with a wax seal pressed with
+  a little house, the town. It replaces the navy open envelope, whose artwork also filled about 94% of the
+  tile where macOS icons leave a margin. On macOS 26 and later it is the system's own glass icon, with
+  light, dark and tinted looks; older macOS, Windows and Linux get the same drawing as an image. The
+  workbench header and browser tab use it too. [How it is built](docs/brand.md).
 - **Unclassified is now People.** The desktop's name for the model's "none of these" class. With bulk mail
   classified (see Fixed), what stays there is mail written by people: on 274 messages of a work account, 51 of
   the 54 left were conversations the model was sure of (0.55 or more), 37 of them threads you replied to or

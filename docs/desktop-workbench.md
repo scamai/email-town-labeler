@@ -223,10 +223,10 @@ macOS 应用的菜单另外提供 <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd>（撤销�
 订单为紫色、推广为玫红、旅行为青蓝、更新为金色、People 为灰色。明暗主题分别调整亮度；
 选中状态同时显示勾号和边线，文字名称始终保留。颜色修改只影响工作台显示。
 
-新的信封小屋 Logo 同时用于页面、浏览器图标、Mac 启动器和[桌面应用](#下载应用)（启动器未签名；macOS 桌面应用的发布版已签名并公证）。可在 macOS 从矢量源文件重建图标：
+封蜡信 Logo（蜡封上压着一座小房子，即“小镇”）同时用于页面、浏览器图标、Mac 启动器和[桌面应用](#下载应用)（启动器未签名；macOS 桌面应用的发布版已签名并公证）。图标由 `scripts/build_desktop_brand.py` 绘制，包括 macOS 26 及以上使用的 Icon Composer 图标（[说明](brand.md)）。可在装有 Xcode 26 或更高版本的 macOS 上重建：
 
 ```sh
-uv run --with playwright python scripts/build_desktop_brand.py
+uv run --with pillow python scripts/build_desktop_brand.py
 python3 scripts/install_macos_workbench.py
 ```
 
