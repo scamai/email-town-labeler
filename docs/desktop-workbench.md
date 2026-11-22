@@ -58,7 +58,8 @@ uv run --extra app --group app-build python scripts/smoke_app.py -- "dist/Email 
 加 `--zip` 时还生成发布用的压缩包。在 Apple M4 Pro（macOS，Python 3.12）上它报告构建用时 11 秒、应用 136 MB、
 zip 49 MB。`smoke_app.py` 运行自检，在新的临时数据目录上打开应用，检查服务、第二次启动和干净退出，从不接触你的邮件数据。
 Linux 还需要 `pywebview[gtk]`（PyGObject）和 GTK 开发包，[Desktop app 工作流](../.github/workflows/app.yml)
-列出了它们。该工作流在三个平台上构建并冒烟测试，只在手动启动或推送 `v*` 标签时运行。
+列出了它们。该工作流在三个平台上构建并冒烟测试，只在手动启动或推送 `v*` 标签时运行。其中 macOS 构建在项目自己的
+Mac 上运行（[app-macos.yml](../.github/workflows/app-macos.yml)），只针对 `main` 或 `v*` 标签。
 
 ## 从源码打开
 
