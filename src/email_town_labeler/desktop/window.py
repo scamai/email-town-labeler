@@ -5,7 +5,10 @@ loopback UI as `email-town-labeler desktop`. This process serves it the way `des
 Workbench + LocalServer under the workbench lock, with the private launch link in launch.json, so a second
 start finds and reuses it. If another process already serves this data root (a running app, or
 `desktop` in a terminal), the window opens on that instance and leaves it running when it closes.
-Closing the window that owns the server stops everything: HTTP server, mail threads, model worker.
+For the window that owns the server (Lifecycle below): on macOS closing it hides the app, which keeps syncing
+and finishing mail actions in the background until its Dock icon brings it back; quitting (and closing it on
+Windows and Linux) first finishes the mail actions already started, then stops everything: HTTP server, mail
+threads, model worker.
 
 target=_blank links (the original message in Gmail/Outlook, the Microsoft sign-in page) open in the
 system browser, as does Google sign-in (webbrowser, unchanged). Attachments download through a save panel.
@@ -18,6 +21,7 @@ before importing anything heavy.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -166,21 +170,138 @@ def run(root: Path, paths: Paths, webview: Any) -> int:
         text_select=True,  # pywebview disables selection by default; mail must be selectable and copyable
         zoomable=True,
     )
+    mac = sys.platform == "darwin"
     if host is None:
         log.info("opening a window on the workbench already running at %s", active["origin"])
     else:
-        # Quit from the app menu (Cmd+Q) ends the process inside the GUI loop, after `closing` fires:
-        # stop there. A plain window close fires it too; the finally below is then a no-op.
-        window.events.closing += host.stop
-        host.on_exit = window.destroy  # `desktop --stop` ended the server: close the window it served
+        appkit = _appkit() if mac and inspect.ismodule(webview) else None  # the real pywebview only
+        # Keep running in the background on close only where quitting can be told apart from closing.
+        lifecycle = Lifecycle(host, window, background=appkit is not None, appkit=appkit)
+        if appkit is not None and not _hook_quit(lifecycle):
+            lifecycle.background = False
+        window.events.closing += lifecycle.closing
+        host.on_exit = lifecycle.stopped_elsewhere  # `desktop --stop` ended the server: close its window
     try:
         # macOS: complete pywebview's default menus once the GUI loop runs (func runs on its own thread).
-        mac = sys.platform == "darwin"
         webview.start(private_mode=True, icon=_icon(), func=_mac_menus if mac else None)
     finally:
         if host is not None:
             host.stop()
     return 0
+
+
+# ─── Closing, running in the background, quitting ───
+
+
+class Lifecycle:
+    """What closing the window and quitting do, for the window that serves the workbench.
+
+    background (macOS): closing the window (red button, ⌘W) hides the app instead of quitting. The workbench
+    keeps syncing and finishing mail actions, and the Dock icon (or opening the app again) brings the same
+    window back. Quitting (⌘Q, the Dock's Quit, logging out) is the only way to stop it.
+    Quitting, and closing the window on Windows and Linux, first finishes the mail actions already started
+    (Workbench.finish_mail), with the window out of sight, then stops everything. Stopping after a fixed 15 s
+    instead left 56 of a 102-message Trash undone.
+    """
+
+    def __init__(self, host: Host, window: Any, *, background: bool, appkit: Any = None):
+        self.host, self.window, self.background, self.appkit = host, window, background, appkit
+        self.quitting = threading.Event()
+        self.finishing = threading.Event()
+
+    def closing(self):
+        """window.events.closing: return False to keep the window (pywebview then cancels the close)."""
+        if self.background and not self.quitting.is_set():
+            self.hide()
+            log.info("window closed: Email Town keeps running in the background; its Dock icon reopens it")
+            return False
+        if self._pending() and not self.finishing.is_set():  # Windows, Linux: finish first, out of sight
+            self.finishing.set()
+            self.window.hide()
+            threading.Thread(target=self._finish_then_close, name="workbench-quit", daemon=True).start()
+            return False
+        self.host.stop()
+        return None
+
+    def should_terminate(self, original, delegate, app) -> int:
+        """macOS applicationShouldTerminate: (⌘Q, Dock > Quit, log out), called instead of pywebview's."""
+        self.quitting.set()
+        if self._pending():
+            self.hide()
+            threading.Thread(target=self._finish_then_reply, name="workbench-quit", daemon=True).start()
+            return 2  # NSTerminateLater: macOS waits (a logout too) until replyToApplicationShouldTerminate:
+        return original(delegate, app)  # pywebview fires `closing` on each window, then answers
+
+    def stopped_elsewhere(self):
+        """host.on_exit: the server stopped without the window (`desktop --stop`): close the window too."""
+        self.quitting.set()
+        self.window.destroy()
+
+    def hide(self):
+        if self.appkit is not None:
+            self.appkit.NSApplication.sharedApplication().hide_(None)  # the Dock icon unhides it
+        else:
+            self.window.hide()
+
+    def _pending(self) -> int:
+        manager = getattr(self.host, "manager", None)
+        return manager.pending_mail() if manager is not None else 0
+
+    def _finish_then_close(self):
+        self.host.stop()  # finishes the queued mail first
+        self.window.destroy()  # `closing` fires again: finishing is set, the stopped host stops at once
+
+    def _finish_then_reply(self):
+        try:
+            self.host.stop()
+        finally:
+            self.reply_terminate()
+
+    def reply_terminate(self):
+        from PyObjCTools import AppHelper
+
+        app = self.appkit.NSApplication.sharedApplication()
+        # callAfter queues in the common run-loop modes, which include the one NSTerminateLater runs in.
+        AppHelper.callAfter(app.replyToApplicationShouldTerminate_, True)
+
+
+def _appkit() -> Any:
+    try:
+        import AppKit
+    except ImportError:
+        return None
+    return AppKit
+
+
+def _hook_quit(lifecycle: Lifecycle) -> bool:
+    """Route macOS's "should the app quit?" through lifecycle.should_terminate. pywebview asks it of each
+    window's `closing` handler, the same as for a window close, so without this hook closing and quitting
+    look alike. False when this pywebview has no such hook: the window then keeps closing = quitting.
+    """
+    try:
+        import objc
+        from webview.platforms.cocoa import BrowserView
+    except ImportError:
+        return False
+    delegate = getattr(BrowserView, "AppDelegate", None)
+    original = getattr(delegate, "applicationShouldTerminate_", None)
+    if original is None:
+        log.warning("quit hook: this pywebview has no applicationShouldTerminate_; closing the window quits")
+        return False
+    call = getattr(original, "callable", original)
+
+    def applicationShouldTerminate_(self, app):
+        return lifecycle.should_terminate(call, self, app)
+
+    objc.classAddMethods(
+        delegate,
+        [
+            objc.selector(
+                applicationShouldTerminate_, selector=original.selector, signature=original.signature
+            )
+        ],
+    )
+    return True
 
 
 def configure(webview: Any) -> None:
@@ -243,6 +364,8 @@ def complete_mac_menus(appkit: Any) -> str:
         window = appkit.NSMenu.alloc().initWithTitle_("Window")
         window.addItemWithTitle_action_keyEquivalent_("Minimize", "performMiniaturize:", "m")
         window.addItemWithTitle_action_keyEquivalent_("Zoom", "performZoom:", "")
+        window.addItem_(appkit.NSMenuItem.separatorItem())
+        window.addItemWithTitle_action_keyEquivalent_("Close", "performClose:", "w")  # keeps it running
         item = appkit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Window", None, "")
         item.setSubmenu_(window)
         main.addItem_(item)

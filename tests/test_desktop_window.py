@@ -6,11 +6,13 @@ from __future__ import annotations
 import http.client
 import io
 import json
+import logging
 import os
 import pickle
 import subprocess
 import sys
 import threading
+import types
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -160,6 +162,112 @@ def test_a_server_stopped_from_outside_closes_its_window(home, calls):
     assert window.run(root, paths, FakeWebview(gui)) == 0
     assert seen == {"status": 200, "destroyed": True}
     assert calls == ["start", "close"] and lock_free(root)
+
+
+# ─── close, background, quit ───
+
+
+class HidingWindow(FakeWindow):
+    def __init__(self, *args, **options):
+        super().__init__(*args, **options)
+        self.hidden = 0
+
+    def hide(self):
+        self.hidden += 1
+
+
+@pytest.fixture
+def served(home):
+    paths, root = home
+    host, _active = window.claim(root, paths)  # started and serving
+    yield host, root
+    host.stop()
+
+
+def counting_down(start):
+    """pending_mail that drops by one each time it is asked: mail that keeps going out."""
+    left = [start]
+
+    def pending():
+        left[0] = max(0, left[0] - 1)
+        return left[0]
+
+    return pending
+
+
+def test_on_macos_closing_the_window_keeps_the_workbench_running_until_quit(served, caplog):
+    """Closing the window stopped everything, a running Trash included: the window now hides, as Mail's."""
+    host, root = served
+    win = HidingWindow("Email Town")
+    life = window.Lifecycle(host, win, background=True)
+    with caplog.at_level(logging.INFO, logger="email_town_labeler.desktop.window"):
+        assert life.closing() is False  # pywebview keeps the window
+    assert win.hidden == 1 and running(root) is not None and not lock_free(root)
+    assert "keeps running in the background" in caplog.text
+    # ⌘Q with nothing pending: pywebview's own answer runs, and it fires `closing` on the window
+    assert life.should_terminate(lambda delegate, app: (life.closing(), 1)[1], None, None) == 1
+    assert running(root) is None and lock_free(root)
+
+
+def test_quitting_with_mail_going_out_finishes_it_before_macos_terminates(served, monkeypatch):
+    host, root = served
+    monkeypatch.setattr(host.manager, "pending_mail", counting_down(4))
+    win = HidingWindow("Email Town")
+    life = window.Lifecycle(host, win, background=True)
+    replied, pywebview = threading.Event(), []
+    life.reply_terminate = replied.set
+    assert life.should_terminate(lambda delegate, app: pywebview.append(1) or 1, None, None) == 2  # later
+    assert win.hidden == 1 and pywebview == []  # out of sight at once; the answer comes after the mail
+    assert replied.wait(5) and lock_free(root) and running(root) is None
+
+
+def test_elsewhere_closing_with_mail_going_out_hides_finishes_then_closes(served, monkeypatch):
+    host, root = served
+    monkeypatch.setattr(host.manager, "pending_mail", counting_down(3))
+    win = HidingWindow("Email Town")
+    life = window.Lifecycle(host, win, background=False)  # Windows, Linux: no Dock to come back from
+    assert life.closing() is False and win.hidden == 1
+    assert win.destroyed.wait(5)  # the window closes itself once the mail is out
+    assert life.closing() is None and lock_free(root)  # destroy() fires `closing` again: stop at once
+
+
+def test_elsewhere_closing_with_nothing_pending_quits_at_once(served):
+    host, root = served
+    win = HidingWindow("Email Town")
+    assert window.Lifecycle(host, win, background=False).closing() is None
+    assert win.hidden == 0 and lock_free(root)
+
+
+def test_a_server_stopped_elsewhere_closes_even_a_window_that_hides(served):
+    host, root = served
+    win = HidingWindow("Email Town")
+    life = window.Lifecycle(host, win, background=True)
+    life.stopped_elsewhere()  # `email-town-labeler desktop --stop`
+    assert win.destroyed.is_set() and life.closing() is None and win.hidden == 0 and lock_free(root)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="the hook patches a Cocoa app delegate")
+def test_the_quit_hook_routes_macos_should_terminate_through_the_lifecycle(monkeypatch):
+    pytest.importorskip("objc")
+    foundation = pytest.importorskip("Foundation")
+
+    class ETTestAppDelegate(foundation.NSObject):  # stands in for pywebview's BrowserView.AppDelegate
+        def applicationShouldTerminate_(self, app):
+            return 1
+
+    module = types.ModuleType("webview.platforms.cocoa")
+    module.BrowserView = SimpleNamespace(AppDelegate=ETTestAppDelegate)
+    monkeypatch.setitem(sys.modules, "webview.platforms.cocoa", module)
+    seen = []
+
+    class Life:
+        def should_terminate(self, original, delegate, app):
+            seen.append(original(delegate, app))
+            return 2
+
+    assert window._hook_quit(Life()) is True
+    assert ETTestAppDelegate.alloc().init().applicationShouldTerminate_(None) == 2
+    assert seen == [1]  # pywebview's own answer stays available to the lifecycle
 
 
 # ─── reuse ───
