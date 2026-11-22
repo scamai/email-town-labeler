@@ -53,7 +53,8 @@ and when the message arrived; `personal.json` holds the personal head and thresh
 chose. Numbers only, no mail content, but derived from your mail: keep both private, and delete them to start over. Private
 drafts, attachments and operation receipts are stored under `workbench/mail`; receipts retain IDs, digests
 and status, not sent bodies; partial SMTP delivery receipts also retain accepted/rejected recipient addresses so recovery can avoid duplicate delivery. Failed, unknown or partial sends retain the draft and are not automatically retried.
-OAuth tokens are mode-0600 local files; IMAP passwords require an approved OS keyring backend.
+OAuth tokens are mode-0600 local files; IMAP passwords require an approved OS keyring backend. The modes on this
+page apply on macOS and Linux; for Windows see [File permissions on Windows](#file-permissions-on-windows).
 `launch.json` is a private capability link. Session authorization uses a custom bearer header and
 per-origin browser sessionStorage, never a cookie shared between localhost ports. HTTP request logging is disabled.
 Account pause retains mail access and only pauses synchronization; it is not credential revocation.
@@ -164,6 +165,15 @@ the table above goes to it over HTTP (a loopback connection unless you opted in 
 | `models/` | model packages (`model.json` + weights) | Not from your mail, unless you ran `personalize` (the refitted head is derived from it). The published `town-modernbert` was trained on someone else's consenting inbox: see [below](#the-published-model-and-whose-mail-it-learned-from). |
 | `logs/` | operational logs | No. See below. |
 | `update-check.json` | when the last [update check](#update-check) ran, the newest version it saw, or the type of error | No |
+
+### File permissions on Windows
+
+The permissions email-town-labeler sets (mode 0600 on `token.json`, the workbench databases and the logs, 0700 on
+the workbench folders) apply on macOS and Linux. Windows has no such modes, and email-town-labeler sets no
+access-control list of its own there, so each file is as private as the folder it is in:
+`%LOCALAPPDATA%\email-town-labeler\` in your user profile, which by default only you, administrators and the
+system can open. If you point `EMAIL_TOWN_LABELER_HOME` or `--home` at another folder on Windows, make sure its
+permissions are as narrow.
 
 ### Contacts
 
