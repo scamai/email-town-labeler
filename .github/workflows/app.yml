@@ -9,7 +9,8 @@ name: Desktop app
 # Windows and Linux build here, on GitHub's runners. macOS builds on our own Mac (macserver), never on a
 # GitHub-hosted runner: job build-macos calls app-macos.yml as it is on main, because the Mac's runner group
 # admits that file only at refs/heads/main. It still builds the tree this run is for (the tag, or main); a
-# manual run from any other branch builds Windows and Linux only.
+# manual run from any other branch builds Windows and Linux only. Until that Mac's runner has a GUI login
+# session, its smoke test is the bundle's self-check alone (no window can open there; app-macos.yml says why).
 
 on:
   workflow_dispatch:

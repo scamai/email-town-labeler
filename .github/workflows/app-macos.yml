@@ -10,6 +10,14 @@ name: Desktop app (macOS)
 # repository, on a push (main or a v* tag) or a manual run from main or a tag, never for a pull request, so
 # code from a fork never reaches the Mac. The zip is a test artifact: the macOS release asset is the signed,
 # notarized disk image (docs/releasing.md). Keep the steps in step with app.yml's build job.
+#
+# The window needs a GUI (Aqua) login session. The Mac's runner has none yet: it runs in the account's Background
+# session (no console login; auto-login needs an admin on the Mac). There AppKit has no screen, so the app cannot
+# open its window and the smoke test's window half (server, second start, clean quit) cannot run. The job reads
+# the session type: in an Aqua session it runs the whole smoke test, as on Windows and Linux; otherwise it runs the
+# bundle's self-check alone and says, as a warning and in the run summary, that the window was not tested. The
+# build and the self-check gate either way. A release still tests the macOS window: the notarized app is driven
+# through its real window on the signing Mac before it is announced (docs/releasing.md, e2e_native_macos.py).
 
 on:
   workflow_call:
@@ -49,8 +57,30 @@ jobs:
       - name: Build
         run: '"$PY" scripts/build_app.py --zip'
 
+      # Aqua = a GUI login session (a window can open); Background = no screen (see the top of this file).
+      - name: GUI login session
+        id: gui
+        run: |
+          session=$(launchctl managername 2>&1) || session="unknown: $session"
+          echo "launchctl managername: $session"
+          echo "session=$session" >> "$GITHUB_OUTPUT"
+
       - name: Smoke test
+        if: steps.gui.outputs.session == 'Aqua'
         run: '"$PY" scripts/smoke_app.py --network --home "$RUNNER_TEMP/smoke-home" -- "dist/Email Town.app/Contents/MacOS/Email Town"'
+
+      - name: Smoke test, self-check only (no GUI login session, so no window)
+        if: steps.gui.outputs.session != 'Aqua'
+        env:
+          SESSION: ${{ steps.gui.outputs.session }}
+        run: |
+          "$PY" scripts/smoke_app.py --self-check-only --network --home "$RUNNER_TEMP/smoke-home" \
+            -- "dist/Email Town.app/Contents/MacOS/Email Town"
+          msg="macOS window NOT tested: this Mac's runner has no GUI login session (launchctl managername: $SESSION)."
+          msg+=" The build and the bundle self-check passed. The window, a second start and a clean quit were tested"
+          msg+=" on Windows and Linux only in this run."
+          echo "::warning title=macOS window not tested::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"
 
       # The app's own log (desktop.log) and the smoke log explain a failed smoke test; no mail is in them.
       - uses: actions/upload-artifact@v4
@@ -68,3 +98,9 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
           retention-days: 14
+
+      # The Mac's disk is shared with teammates' work: leave no build behind for the next job. The runner's own
+      # cleanup prunes idle checkouts when free space runs low; this removes this job's outputs at once.
+      - name: Remove this build from the Mac
+        if: always()
+        run: rm -rf .venv build dist "$RUNNER_TEMP/smoke-home"

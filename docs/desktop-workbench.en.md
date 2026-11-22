@@ -73,7 +73,10 @@ checks the server, a second start and a clean quit, and never touches your mail 
 `pywebview[gtk]` (PyGObject) and the GTK development packages; the
 [Desktop app workflow](../.github/workflows/app.yml) lists them. That workflow builds and smoke-tests all
 three platforms; it runs only when started by hand or by a `v*` tag. Its macOS build runs on the project's own
-Mac ([app-macos.yml](../.github/workflows/app-macos.yml)), only for `main` or a `v*` tag.
+Mac ([app-macos.yml](../.github/workflows/app-macos.yml)), only for `main` or a `v*` tag. That Mac's runner has
+no GUI login session yet, so no window can open there: its smoke test is the app's self-check alone, and the run
+says so. The window is tested on Windows and Linux, and on macOS before each release
+([releasing](releasing.md#before-announcing-test-the-installed-app)).
 
 ## Open from source
 

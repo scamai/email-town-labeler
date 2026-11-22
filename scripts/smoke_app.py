@@ -12,6 +12,9 @@ It always uses a new empty EMAIL_TOWN_LABELER_HOME (never your mailbox data), an
   5. no process of the app is left, model worker included.
 With a built app it first runs `--self-check` (imports, web assets, CA store, frozen model worker).
 Exit 0 only if every step passed. No mail, account or credential is involved.
+
+--self-check-only runs that self-check and stops: for a Mac with no GUI login session (a CI runner in a
+Background session), where AppKit has no screen and the window, and so steps 1-5, cannot run.
 """
 
 from __future__ import annotations
@@ -155,6 +158,11 @@ def main() -> int:
     )
     parser.add_argument("--screenshot", type=Path, help="macOS: save a capture of the window here")
     parser.add_argument("--network", action="store_true", help="self-check: also test HTTPS to the model")
+    parser.add_argument(
+        "--self-check-only",
+        action="store_true",
+        help="built app only: run its self-check and stop, opening no window (a Mac with no GUI login session)",
+    )
     parser.add_argument("--timeout", type=float, default=60.0, help="seconds to wait for the server")
     parser.add_argument(
         "--home", type=Path, help="use this (new, empty) folder as the temporary home, e.g. to keep its logs"
@@ -174,6 +182,8 @@ def main() -> int:
     frozen = Path(binary).is_file() and "python" not in Path(binary).name.lower()
     # What identifies the app's processes: the bundle binary, or the module when run from source.
     marker = (Path(binary).name if os.name == "nt" else binary) if frozen else args.app[-1]
+    if args.self_check_only and not frozen:
+        parser.error("--self-check-only needs a built app: the bundle's binary after --")
     print(f"home: {home}\napp:  {' '.join(args.app)}", flush=True)
     passed = True
 
@@ -183,6 +193,10 @@ def main() -> int:
         code = subprocess.run(cmd, env=env, capture_output=True, timeout=180, check=False).returncode
         print(report.read_text() if report.exists() else "(no self-check report)", end="", flush=True)
         passed &= step(code == 0, f"self-check exit code {code}")
+    if args.self_check_only:
+        print("skip  window, server, second start, clean quit (--self-check-only: not run)", flush=True)
+        print("PASS" if passed else "FAIL", flush=True)
+        return 0 if passed else 1
 
     started = time.monotonic()
     first = launch(args.app, env, log)
