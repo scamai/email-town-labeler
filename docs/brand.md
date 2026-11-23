@@ -42,6 +42,7 @@ The values live in one place, the top of `scripts/build_desktop_brand.py`.
 | `src/email_town_labeler/desktop/web/app-icon.icns` | Older macOS and Finder (`CFBundleIconFile`): 16 to 1024 px with Apple's margin |
 | `src/email_town_labeler/desktop/web/app-icon.png` | The Windows `.ico` and the Linux window icon |
 | `src/email_town_labeler/desktop/web/logo.svg` | The workbench header and the browser tab |
+| `docs/assets/banner-light.svg`, `banner-dark.svg` | The README banner. It embeds `logo.svg`; rebuild it with `python scripts/make_readme_art.py` after redrawing the mark |
 
 ## Reproduce the icon
 
