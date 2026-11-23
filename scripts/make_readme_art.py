@@ -4,10 +4,13 @@
 
 Everything shown is made up: senders, subjects and snippets are fictional, and no real mail was used.
 Label colors come from taxonomy.DEFAULT_LABEL_COLORS, so the art matches what the tool applies in Gmail.
+The banner carries the app's mark, read from the workbench's logo.svg (scripts/build_desktop_brand.py draws it);
+rerun this script after redrawing the mark.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from html import escape
 from pathlib import Path
@@ -17,6 +20,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from email_town_labeler.taxonomy import DEFAULT_LABEL_COLORS
 
 OUT = ROOT / "docs" / "assets"
+LOGO = ROOT / "src" / "email_town_labeler" / "desktop" / "web" / "logo.svg"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 THEMES = {
     "light": {
@@ -115,6 +119,19 @@ def chip(x: float, y: float, cls: str, prefix: str = "e/", size: float = 12) -> 
     return svg, w
 
 
+def mark(x: float, y: float, size: float) -> str:
+    """The app's mark (the sealed letter) as a nested <svg>, placed at (x, y) and size px square."""
+    svg = LOGO.read_text(encoding="utf-8").strip()
+    svg = re.sub(r"<title>.*?</title>", "", svg)  # the banner's own <title> names the picture
+    svg, n = re.subn(
+        r'^<svg xmlns="http://www.w3.org/2000/svg" width="\d+" height="\d+"',
+        f'<svg x="{x:g}" y="{y:g}" width="{size:g}" height="{size:g}"',
+        svg,
+    )
+    assert n == 1, f"unexpected root element in {LOGO}"
+    return svg
+
+
 def banner(t: dict) -> str:
     chips, x = [], 0.0
     for cls in ["action_needed", "travel", "newsletters", "promotional", "orders", "updates", "new_sender"]:
@@ -125,14 +142,7 @@ def banner(t: dict) -> str:
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="880" height="250" viewBox="0 0 880 250" font-family="{FONT}">
 <title>email-town-labeler: your Gmail, sorted on your own machine</title>
 <rect width="880" height="250" rx="16" fill="{t["panel"]}"/>
-<g transform="translate(372 30)">
-  <rect width="136" height="92" rx="14" fill="{t["card"]}" stroke="{t["line"]}" stroke-width="2"/>
-  <path d="M14 22 L68 58 L122 22" fill="none" stroke="{t["ink2"]}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-  <g transform="translate(86 52) rotate(-18)">
-    <path d="M0 0 h34 l12 12 l-12 12 h-34 z" fill="{DEFAULT_LABEL_COLORS["action_needed"]["backgroundColor"]}"/>
-    <circle cx="7" cy="12" r="3.5" fill="{t["card"]}"/>
-  </g>
-</g>
+{mark(392, 24, 100)}
 <text x="440" y="160" text-anchor="middle" font-size="34" font-weight="700" fill="{t["ink"]}">email-town-labeler</text>
 <text x="440" y="190" text-anchor="middle" font-size="17" fill="{t["ink2"]}">Your Gmail, sorted by an AI that runs on your own computer.</text>
 <g transform="translate({off:.1f} 210)">{"".join(chips)}</g>

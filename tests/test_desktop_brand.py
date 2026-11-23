@@ -80,3 +80,18 @@ def test_the_header_mark_is_one_self_contained_svg():
     assert root.find("{http://www.w3.org/2000/svg}title").text == "Email Town"
     hrefs = [v for el in root.iter() for k, v in el.attrib.items() if k.endswith("href")]
     assert all(v.startswith("#") for v in hrefs)  # nothing fetched: the page's CSP allows only 'self'
+
+
+def test_the_readme_banner_shows_the_current_mark():
+    """The README banner drew its own envelope-and-tag mark and kept it after the icon was redrawn (#95).
+
+    It now embeds logo.svg; redrawing the mark without rerunning scripts/make_readme_art.py fails here.
+    """
+    spec = importlib.util.spec_from_file_location("make_readme_art", ROOT / "scripts" / "make_readme_art.py")
+    art = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(art)
+    for theme, t in art.THEMES.items():
+        committed = (ROOT / "docs" / "assets" / f"banner-{theme}.svg").read_text()
+        assert committed == art.banner(t), f"banner-{theme}.svg differs from scripts/make_readme_art.py"
+        assert brand.WAX[0] in committed and brand.DEBOSS in committed  # the seal and its house
+        ET.fromstring(committed)  # still one well-formed document with the mark nested inside
