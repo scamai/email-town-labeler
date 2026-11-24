@@ -1499,7 +1499,32 @@
     const ruleable = !["unknown", "new_sender"].includes(els.categorySelect.value);
     $("senderRuleRow").hidden = $("senderRuleRow").dataset.eligible !== "true" || !ruleable;
   }
+  function pendingGoogleSignIn() {
+    return state.jobs.find((job) => job.cancellable);
+  }
+  async function cancelGoogleSignIn(id) {
+    try {
+      await api("/api/account-cancel", {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      });
+      els.accountError.hidden = true;
+    } catch (error) {
+      if (els.accountDialog.open) {
+        els.accountError.textContent = error.message;
+        els.accountError.hidden = false;
+      } else {
+        showToast(error.message);
+      }
+    }
+    await loadState();
+  }
+  $("cancelAccountSignIn").addEventListener("click", () => {
+    const job = pendingGoogleSignIn();
+    if (job) cancelGoogleSignIn(job.id);
+  });
   function renderJobs() {
+    $("pendingGoogleSignIn").hidden = !pendingGoogleSignIn();
     els.demoBanner.hidden = !state.demo;
     els.jobStatus.replaceChildren();
     const failed = state.accounts.filter(
@@ -1518,7 +1543,15 @@
     });
     jobs.forEach((job) => {
       const item = document.createElement("div");
-      item.textContent = `${text(job.message || "Account connection")} ${job.status === "error" ? "(failed)" : job.status === "pending" || job.status === "waiting" ? "(waiting for action)" : job.status === "complete" ? "(connected)" : ""}`;
+      item.textContent = `${text(job.message || "Account connection")} ${job.status === "error" ? "(failed)" : job.status === "complete" ? "(connected)" : ""}`;
+      if (job.cancellable) {
+        const cancel = document.createElement("button");
+        cancel.type = "button";
+        cancel.className = "button button-secondary button-small";
+        cancel.textContent = "Cancel Google sign-in";
+        cancel.addEventListener("click", () => cancelGoogleSignIn(job.id));
+        item.append(" ", cancel);
+      }
       if (job.user_code) {
         const code = document.createElement("strong");
         code.textContent = ` Code: ${text(job.user_code)}`;

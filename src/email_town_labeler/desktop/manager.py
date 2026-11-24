@@ -1486,9 +1486,21 @@ class Workbench:
         with self.lock:
             if any(j["status"] == "pending" for j in self.jobs.values()):
                 raise ValueError("Finish connecting the current account first")
-            self.jobs = {job: {"id": job, "status": "pending", "message": "Connecting account"}}
+            details = {"id": job, "status": "pending", "message": "Connecting account"}
+            if provider == "gmail":
+                details.update(message="Finish Google sign-in in your browser", cancellable=True)
+            self.jobs = {job: details}
+            self._touch()
         threading.Thread(target=self._connect, args=(job, name, provider, dict(data)), daemon=True).start()
         return {"ok": True, "job": job}
+
+    def cancel_connection(self, job: str):
+        with self.lock:
+            if not isinstance(job, str) or not self.jobs.get(job, {}).get("cancellable"):
+                raise ValueError("This sign-in is no longer waiting in your browser")
+            self.jobs[job] = {"id": job, "status": "cancelled", "message": "Google sign-in cancelled"}
+            self._touch()
+        return {"ok": True}
 
     def _enroll_verified(self, name, provider, settings, aid, existing):
         candidate = {"id": aid, "provider": provider, "settings": settings}
@@ -1513,6 +1525,7 @@ class Workbench:
         self.accounts.bind_identity(aid, identity)
 
     def _connect(self, job: str, name: str, provider: str, data: dict):
+        aid = None
         try:
             existing = self.accounts.get(data["reconnect_id"]) if data.get("reconnect_id") else None
             aid = existing["id"] if existing else uuid.uuid4().hex
@@ -1542,7 +1555,7 @@ class Workbench:
                 else:
                     self.accounts.add(name, "imap", settings, account_id=aid)
             elif provider == "gmail":
-                from google_auth_oauthlib.flow import InstalledAppFlow
+                from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
 
                 client = google_client_config(self.paths)
                 if client is None:
@@ -1550,17 +1563,29 @@ class Workbench:
                         "Google sign-in is not set up in this copy. Import a Google OAuth client file,"
                         " or add Gmail as Other email with an app password"
                     )
-                paths = Paths.default(self.root / "accounts" / uuid.uuid4().hex).ensure()
                 flow = InstalledAppFlow.from_client_config(
                     client[0], ["https://www.googleapis.com/auth/gmail.modify"]
                 )
-                credentials = flow.run_local_server(
-                    port=0,
-                    open_browser=True,
-                    timeout_seconds=180,
-                    authorization_prompt_message="",
-                    success_message="Account connected. Close this page and return to Email Town.",
-                )
+                try:
+                    credentials = flow.run_local_server(
+                        port=0,
+                        open_browser=True,
+                        timeout_seconds=180,
+                        authorization_prompt_message="",
+                        success_message="Return to Email Town to check the status of your sign-in.",
+                    )
+                except WSGITimeoutError as error:
+                    raise ValueError(
+                        "Google sign-in timed out. Choose Add account or Reconnect to try again."
+                    ) from error
+                with self.lock:
+                    # Cancellation wins until verification starts. A late callback must never save credentials.
+                    details = self.jobs.get(job)
+                    if details is None or details["status"] != "pending":
+                        return
+                    self.jobs[job] = {"id": job, "status": "pending", "message": "Verifying Google mailbox"}
+                    self._touch()
+                paths = Paths.default(self.root / "accounts" / uuid.uuid4().hex).ensure()
                 save_credentials(credentials, paths.token)
                 self._enroll_verified(
                     name,
@@ -1620,11 +1645,16 @@ class Workbench:
                     "status": "complete",
                     "message": "Account connected. Loading mail",
                 }
+                self._touch()
             self.refresh()
         except Exception as e:  # noqa: BLE001 - async connection jobs report safe errors in the UI
-            log.warning("connecting a %s account failed (%s)", provider, type(e).__name__)
             with self.lock:
-                self.readers.pop(aid, None)
+                details = self.jobs.get(job)
+                if details is None or details["status"] != "pending":
+                    return
+                log.warning("connecting a %s account failed (%s)", provider, type(e).__name__)
+                if aid is not None:
+                    self.readers.pop(aid, None)
                 self.jobs[job] = {
                     "id": job,
                     "status": "error",
@@ -1632,3 +1662,4 @@ class Workbench:
                     if isinstance(e, (ProviderError, ValueError))
                     else "Connection did not complete. Try again (" + type(e).__name__ + ")",
                 }
+                self._touch()

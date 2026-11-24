@@ -1,7 +1,9 @@
 import os
+import threading
 from pathlib import Path
 
 import pytest
+from google_auth_oauthlib.flow import InstalledAppFlow, WSGITimeoutError
 
 from email_town_labeler.config import Paths
 from email_town_labeler.desktop import manager as desktop_manager
@@ -36,6 +38,59 @@ def make_workbench(tmp_path: Path, reader=None):
         reader_factory=lambda _account: reader or IdentityReader(),
         classifier=object(),
     )
+
+
+def test_cancelled_google_sign_in_allows_retry_and_ignores_late_callback(tmp_path, monkeypatch):
+    workbench = make_workbench(tmp_path)
+    waiting, callback, retrying = threading.Event(), threading.Event(), threading.Event()
+    workers = []
+    connect = workbench._connect
+    attempts = 0
+
+    def record_worker(*args):
+        workers.append(threading.current_thread())
+        connect(*args)
+
+    def sign_in(**_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            waiting.set()
+            assert callback.wait(5)
+            return object()
+        retrying.set()
+        raise WSGITimeoutError("no callback")
+
+    saved = []
+    monkeypatch.setattr(workbench, "_connect", record_worker)
+    monkeypatch.setattr(desktop_manager, "google_client_config", lambda _paths: ({}, "own"))
+    monkeypatch.setattr(InstalledAppFlow, "from_client_config", lambda *_args: FakeFlow)
+    monkeypatch.setattr(desktop_manager, "save_credentials", lambda *args: saved.append(args))
+
+    class FakeFlow:
+        run_local_server = staticmethod(sign_in)
+
+    try:
+        first = workbench.connect({"provider": "gmail"})["job"]
+        assert waiting.wait(5)
+        with pytest.raises(ValueError, match="current account first"):
+            workbench.connect({"provider": "gmail"})
+        workbench.cancel_connection(first)
+        second = workbench.connect({"provider": "gmail"})["job"]
+        assert retrying.wait(5)
+        callback.set()
+        for worker in workers:
+            worker.join(5)
+        assert list(workbench.jobs) == [second]
+        assert workbench.jobs[second]["status"] == "error"
+        assert "timed out" in workbench.jobs[second]["message"]
+        assert not saved
+        assert not workbench.accounts.all()
+    finally:
+        callback.set()
+        for worker in workers:
+            worker.join(5)
+        workbench.close()
 
 
 def test_microsoft_device_flow_handles_pending_slow_down_and_saves_private_token(tmp_path, monkeypatch):

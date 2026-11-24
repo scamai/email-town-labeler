@@ -374,6 +374,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = manager.undo(data.get("token", ""))
             elif path == "/api/account":
                 result = manager.connect(data)
+            elif path == "/api/account-cancel":
+                result = manager.cancel_connection(data.get("id"))
             elif path == "/api/google-client":
                 result = save_google_client(manager.paths, data.get("client"))
             elif path == "/api/account-action":

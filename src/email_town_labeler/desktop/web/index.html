@@ -628,6 +628,12 @@
           maxlength="80"
           placeholder="Defaults to the email address"
         />
+        <div id="pendingGoogleSignIn" hidden>
+          <p>Finish Google sign-in in your browser, or cancel it to start again.</p>
+          <button class="button button-secondary button-small" id="cancelAccountSignIn" type="button">
+            Cancel Google sign-in
+          </button>
+        </div>
         <p class="form-error" id="accountFormError" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-quiet" type="button" data-close-dialog>
