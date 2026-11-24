@@ -85,8 +85,10 @@ def test_account_name_is_optional_and_shown_as_the_address(tmp_path, monkeypatch
     workbench.close()
 
 
-def test_gmail_without_any_client_explains_the_alternatives(tmp_path):
+def test_gmail_without_any_client_explains_the_alternatives(tmp_path, monkeypatch):
     workbench, _readers, _first, _second = _workbench(tmp_path)
+    monkeypatch.setattr("email_town_labeler.desktop.manager.google_client_config", lambda _paths: None)
+    workbench.jobs["job"] = {"id": "job", "status": "pending"}
     workbench._connect("job", "Gmail", "gmail", {"provider": "gmail"})
     message = workbench.jobs["job"]["message"]
     assert workbench.jobs["job"]["status"] == "error"
